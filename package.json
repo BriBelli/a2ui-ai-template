@@ -1,0 +1,22 @@
+{
+  "name": "a2ui",
+  "version": "1.0.0",
+  "license": "MIT",
+  "scripts": {
+    "frontend:start": "nx start frontend",
+    "frontend:build": "nx build frontend",
+    "frontend:test": "nx test frontend",
+    "backend:start": "cd backend && python3 app.py"
+  },
+  "private": true,
+  "devDependencies": {
+    "nx": "^22.0.0",
+    "@nx/react": "^22.0.0",
+    "@nx/vite": "^22.0.0",
+    "@nx/js": "^22.0.0"
+  },
+  "workspaces": [
+    "apps/*",
+    "libs/*"
+  ]
+}
