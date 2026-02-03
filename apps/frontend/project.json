@@ -1,0 +1,39 @@
+{
+  "name": "frontend",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/frontend/src",
+  "projectType": "application",
+  "tags": [],
+  "targets": {
+    "start": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "react-scripts start",
+        "cwd": "apps/frontend"
+      }
+    },
+    "build": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "react-scripts build",
+        "cwd": "apps/frontend",
+        "outputPath": "apps/frontend/build"
+      },
+      "outputs": ["{options.outputPath}"]
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "react-scripts test",
+        "cwd": "apps/frontend"
+      }
+    },
+    "lint": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "echo 'No linting configured'",
+        "cwd": "apps/frontend"
+      }
+    }
+  }
+}
