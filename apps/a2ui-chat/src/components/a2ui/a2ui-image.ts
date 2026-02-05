@@ -61,6 +61,25 @@ export class A2UIImage extends LitElement {
 
   @state() private loadState: 'loading' | 'loaded' | 'error' = 'loading';
 
+  /**
+   * Validate image src to prevent javascript:, file:, and other dangerous protocols.
+   * Allows: http(s), relative paths, and data:image/* URIs.
+   */
+  private isValidSrc(src: string): boolean {
+    if (!src) return false;
+    const trimmed = src.trim().toLowerCase();
+
+    // Allow relative paths
+    if (trimmed.startsWith('/') || trimmed.startsWith('./') || trimmed.startsWith('../')) return true;
+    // Allow http(s)
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return true;
+    // Allow base64 images specifically (data:image/png, data:image/jpeg, etc.)
+    if (trimmed.startsWith('data:image/')) return true;
+
+    // Block everything else (javascript:, file:, data:text/html, etc.)
+    return false;
+  }
+
   private handleLoad() {
     this.loadState = 'loaded';
   }
@@ -70,7 +89,7 @@ export class A2UIImage extends LitElement {
   }
 
   render() {
-    const showPlaceholder = !this.src || this.loadState === 'error';
+    const showPlaceholder = !this.src || !this.isValidSrc(this.src) || this.loadState === 'error';
 
     return html`
       <div class="image-container">

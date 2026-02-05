@@ -39,9 +39,28 @@ export interface ProvidersResponse {
 export class ChatService {
   private baseUrl = '/api';
 
+  /**
+   * Build request headers, including optional API key auth.
+   * Set VITE_A2UI_API_KEY in your .env to enable.
+   */
+  private getHeaders(json = true): Record<string, string> {
+    const headers: Record<string, string> = {};
+    if (json) {
+      headers['Content-Type'] = 'application/json';
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const apiKey = (import.meta as any).env?.VITE_A2UI_API_KEY;
+    if (apiKey) {
+      headers['X-API-Key'] = apiKey;
+    }
+    return headers;
+  }
+
   async getProviders(): Promise<LLMProvider[]> {
     try {
-      const response = await fetch(`${this.baseUrl}/providers`);
+      const response = await fetch(`${this.baseUrl}/providers`, {
+        headers: this.getHeaders(false),
+      });
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
@@ -81,9 +100,7 @@ export class ChatService {
 
       const response = await fetch(`${this.baseUrl}/chat`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: this.getHeaders(),
         body: JSON.stringify(body),
       });
 

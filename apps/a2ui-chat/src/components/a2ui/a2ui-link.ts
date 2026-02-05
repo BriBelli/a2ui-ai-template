@@ -1,6 +1,9 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 
+/** Protocols allowed in href values. Everything else is blocked. */
+const SAFE_PROTOCOLS = ['http:', 'https:', 'mailto:'];
+
 @customElement('a2ui-link')
 export class A2UILink extends LitElement {
   static styles = css`
@@ -32,10 +35,38 @@ export class A2UILink extends LitElement {
   @property({ type: String }) text = '';
   @property({ type: Boolean }) external = false;
 
+  /**
+   * Sanitize href to prevent javascript:, data:, vbscript:, file: XSS vectors.
+   * Only allows http(s), mailto, relative paths, and fragment links.
+   */
+  private sanitizeHref(href: string): string {
+    const trimmed = href.trim();
+
+    // Allow fragment-only and relative paths
+    if (trimmed.startsWith('#') || trimmed.startsWith('/') || trimmed.startsWith('./') || trimmed.startsWith('../')) {
+      return trimmed;
+    }
+
+    // Check protocol for absolute URLs
+    try {
+      const url = new URL(trimmed, window.location.href);
+      if (SAFE_PROTOCOLS.includes(url.protocol)) {
+        return trimmed;
+      }
+    } catch {
+      // Malformed URL — fall through to blocked
+    }
+
+    // Block everything else
+    return '#';
+  }
+
   render() {
+    const safeHref = this.sanitizeHref(this.href);
+
     return html`
       <a 
-        href=${this.href}
+        href=${safeHref}
         target=${this.external ? '_blank' : '_self'}
         rel=${this.external ? 'noopener noreferrer' : ''}
       >

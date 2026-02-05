@@ -20,4 +20,5 @@ def get_openai_completion(prompt: str, model: str = "gpt-3.5-turbo", max_tokens:
         )
         return {"response": response.choices[0].message.content.strip(), "status_code": 200}
     except Exception as e:
-        return {"error": str(e), "status_code": 500}
+        print(f"OpenAI error: {e}")
+        return {"error": "An error occurred processing your request", "status_code": 500}
