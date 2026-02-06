@@ -199,6 +199,15 @@ export class A2UIApp extends LitElement {
   @state() private selectedProvider = '';
   @state() private selectedModel = '';
 
+  // ── Suggestions (data can come from AI, config, or any source) ──
+  private suggestions = [
+    'Compare iPhone vs Android',
+    'Top 5 trending stocks',
+    'Show weather forecast',
+    'Explain machine learning',
+    'Create a task list',
+  ];
+
   // ── Auth state ──────────────────────────────────────────
   @state() private authLoading = true;
   @state() private isAuthenticated = false;
@@ -325,6 +334,7 @@ export class A2UIApp extends LitElement {
         a2ui: response.a2ui,
         timestamp: Date.now(),
         model: model?.name || this.selectedModel,
+        suggestions: response.suggestions,
       }];
     } catch (error) {
       console.error('Chat error:', error);
@@ -434,6 +444,7 @@ export class A2UIApp extends LitElement {
         <a2ui-chat-container
           .messages=${this.messages}
           .isLoading=${this.isLoading}
+          .suggestions=${this.suggestions}
           @send-message=${this.handleSendMessage}
         ></a2ui-chat-container>
       </main>

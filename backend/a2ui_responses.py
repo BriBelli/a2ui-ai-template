@@ -103,6 +103,7 @@ def get_stock_response(message: str) -> Dict[str, Any]:
                 },
             ],
         },
+        "suggestions": ["Show NVDA stock chart", "Compare tech stocks performance"],
     }
 
 
@@ -186,6 +187,7 @@ def get_chart_response(message: str) -> Dict[str, Any]:
                 },
             ],
         },
+        "suggestions": ["Show 1-year NVDA chart", "Compare AAPL vs MSFT"],
     }
 
 
@@ -261,6 +263,7 @@ def get_weather_response(message: str) -> Dict[str, Any]:
                 },
             ],
         },
+        "suggestions": ["5-day extended forecast", "Weather in another city"],
     }
 
 
@@ -294,6 +297,7 @@ def get_task_response(message: str) -> Dict[str, Any]:
                 },
             ],
         },
+        "suggestions": ["Add a new task", "Show completed tasks"],
     }
 
 
@@ -335,6 +339,7 @@ def get_compare_response(message: str) -> Dict[str, Any]:
                     },
                 ],
             },
+            "suggestions": ["Compare Samsung vs Pixel", "Best budget phones"],
         }
     # Generic comparison placeholder
     return get_default_response(message)
@@ -385,6 +390,7 @@ def get_help_response() -> Dict[str, Any]:
                 },
             ],
         },
+        "suggestions": ["Show trending stocks", "Create a chart", "What's the weather?"],
     }
 
 
@@ -426,4 +432,5 @@ I can help you with:
 • Data analysis and visualization
 
 Try asking about "trending stocks" or "show me a chart"!""",
+        "suggestions": ["Top 5 trending stocks", "Show weather forecast"],
     }

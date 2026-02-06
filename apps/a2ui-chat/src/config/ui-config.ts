@@ -24,6 +24,12 @@ export interface UIConfig {
    * Enable welcome screen animations
    */
   animateWelcome: boolean;
+
+  /**
+   * Show suggestion prompts on the welcome screen.
+   * Data is provided separately — this just toggles visibility.
+   */
+  suggestions: boolean;
 }
 
 export interface AIConfig {
@@ -52,6 +58,7 @@ export const uiConfig: UIConfig = {
   loadingStyle: 'chat',
   animateMessages: true,
   animateWelcome: true,
+  suggestions: true,
 };
 
 /**

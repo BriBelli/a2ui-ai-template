@@ -130,6 +130,12 @@ RULES:
 - For lists of items, use list with appropriate variant
 - Wrap related components in a container
 - Keep responses concise but informative
+
+FOLLOW-UP SUGGESTIONS:
+- Include a "suggestions" field in your JSON response: an array of 2-3 short follow-up prompts
+- These appear as clickable buttons below your response so the user can explore related topics
+- Make them specific and contextual to your response (not generic)
+- Example: {"text": "...", "suggestions": ["Show NVDA stock chart", "Compare tech vs energy stocks"]}
 """
 
 SYSTEM_PROMPT = f"""You respond using A2UI JSON protocol. Be concise but helpful.

@@ -165,9 +165,52 @@ export class A2UIChatMessage extends LitElement {
     .model-badge:hover {
       background: var(--a2ui-bg-elevated);
     }
+
+    /* ── Follow-up suggestions ─────────────────────────── */
+
+    .followups {
+      display: flex;
+      flex-direction: column;
+      gap: var(--a2ui-space-2);
+      margin-top: var(--a2ui-space-3);
+    }
+
+    .followup {
+      display: flex;
+      align-items: center;
+      gap: var(--a2ui-space-2);
+      background: none;
+      border: none;
+      padding: var(--a2ui-space-1) 0;
+      color: var(--a2ui-text-secondary);
+      font-size: var(--a2ui-text-sm);
+      font-family: var(--a2ui-font-family);
+      cursor: pointer;
+      text-align: left;
+      transition: color 0.15s ease;
+    }
+
+    .followup:hover {
+      color: var(--a2ui-text-primary);
+    }
+
+    .followup-icon {
+      flex-shrink: 0;
+      width: 16px;
+      height: 16px;
+      color: var(--a2ui-text-tertiary);
+    }
   `;
 
   @property({ type: Object }) message!: ChatMessage;
+
+  private handleFollowup(text: string) {
+    this.dispatchEvent(new CustomEvent('send-message', {
+      detail: { message: text },
+      bubbles: true,
+      composed: true,
+    }));
+  }
 
   connectedCallback() {
     super.connectedCallback();
@@ -220,6 +263,18 @@ export class A2UIChatMessage extends LitElement {
             ` : ''}
             <span>${this.formatTime(timestamp)}</span>
           </div>
+          ${!isUser && uiConfig.suggestions && this.message.suggestions?.length ? html`
+            <div class="followups">
+              ${this.message.suggestions.map(s => html`
+                <button class="followup" @click=${() => this.handleFollowup(s)}>
+                  <svg class="followup-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M5 12h14M12 5l7 7-7 7"/>
+                  </svg>
+                  ${s}
+                </button>
+              `)}
+            </div>
+          ` : ''}
         </div>
       </div>
     `;

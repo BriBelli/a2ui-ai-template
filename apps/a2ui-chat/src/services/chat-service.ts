@@ -12,6 +12,8 @@ export interface ChatMessage {
   avatarUrl?: string;
   /** Initials fallback when no avatar image (user messages only) */
   avatarInitials?: string;
+  /** Follow-up suggestions shown below assistant responses */
+  suggestions?: string[];
 }
 
 /** Simplified message format for API history */
@@ -23,6 +25,7 @@ export interface HistoryMessage {
 export interface ChatResponse {
   text?: string;
   a2ui?: A2UIResponse;
+  suggestions?: string[];
 }
 
 export interface LLMModel {
@@ -166,6 +169,7 @@ export class ChatService {
             },
           ],
         },
+        suggestions: ['Show NVDA stock chart', 'Compare tech stocks performance'],
       };
     }
 
@@ -378,6 +382,7 @@ export class ChatService {
     // Default response
     return {
       text: `I understand you're asking about "${message}". I can help you with:\n\n• Stock market data and charts\n• Weather forecasts\n• Task management\n• Data analysis and visualization\n\nTry asking about "trending stocks" or "show me a chart"!`,
+      suggestions: ['Top 5 trending stocks', 'Show weather forecast'],
     };
   }
 }

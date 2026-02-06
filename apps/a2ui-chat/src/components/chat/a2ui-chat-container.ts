@@ -142,17 +142,9 @@ export class A2UIChatContainer extends LitElement {
 
   @property({ type: Array }) messages: ChatMessage[] = [];
   @property({ type: Boolean }) isLoading = false;
-  
+  @property({ type: Array }) suggestions: string[] = [];
 
   @query('.messages-container') private messagesContainer!: HTMLElement;
-
-  private suggestions = [
-    'Compare iPhone vs Android',
-    'Top 5 trending stocks',
-    'Show weather forecast',
-    'Explain machine learning',
-    'Create a task list',
-  ];
 
   connectedCallback() {
     super.connectedCallback();
@@ -219,13 +211,15 @@ export class A2UIChatContainer extends LitElement {
             <p class="welcome-subtitle">
               Ask me anything. I can search the web, analyze data, create charts, and more.
             </p>
-            <div class="suggestions">
-              ${this.suggestions.map(s => html`
-                <button class="suggestion" @click=${() => this.handleSuggestionClick(s)}>
-                  ${s}
-                </button>
-              `)}
-            </div>
+            ${uiConfig.suggestions && this.suggestions.length > 0 ? html`
+              <div class="suggestions">
+                ${this.suggestions.map(s => html`
+                  <button class="suggestion" @click=${() => this.handleSuggestionClick(s)}>
+                    ${s}
+                  </button>
+                `)}
+              </div>
+            ` : ''}
           </div>
         `}
       </div>
