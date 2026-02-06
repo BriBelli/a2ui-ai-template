@@ -296,6 +296,8 @@ export class A2UIApp extends LitElement {
       role: 'user',
       content: message,
       timestamp: Date.now(),
+      avatarUrl: this.user?.picture || undefined,
+      avatarInitials: this.getInitials(this.user!),
     }];
 
     // Push history entry on first message so back clears the conversation

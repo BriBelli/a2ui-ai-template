@@ -58,6 +58,13 @@ export class A2UIChatMessage extends LitElement {
     .avatar.user {
       background: var(--a2ui-accent);
       color: var(--a2ui-text-inverse);
+      overflow: hidden;
+    }
+
+    .avatar.user img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
     }
 
     .avatar.assistant {
@@ -184,7 +191,11 @@ export class A2UIChatMessage extends LitElement {
     return html`
       <div class="message ${role}">
         <div class="avatar ${role}">
-          ${isUser ? 'U' : 'AI'}
+          ${isUser
+            ? (this.message.avatarUrl
+                ? html`<img src=${this.message.avatarUrl} alt="" />`
+                : (this.message.avatarInitials || 'U'))
+            : 'AI'}
         </div>
         <div class="content">
           ${isUser ? html`

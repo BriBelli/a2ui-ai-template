@@ -8,6 +8,10 @@ export interface ChatMessage {
   a2ui?: A2UIResponse;
   timestamp: number;
   model?: string;
+  /** Auth0 user avatar URL (user messages only) */
+  avatarUrl?: string;
+  /** Initials fallback when no avatar image (user messages only) */
+  avatarInitials?: string;
 }
 
 /** Simplified message format for API history */
