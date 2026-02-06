@@ -30,6 +30,12 @@ export interface UIConfig {
    * Data is provided separately — this just toggles visibility.
    */
   suggestions: boolean;
+
+  /**
+   * Persist chat threads to localStorage so conversations
+   * survive page refreshes. Threads are scoped per user.
+   */
+  persistChat: boolean;
 }
 
 export interface AIConfig {
@@ -59,6 +65,7 @@ export const uiConfig: UIConfig = {
   animateMessages: true,
   animateWelcome: true,
   suggestions: true,
+  persistChat: true,
 };
 
 /**

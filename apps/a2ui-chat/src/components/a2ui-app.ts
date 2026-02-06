@@ -3,6 +3,8 @@ import { customElement, state } from 'lit/decorators.js';
 import type { A2UIResponse } from '@a2ui/core';
 import { ChatService, type ChatMessage, type LLMProvider } from '../services/chat-service';
 import { authService, type AuthUser } from '../services/auth-service';
+import { chatHistoryService, ChatHistoryService, type ChatThread } from '../services/chat-history-service';
+import { uiConfig } from '../config/ui-config';
 
 @customElement('a2ui-app')
 export class A2UIApp extends LitElement {
@@ -198,6 +200,7 @@ export class A2UIApp extends LitElement {
   @state() private providers: LLMProvider[] = [];
   @state() private selectedProvider = '';
   @state() private selectedModel = '';
+  private activeThreadId: string | null = null;
 
   // ── Suggestions (data can come from AI, config, or any source) ──
   private suggestions = [
@@ -236,12 +239,17 @@ export class A2UIApp extends LitElement {
         if (history.state?.a2ui === 'login') {
           history.back();
         }
+        // Scope localStorage to this user
+        chatHistoryService.setUser(this.user?.sub ?? null);
+        this.restoreLastThread();
         this.loadProviders();
       }
     });
 
     await authService.init();
     if (authService.isAuthenticated) {
+      chatHistoryService.setUser(authService.user?.sub ?? null);
+      this.restoreLastThread();
       await this.loadProviders();
     }
   }
@@ -261,11 +269,14 @@ export class A2UIApp extends LitElement {
       this.showLogin = state?.a2ui === 'login';
     } else if (state?.a2ui === 'chat' && this.messages.length === 0 && this.savedMessages.length > 0) {
       // Forward to active conversation → restore
+      this.activeThreadId = state.threadId ?? this.activeThreadId;
       this.messages = this.savedMessages;
     } else if (state?.a2ui !== 'chat' && this.messages.length > 0) {
       // Back from active conversation → save and clear
+      this.persistThread();
       this.savedMessages = [...this.messages];
       this.messages = [];
+      this.activeThreadId = null;
     }
   }
 
@@ -294,11 +305,54 @@ export class A2UIApp extends LitElement {
     this.selectedModel = e.detail.model;
   }
 
+  // ── Persistence helpers ──────────────────────────────────
+
+  private static readonly ACTIVE_KEY = 'a2ui_active_thread';
+
+  /** Save the current thread to localStorage. */
+  private persistThread() {
+    if (!uiConfig.persistChat || !this.activeThreadId || this.messages.length === 0) return;
+
+    const existing = chatHistoryService.getThread(this.activeThreadId);
+    const thread: ChatThread = {
+      id: this.activeThreadId,
+      title: existing?.title ?? ChatHistoryService.titleFrom(this.messages[0].content),
+      messages: this.messages,
+      createdAt: existing?.createdAt ?? this.messages[0].timestamp,
+      updatedAt: Date.now(),
+      provider: this.selectedProvider || undefined,
+      model: this.selectedModel || undefined,
+    };
+    chatHistoryService.saveThread(thread);
+    sessionStorage.setItem(A2UIApp.ACTIVE_KEY, this.activeThreadId);
+  }
+
+  /** Restore the active thread on page refresh. */
+  private restoreLastThread() {
+    if (!uiConfig.persistChat) return;
+
+    const activeId = sessionStorage.getItem(A2UIApp.ACTIVE_KEY);
+    if (!activeId) return;
+
+    const thread = chatHistoryService.getThread(activeId);
+    if (thread) {
+      this.activeThreadId = thread.id;
+      this.messages = thread.messages;
+    }
+  }
+
+  // ── Chat actions ───────────────────────────────────────
+
   private async handleSendMessage(e: CustomEvent<{ message: string }>) {
     const { message } = e.detail;
     if (!message.trim()) return;
 
     const isFirstMessage = this.messages.length === 0;
+
+    // Start a new thread on first message
+    if (isFirstMessage) {
+      this.activeThreadId = crypto.randomUUID();
+    }
 
     this.messages = [...this.messages, {
       id: crypto.randomUUID(),
@@ -311,9 +365,10 @@ export class A2UIApp extends LitElement {
 
     // Push history entry on first message so back clears the conversation
     if (isFirstMessage) {
-      history.pushState({ a2ui: 'chat' }, '');
+      history.pushState({ a2ui: 'chat', threadId: this.activeThreadId }, '');
     }
 
+    this.persistThread();
     this.isLoading = true;
 
     try {
@@ -336,6 +391,8 @@ export class A2UIApp extends LitElement {
         model: model?.name || this.selectedModel,
         suggestions: response.suggestions,
       }];
+
+      this.persistThread();
     } catch (error) {
       console.error('Chat error:', error);
       this.messages = [...this.messages, {
@@ -344,14 +401,19 @@ export class A2UIApp extends LitElement {
         content: 'Sorry, there was an error processing your request.',
         timestamp: Date.now(),
       }];
+      this.persistThread();
     } finally {
       this.isLoading = false;
     }
   }
 
   private clearChat() {
+    // Persist before clearing so the thread stays in history
+    this.persistThread();
     this.messages = [];
+    this.activeThreadId = null;
     this.savedMessages = [];
+    sessionStorage.removeItem(A2UIApp.ACTIVE_KEY);
     if (history.state?.a2ui === 'chat') {
       history.back();
     }
