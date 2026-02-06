@@ -8,6 +8,7 @@ import './components/chat/a2ui-chat-container';
 import './components/chat/a2ui-chat-input';
 import './components/chat/a2ui-chat-message';
 import './components/chat/a2ui-thinking-indicator';
+import './components/auth/a2ui-login';
 
 // Import A2UI Web Components
 import './components/a2ui/a2ui-text';

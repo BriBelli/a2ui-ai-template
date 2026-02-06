@@ -9,9 +9,10 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "lit": "^3.0.0",
+    "@a2ui/core": "*",
+    "@auth0/auth0-spa-js": "^2.14.0",
     "chart.js": "^4.4.0",
-    "@a2ui/core": "*"
+    "lit": "^3.0.0"
   },
   "devDependencies": {
     "typescript": "^5.0.0",
