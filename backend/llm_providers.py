@@ -120,7 +120,11 @@ Available component types:
 
 10. image - Image display
     props: { src: string, alt: string, caption?: string }
-    Note: For placeholder images, use URLs like "https://picsum.photos/200" or leave src empty for a placeholder icon
+    IMPORTANT: NEVER invent or guess image URLs. Only use the image component when:
+    - URLs are provided in [Available Images] from web search results
+    - A real URL is provided by the user in the conversation
+    If web search returned images, use them! Display in a grid for visual topics.
+    If NO real URLs are available, describe visually with text — do NOT make up URLs.
 
 11. grid - Multi-column layout (for dashboards, side-by-side cards)
     props: { columns?: number (default 2), gap?: "none"|"xs"|"sm"|"md"|"lg"|"xl" }
@@ -186,6 +190,12 @@ HOW-TO / STEPS:
       list(numbered — step by step instructions)
     text(caption — tip or note)
 
+VISUAL / GALLERY (when [Available Images] are present):
+  container(vertical) >
+    text(body — brief intro)
+    grid(columns:3) >
+      image(src: real-url-from-search, alt, caption) [repeat for each image]
+
 FOLLOW-UP SUGGESTIONS:
 - Include a "suggestions" field in your JSON response: an array of 2-3 short follow-up prompts
 - These appear as clickable buttons below your response so the user can explore related topics
@@ -216,6 +226,7 @@ RESPONSE RULES:
 6. For real-time queries (stocks, weather, sports): USE the web search results provided to give accurate current data
 7. For stock/market data: ALWAYS use a line chart with fillArea, currency, and referenceLine for price trends. Use actual values from search results.
 8. When web search results are present, extract specific numbers and use them in charts and tables — do NOT say "I can't provide real-time data"
+9. When [Available Images] are present in search results, USE them with the image component in a grid layout. These are real URLs — display them!
 
 Example simple response:
 {{"text": "Hello! How can I help?", "a2ui": {{"version": "1.0", "components": [{{"id": "greeting", "type": "text", "props": {{"content": "I'm ready to assist you.", "variant": "body"}}}}]}}}}
@@ -461,11 +472,13 @@ class LLMService:
                     if context:
                         # Search succeeded - add context
                         augmented_message = f"{context}\n\nUser question: {message}"
-                        print(f"✓ Web search complete, {len(search_results.get('results', []))} results")
+                        image_count = len(search_results.get('images', []))
+                        print(f"✓ Web search complete, {len(search_results.get('results', []))} results, {image_count} images")
                         search_metadata = {
                             "searched": True,
                             "success": True,
-                            "results_count": len(search_results.get('results', []))
+                            "results_count": len(search_results.get('results', [])),
+                            "images_count": image_count,
                         }
                     else:
                         # Search failed - continue without context
