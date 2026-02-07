@@ -1,14 +1,17 @@
 {
-  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    "target": "es2015",
+    "module": "esnext",
+    "lib": ["es2020"],
+    "moduleResolution": "node",
     "outDir": "./dist",
     "declaration": true,
     "declarationMap": true,
+    "sourceMap": true,
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "moduleResolution": "node",
     "resolveJsonModule": true,
     "isolatedModules": true
   },
