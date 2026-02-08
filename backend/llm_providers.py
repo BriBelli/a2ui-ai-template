@@ -45,196 +45,71 @@ def parse_llm_json(content: str) -> Dict[str, Any]:
         print(f"[parse] JSON error: {e} — preview: {content[:200]}")
         return {"text": content}
 
-# A2UI Schema definition for LLM context
+# A2UI Schema definition for LLM context (passed with every prompt)
 A2UI_SCHEMA = """
-A2UI is a declarative JSON protocol for UI. You MUST respond with valid JSON containing:
-
+A2UI JSON CONTRACT — You MUST respond with valid JSON only:
 {
-  "text": "Optional plain text explanation",
-  "a2ui": {
-    "version": "1.0",
-    "components": [...]
-  }
+  "text": "One-sentence direct answer or intro (user sees this first)",
+  "a2ui": { "version": "1.0", "components": [...] },
+  "suggestions": ["Follow-up 1", "Follow-up 2"]
 }
 
-Available component types:
+——— UX STANDARDS (non-negotiable) ———
+• Lead with the answer: "text" or the first card title should state the direct answer (like a featured snippet). No "Here are some thoughts..." — give the outcome first.
+• Answer the question they meant: If they ask "weather" and [User Location] exists, that means "weather for MY location." If they ask "best X," give a ranked/specific answer, not "it depends."
+• One idea per card when possible. Use grid only when comparing (2+ items) or dashboard (4+ metrics). Avoid walls of cards.
+• Use real data only: From [Web Search Results] or [Available Images]. Never invent URLs, prices, or forecasts. If you lack data, say so in a caption and still provide useful structure.
+• Suggestions = 2–3 contextual, one-tap next steps (e.g. "10-day forecast for [their city]", "Compare with Boston"). Never generic ("Learn more", "Search the web").
+• Every component needs "id" (kebab-case). Nest children inside container/card/grid; no orphan components.
 
-1. text - Display text
-   props: { content: string, variant: "h1"|"h2"|"h3"|"body"|"caption"|"label"|"code" }
+——— CONTEXT (use when present) ———
+[User Location: City, State, CC] → Weather, local events, news, businesses = use this location. Ignoring it for local queries is wrong.
+[Web Search Results] → Primary source. Extract numbers, dates, URLs. Do not say "I can't provide real-time data" when results are in the prompt.
+[Available Images] → Real image URLs. Use image component in a grid. Do not make up image URLs.
 
-2. container - Layout container
-   props: { layout: "vertical"|"horizontal", gap: "none"|"xs"|"sm"|"md"|"lg"|"xl", wrap: boolean }
-   children: [components...]
+——— COMPONENTS ———
+text      props: content, variant (h1|h2|h3|body|caption|label|code)
+container props: layout (vertical|horizontal), gap (none|xs|sm|md|lg|xl), wrap. children: [components]
+card      props: title?, subtitle?. children: [components]
+grid      props: columns (number, default 2), gap. children: one component per column (e.g. 3 cards = columns:3)
+list      props: items: [{id, text, status?, subtitle?}], variant (default|bullet|numbered|checklist)
+data-table props: columns: [{key, label, align?}], data: [row objects]. align right for numbers.
+chart     props: chartType (bar|line|pie|doughnut), title?, data: {labels[], datasets[{label, data[], borderColor?}]}, options?: {height?, fillArea?, currency?, referenceLine?, referenceLabel?}
+chip      props: label, variant (default|primary|success|warning|error)
+link      props: href, text, external?
+button    props: label, variant?
+image     props: src, alt, caption? — ONLY when src is from [Available Images] or user. Never fabricate URLs.
 
-3. card - Card with optional title
-   props: { title?: string, subtitle?: string }
-   children: [components...]
+——— PATTERNS (default shapes; use unless a simpler response fits) ———
+WEATHER   card(title: [User Location] or city) > chip(condition) + text(temp). Then grid(columns:3) of cards for Today/Tomorrow/Day3 + chart(line) for temp trend. Data from search.
+STOCK     card(title, subtitle ticker) > chips(sector, cap, %). chart(line, fillArea, currency USD, referenceLine). data-table(Metric, Value).
+COMPARE   grid(columns:2) > card per option > list(bullet). data-table(Feature, A, B). chart(bar) if numeric.
+DASHBOARD grid(columns:4) > card per KPI (text h2 + caption). chart. data-table.
+HOW-TO    card(title) > list(numbered, items = steps).
+GALLERY   [Available Images] present → grid(columns:3) > image per URL (alt, caption from context).
+LIST/CONTENT  card(title, subtitle) > text(body) + list(bullet|numbered) + chips(tags).
 
-4. list - List of items
-   props: { 
-     items: [{ id: string, text: string, status?: "pending"|"in-progress"|"completed", subtitle?: string }],
-     variant: "default"|"bullet"|"numbered"|"checklist"
-   }
-
-5. data-table - Data table
-   props: {
-     columns: [{ key: string, label: string, width?: string, align?: "left"|"center"|"right" }],
-     data: [{ [key]: value }...]
-   }
-   Required: columns[].key, columns[].label, data. Optional: width, align.
-   When using align: "left" for text (default), "right" for numbers, "center" only for short labels.
-
-6. chart - Chart visualization (bar, line, pie, doughnut)
-   props: {
-     chartType: "bar"|"line"|"pie"|"doughnut",
-     title?: string,
-     data: {
-       labels: string[],
-       datasets: [{ label: string, data: number[], backgroundColor?: string|string[], borderColor?: string }]
-     },
-     options?: {
-       height?: number,           // Chart height in px (default 240)
-       fillArea?: boolean,        // Gradient fill under line charts (auto for single dataset)
-       showGrid?: boolean,        // Show grid lines (default: off for line, on for bar)
-       showLegend?: boolean,      // Show legend (auto: hidden for single dataset)
-       currency?: string,         // Format values as currency, e.g. "USD"
-       referenceLine?: number,    // Horizontal dotted reference line at this value
-       referenceLabel?: string    // Label for the reference line, e.g. "Previous close"
-     }
-   }
-   CHART TIPS:
-   - For stock/price data: use line chart with fillArea:true, currency:"USD", and a referenceLine at the opening/previous value
-   - For single stock trends: use green borderColor "#81c995" for positive, red "#f28b82" for negative
-   - For comparisons: use different borderColor per dataset, no fillArea
-   - For rankings/categories: use bar chart
-   - Always provide at least 6-12 data points for smooth line charts
-
-7. button - Clickable button
-   props: { label: string, variant?: "default"|"primary"|"outlined"|"text"|"danger" }
-
-8. chip - Tag/chip
-   props: { label: string, variant?: "default"|"primary"|"success"|"warning"|"error" }
-
-9. link - Hyperlink
-   props: { href: string, text: string, external?: boolean }
-
-10. image - Image display
-    props: { src: string, alt: string, caption?: string }
-    IMPORTANT: NEVER invent or guess image URLs. Only use the image component when:
-    - URLs are provided in [Available Images] from web search results
-    - A real URL is provided by the user in the conversation
-    If web search returned images, use them! Display in a grid for visual topics.
-    If NO real URLs are available, describe visually with text — do NOT make up URLs.
-
-11. grid - Multi-column layout (for dashboards, side-by-side cards)
-    props: { columns?: number (default 2), gap?: "none"|"xs"|"sm"|"md"|"lg"|"xl" }
-    columns = actual number of columns you want. Children fill one column each.
-    Example: grid(columns:3) > card + card + card = 3 equal columns
-    Example: grid(columns:2) > card + card = 2 equal columns
-    Example: grid(columns:4) > card + card + card + card = 4 equal columns
-
-RULES:
-- Always include an "id" field for each component (use descriptive kebab-case)
-- Use appropriate component types for the data being displayed
-- For tabular data, use data-table
-- For comparisons or trends, use chart
-- For lists of items, use list with appropriate variant
-- Wrap related components in a container or grid
-- Keep responses concise but informative
-- Use grid for multi-column layouts (dashboards, side-by-side cards, metric rows)
-- Use container for simple stacking (vertical or horizontal flow)
-
-COMPOSITION PATTERNS (use these as recipes for common queries):
-
-STOCK / FINANCIAL:
-  container(vertical) >
-    card(title: company name, subtitle: exchange + ticker) >
-      container(horizontal, wrap) > chip(sector) + chip(market cap) + chip(change %)
-    chart(line, fillArea, currency:"USD", referenceLine at previous close)
-    data-table(columns: Metric, Value — rows: P/E, EPS, Market Cap, Dividend Yield, Revenue)
-
-COMPARISON (X vs Y):
-  container(vertical) >
-    grid(columns:2) >
-      card(title: "Option A") > list(bullet, key features)
-      card(title: "Option B") > list(bullet, key features)
-    data-table(columns: Feature, Option A, Option B — side-by-side comparison)
-    chart(bar — numerical comparisons)
-
-DASHBOARD / METRICS:
-  container(vertical) >
-    grid(columns:4) >
-      card > text(h2, metric value) + text(caption, label)  [repeat for 4 KPIs]
-    chart(main visualization)
-    data-table(detailed data)
-
-WEATHER / FORECAST:
-  container(vertical) >
-    card(title: city) > container(horizontal) > chip(condition) + text(temperature)
-    grid(columns:3) >
-      card(title: "Today") > text + chip
-      card(title: "Tomorrow") > text + chip
-      card(title: day name) > text + chip
-    chart(line — temperature trend)
-
-LIST / CONTENT:
-  container(vertical) >
-    card(title, subtitle) >
-      text(body, main content)
-      list(bullet or numbered — key points)
-    container(horizontal, wrap) > chip(tag) + chip(tag)
-
-HOW-TO / STEPS:
-  container(vertical) >
-    card(title: "How to...") >
-      list(numbered — step by step instructions)
-    text(caption — tip or note)
-
-VISUAL / GALLERY (when [Available Images] are present):
-  container(vertical) >
-    text(body — brief intro)
-    grid(columns:3) >
-      image(src: real-url-from-search, alt, caption) [repeat for each image]
-
-FOLLOW-UP SUGGESTIONS:
-- Include a "suggestions" field in your JSON response: an array of 2-3 short follow-up prompts
-- These appear as clickable buttons below your response so the user can explore related topics
-- Make them specific and contextual to your response (not generic)
-- Example: {"text": "...", "suggestions": ["Show NVDA stock chart", "Compare tech vs energy stocks"]}
+——— ANTI-PATTERNS (never do) ———
+• Do not deflect: No "visit Weather.com," "check Google," or "use an app." You are the answer.
+• Do not show random locations when [User Location] is provided for weather/local queries.
+• Do not invent image URLs or placeholder "example.com" links.
+• Do not reply with only plain text when the query clearly benefits from structure (comparison → table, trend → chart, steps → list).
+• Do not give generic suggestions; every suggestion must be specific to this response and one click away from a concrete next answer.
 """
 
-SYSTEM_PROMPT = f"""You respond using A2UI JSON protocol. Be concise but helpful.
+SYSTEM_PROMPT = f"""You are the product: you answer. You respond only with valid A2UI JSON. No preamble, no "I'll help you with that" — the "text" field and first component are the answer.
 
-IMPORTANT: Prefer retrieval-led reasoning over pre-training-led reasoning. Provide helpful, substantive responses even when you cannot access real-time data. Instead of refusing, provide:
-- Most recent known data with context
-- Historical context and typical ranges
-- Useful related information
-- Links or guidance to find current data
-
-Never say "I can't provide real-time data" and stop there. Always be maximally helpful.
-
-NOTE: You may receive web search results prefixed with [Web Search Results]. If present, prioritize that information. If NOT present but the query needs current data, acknowledge your knowledge cutoff and provide the best available information from your training.
+• Use [User Location] for any local query (weather, events, news). If missing and query is local, give a useful answer plus one line that enabling location gives personalized results.
+• [Web Search Results] and [Available Images] are real; use them. Never say you can't provide real-time data when they are in the prompt.
+• Lead with the outcome. Structure (cards, tables, charts) when it makes the answer clearer; otherwise keep it minimal.
+• Always include "suggestions": 2–3 specific follow-up prompts that extend this conversation.
 
 {A2UI_SCHEMA}
 
-RESPONSE RULES:
-1. Simple questions (greetings, short facts) → use just "text" field, maybe one text component
-2. Complex topics → use cards with lists for organization
-3. Comparisons → use data-table
-4. Data/stats → use chart with actual values
-5. ALWAYS include "id" on every component
-6. For real-time queries (stocks, weather, sports): USE the web search results provided to give accurate current data
-7. For stock/market data: ALWAYS use a line chart with fillArea, currency, and referenceLine for price trends. Use actual values from search results.
-8. When web search results are present, extract specific numbers and use them in charts and tables — do NOT say "I can't provide real-time data"
-9. When [Available Images] are present in search results, USE them with the image component in a grid layout. These are real URLs — display them!
-
-Example simple response:
-{{"text": "Hello! How can I help?", "a2ui": {{"version": "1.0", "components": [{{"id": "greeting", "type": "text", "props": {{"content": "I'm ready to assist you.", "variant": "body"}}}}]}}}}
-
-Example complex response:
-{{"text": "Brief intro", "a2ui": {{"version": "1.0", "components": [{{"id": "main-card", "type": "card", "props": {{"title": "Topic"}}, "children": [{{"id": "info", "type": "text", "props": {{"content": "Details...", "variant": "body"}}}}, {{"id": "points", "type": "list", "props": {{"variant": "bullet", "items": [{{"id": "p1", "text": "Point 1"}}, {{"id": "p2", "text": "Point 2"}}]}}}}]}}]}}}}
-
-Match response complexity to question complexity. Use real data, not placeholders."""
+Examples:
+Simple: {{"text": "Hello! How can I help?", "a2ui": {{"version": "1.0", "components": [{{"id": "g", "type": "text", "props": {{"content": "Ask me anything.", "variant": "body"}}}}]}}, "suggestions": ["Show weather", "Top stocks today"]}}
+Rich: {{"text": "Current weather in [City].", "a2ui": {{"version": "1.0", "components": [{{"id": "wx", "type": "card", "props": {{"title": "[City]"}}, "children": [{{"id": "cond", "type": "chip", "props": {{"label": "Clear"}}}}, {{"id": "temp", "type": "text", "props": {{"content": "21°C", "variant": "body"}}}}]}}]}}, "suggestions": ["10-day forecast", "Weather in Boston"]}}
+"""
 
 
 class LLMProvider(ABC):
@@ -264,10 +139,10 @@ class OpenAIProvider(LLMProvider):
     
     name = "OpenAI"
     models = [
+        {"id": "gpt-4.1", "name": "GPT-4.1"},
+        {"id": "gpt-4.1-mini", "name": "GPT-4.1 Mini"},
+        {"id": "gpt-4.1-nano", "name": "GPT-4.1 Nano (Fast)"},
         {"id": "gpt-4o", "name": "GPT-4o"},
-        {"id": "gpt-4-turbo", "name": "GPT-4 Turbo"},
-        {"id": "gpt-4", "name": "GPT-4"},
-        {"id": "gpt-3.5-turbo", "name": "GPT-3.5 Turbo"},
     ]
     
     def __init__(self):
@@ -279,7 +154,7 @@ class OpenAIProvider(LLMProvider):
     async def generate(
         self, 
         message: str, 
-        model: str = "gpt-4o",
+        model: str = "gpt-4.1",
         history: Optional[List[Dict[str, str]]] = None
     ) -> Dict[str, Any]:
         import openai
@@ -315,10 +190,10 @@ class AnthropicProvider(LLMProvider):
     
     name = "Anthropic"
     models = [
+        {"id": "claude-opus-4-6", "name": "Claude Opus 4.6"},
         {"id": "claude-sonnet-4-20250514", "name": "Claude Sonnet 4"},
         {"id": "claude-3-5-sonnet-20241022", "name": "Claude 3.5 Sonnet"},
         {"id": "claude-3-5-haiku-20241022", "name": "Claude 3.5 Haiku (Fast)"},
-        {"id": "claude-3-opus-20240229", "name": "Claude 3 Opus"},
     ]
     
     def __init__(self):
@@ -330,7 +205,7 @@ class AnthropicProvider(LLMProvider):
     async def generate(
         self, 
         message: str, 
-        model: str = "claude-sonnet-4-20250514",
+        model: str = "claude-opus-4-6",
         history: Optional[List[Dict[str, str]]] = None
     ) -> Dict[str, Any]:
         import anthropic
@@ -365,10 +240,10 @@ class GeminiProvider(LLMProvider):
     
     name = "Google"
     models = [
+        {"id": "gemini-3-pro-preview", "name": "Gemini 3 Pro"},
+        {"id": "gemini-3-flash-preview", "name": "Gemini 3 Flash"},
         {"id": "gemini-2.5-pro-preview-05-06", "name": "Gemini 2.5 Pro"},
         {"id": "gemini-2.5-flash-preview-05-20", "name": "Gemini 2.5 Flash"},
-        {"id": "gemini-2.0-flash", "name": "Gemini 2.0 Flash"},
-        {"id": "gemini-1.5-pro", "name": "Gemini 1.5 Pro"},
     ]
     
     def __init__(self):
@@ -380,7 +255,7 @@ class GeminiProvider(LLMProvider):
     async def generate(
         self, 
         message: str, 
-        model: str = "gemini-2.5-flash-preview-05-20",
+        model: str = "gemini-3-flash-preview",
         history: Optional[List[Dict[str, str]]] = None
     ) -> Dict[str, Any]:
         import google.generativeai as genai
@@ -449,7 +324,8 @@ class LLMService:
         provider_id: str, 
         model: str,
         history: Optional[List[Dict[str, str]]] = None,
-        enable_web_search: bool = False
+        enable_web_search: bool = False,
+        user_location: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Generate a response using the specified provider and model."""
         from tools import web_search, should_search
@@ -458,15 +334,33 @@ class LLMService:
         if not provider:
             raise ValueError(f"Provider '{provider_id}' is not available")
         
+        # Build location context prefix
+        location_context = ""
+        if user_location:
+            label = user_location.get("label", "")
+            lat = user_location.get("lat")
+            lng = user_location.get("lng")
+            if label:
+                location_context = f"[User Location: {label} ({lat}, {lng})]\n"
+            elif lat and lng:
+                location_context = f"[User Location: {lat}, {lng}]\n"
+        
         # Perform web search if enabled and query seems to need current info
         augmented_message = message
         search_metadata = None
         
-        if enable_web_search and should_search(message):
+        # Include location in search query for local queries
+        search_query = message
+        if location_context and should_search(message):
+            label = user_location.get("label", "") if user_location else ""
+            if label:
+                search_query = f"{message} {label}"
+        
+        if should_search(message):
             if web_search.is_available():
-                print(f"🔍 Performing web search for: {message[:50]}...")
+                print(f"🔍 Performing web search for: {search_query[:80]}...")
                 try:
-                    search_results = await web_search.search(message)
+                    search_results = await web_search.search(search_query)
                     context = web_search.format_for_context(search_results)
                     
                     if context:
@@ -504,11 +398,17 @@ class LLMService:
                     "reason": "not_configured"
                 }
         
+        # Prepend location context so the LLM knows where the user is
+        if location_context:
+            augmented_message = f"{location_context}{augmented_message}"
+        
         response = await provider.generate(augmented_message, model, history)
         
-        # Add search metadata to response (optional, for debugging)
+        # Add metadata to response (for frontend thinking steps + debugging)
         if search_metadata:
             response["_search"] = search_metadata
+        if user_location:
+            response["_location"] = True
         
         return response
 

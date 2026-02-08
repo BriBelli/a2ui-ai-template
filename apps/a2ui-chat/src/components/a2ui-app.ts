@@ -6,6 +6,7 @@ import { authService, type AuthUser } from '../services/auth-service';
 import { chatHistoryService, ChatHistoryService, type ChatThread } from '../services/chat-history-service';
 import { uiConfig } from '../config/ui-config';
 import { initTheme, toggleTheme, getTheme, type Theme } from '../services/theme-service';
+import type { ThinkingStep } from './chat/a2ui-thinking-indicator';
 
 @customElement('a2ui-app')
 export class A2UIApp extends LitElement {
@@ -225,6 +226,9 @@ export class A2UIApp extends LitElement {
   // ── Theme ───────────────────────────────────────────────
   @state() private theme: Theme = 'dark';
 
+  // ── Thinking steps (drives the loading indicator) ──────
+  @state() private thinkingSteps: ThinkingStep[] = [];
+
   private chatService = new ChatService();
 
   // ── History / back-button navigation ────────────────────
@@ -381,6 +385,26 @@ export class A2UIApp extends LitElement {
     this.persistThread();
     this.isLoading = true;
 
+    // Drive thinking steps through the request lifecycle
+    this.thinkingSteps = [{ label: 'Analyzing your message', done: false }];
+
+    // After a short delay, mark analyzing done and show search step
+    const searchTimer = window.setTimeout(() => {
+      this.thinkingSteps = [
+        { label: 'Analyzing your message', done: true },
+        { label: 'Searching for information', done: false },
+      ];
+    }, 800);
+
+    // After search likely completes, show generating step
+    const genTimer = window.setTimeout(() => {
+      this.thinkingSteps = [
+        { label: 'Analyzing your message', done: true },
+        { label: 'Searching for information', done: true },
+        { label: 'Generating response', done: false },
+      ];
+    }, 3000);
+
     try {
       const response = await this.chatService.sendMessage(
         message,
@@ -388,6 +412,17 @@ export class A2UIApp extends LitElement {
         this.selectedModel,
         this.messages
       );
+
+      // Clear timers since response arrived
+      clearTimeout(searchTimer);
+      clearTimeout(genTimer);
+
+      // Show all steps completed briefly before removing
+      this.thinkingSteps = [
+        { label: 'Analyzing your message', done: true },
+        ...(response._search?.searched ? [{ label: 'Searching for information', done: true }] : []),
+        { label: 'Generating response', done: true },
+      ];
 
       const provider = this.providers.find(p => p.id === this.selectedProvider);
       const model = provider?.models.find(m => m.id === this.selectedModel);
@@ -404,6 +439,8 @@ export class A2UIApp extends LitElement {
 
       this.persistThread();
     } catch (error) {
+      clearTimeout(searchTimer);
+      clearTimeout(genTimer);
       console.error('Chat error:', error);
       this.messages = [...this.messages, {
         id: crypto.randomUUID(),
@@ -414,6 +451,7 @@ export class A2UIApp extends LitElement {
       this.persistThread();
     } finally {
       this.isLoading = false;
+      this.thinkingSteps = [];
     }
   }
 
@@ -533,6 +571,7 @@ export class A2UIApp extends LitElement {
           .messages=${this.messages}
           .isLoading=${this.isLoading}
           .suggestions=${this.suggestions}
+          .thinkingSteps=${this.thinkingSteps}
           @send-message=${this.handleSendMessage}
         ></a2ui-chat-container>
       </main>

@@ -1,7 +1,7 @@
 import { LitElement, html, css } from 'lit';
-import { customElement, state } from 'lit/decorators.js';
+import { customElement, property } from 'lit/decorators.js';
 
-interface ThinkingStep {
+export interface ThinkingStep {
   label: string;
   done: boolean;
 }
@@ -118,48 +118,11 @@ export class A2UIThinkingIndicator extends LitElement {
     }
   `;
 
-  @state() private steps: ThinkingStep[] = [];
-  private timers: number[] = [];
-
-  private thinkingSteps: string[] = [
-    'Analyzing your message',
-    'Searching for information',
-    'Generating response',
-  ];
-
-  connectedCallback() {
-    super.connectedCallback();
-    this.startThinking();
-  }
-
-  disconnectedCallback() {
-    super.disconnectedCallback();
-    this.timers.forEach(t => clearTimeout(t));
-    this.timers = [];
-  }
-
-  private startThinking() {
-    // Show first step immediately
-    this.steps = [{ label: this.thinkingSteps[0], done: false }];
-
-    // Progress through steps with delays
-    const t1 = window.setTimeout(() => {
-      this.steps = [
-        { label: this.thinkingSteps[0], done: true },
-        { label: this.thinkingSteps[1], done: false },
-      ];
-    }, 1200);
-
-    const t2 = window.setTimeout(() => {
-      this.steps = [
-        { label: this.thinkingSteps[0], done: true },
-        { label: this.thinkingSteps[1], done: true },
-        { label: this.thinkingSteps[2], done: false },
-      ];
-    }, 2800);
-
-    this.timers = [t1, t2];
-  }
+  /**
+   * Steps to display. Parent controls progression.
+   * If empty, falls back to default timed progression.
+   */
+  @property({ type: Array }) steps: ThinkingStep[] = [];
 
   private renderStepIcon(done: boolean) {
     if (done) {

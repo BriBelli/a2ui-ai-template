@@ -1,5 +1,6 @@
 import type { A2UIResponse } from '@a2ui/core';
 import { aiConfig } from '../config/ui-config';
+import { getUserLocation } from './geolocation-service';
 
 export interface ChatMessage {
   id: string;
@@ -26,6 +27,9 @@ export interface ChatResponse {
   text?: string;
   a2ui?: A2UIResponse;
   suggestions?: string[];
+  /** Backend metadata about search/tools used (for thinking indicator). */
+  _search?: { searched: boolean; success?: boolean; results_count?: number; images_count?: number; error?: string };
+  _location?: boolean;
 }
 
 export interface LLMModel {
@@ -86,12 +90,16 @@ export class ChatService {
     history?: ChatMessage[]
   ): Promise<ChatResponse> {
     try {
+      // Attempt to get user location (non-blocking, cached after first grant)
+      const location = await getUserLocation();
+
       // Build request body
       const body: Record<string, unknown> = { 
         message, 
         provider, 
         model,
         enableWebSearch: aiConfig.webSearch,
+        ...(location && { userLocation: location }),
       };
 
       // Add conversation history if enabled

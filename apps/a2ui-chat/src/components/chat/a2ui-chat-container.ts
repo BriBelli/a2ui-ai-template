@@ -1,6 +1,7 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, property, query } from 'lit/decorators.js';
 import type { ChatMessage } from '../../services/chat-service';
+import type { ThinkingStep } from './a2ui-thinking-indicator';
 import { uiConfig } from '../../config/ui-config';
 
 @customElement('a2ui-chat-container')
@@ -143,6 +144,7 @@ export class A2UIChatContainer extends LitElement {
   @property({ type: Array }) messages: ChatMessage[] = [];
   @property({ type: Boolean }) isLoading = false;
   @property({ type: Array }) suggestions: string[] = [];
+  @property({ type: Array }) thinkingSteps: ThinkingStep[] = [];
 
   @query('.messages-container') private messagesContainer!: HTMLElement;
 
@@ -188,7 +190,7 @@ export class A2UIChatContainer extends LitElement {
   }
 
   private renderLoading() {
-    return html`<a2ui-thinking-indicator></a2ui-thinking-indicator>`;
+    return html`<a2ui-thinking-indicator .steps=${this.thinkingSteps}></a2ui-thinking-indicator>`;
   }
 
   render() {
