@@ -1,9 +1,11 @@
 import { LitElement, html, css } from 'lit';
-import { customElement, state } from 'lit/decorators.js';
+import { customElement, property, state } from 'lit/decorators.js';
 
-interface ThinkingStep {
+export interface ThinkingStep {
   label: string;
   done: boolean;
+  /** Optional detail shown in muted text (e.g. the search query). */
+  detail?: string;
 }
 
 @customElement('a2ui-thinking-indicator')
@@ -55,6 +57,13 @@ export class A2UIThinkingIndicator extends LitElement {
       font-size: var(--a2ui-text-sm);
     }
 
+    .elapsed {
+      color: var(--a2ui-text-tertiary);
+      font-size: var(--a2ui-text-xs);
+      margin-left: auto;
+      font-variant-numeric: tabular-nums;
+    }
+
     .spinner {
       width: 14px;
       height: 14px;
@@ -77,7 +86,7 @@ export class A2UIThinkingIndicator extends LitElement {
 
     .step {
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       gap: var(--a2ui-space-2);
       font-size: var(--a2ui-text-xs);
       color: var(--a2ui-text-tertiary);
@@ -97,6 +106,7 @@ export class A2UIThinkingIndicator extends LitElement {
       align-items: center;
       justify-content: center;
       flex-shrink: 0;
+      margin-top: 1px;
     }
 
     .step-icon svg {
@@ -116,49 +126,35 @@ export class A2UIThinkingIndicator extends LitElement {
       border-radius: 50%;
       animation: spin 0.8s linear infinite;
     }
+
+    .step-text {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+    }
+
+    .step-detail {
+      color: var(--a2ui-accent);
+      font-size: 10px;
+      font-style: italic;
+    }
   `;
 
-  @state() private steps: ThinkingStep[] = [];
-  private timers: number[] = [];
+  /** Steps to display. Parent controls progression. */
+  @property({ type: Array }) steps: ThinkingStep[] = [];
 
-  private thinkingSteps: string[] = [
-    'Analyzing your message',
-    'Searching for information',
-    'Generating response',
-  ];
+  @state() private elapsed = 0;
+  private timer = 0;
 
   connectedCallback() {
     super.connectedCallback();
-    this.startThinking();
+    this.elapsed = 0;
+    this.timer = window.setInterval(() => { this.elapsed++; }, 1000);
   }
 
   disconnectedCallback() {
     super.disconnectedCallback();
-    this.timers.forEach(t => clearTimeout(t));
-    this.timers = [];
-  }
-
-  private startThinking() {
-    // Show first step immediately
-    this.steps = [{ label: this.thinkingSteps[0], done: false }];
-
-    // Progress through steps with delays
-    const t1 = window.setTimeout(() => {
-      this.steps = [
-        { label: this.thinkingSteps[0], done: true },
-        { label: this.thinkingSteps[1], done: false },
-      ];
-    }, 1200);
-
-    const t2 = window.setTimeout(() => {
-      this.steps = [
-        { label: this.thinkingSteps[0], done: true },
-        { label: this.thinkingSteps[1], done: true },
-        { label: this.thinkingSteps[2], done: false },
-      ];
-    }, 2800);
-
-    this.timers = [t1, t2];
+    clearInterval(this.timer);
   }
 
   private renderStepIcon(done: boolean) {
@@ -182,13 +178,17 @@ export class A2UIThinkingIndicator extends LitElement {
           <div class="header">
             <span class="spinner"></span>
             <span>Thinking...</span>
+            ${this.elapsed >= 2 ? html`<span class="elapsed">${this.elapsed}s</span>` : ''}
           </div>
           ${this.steps.length > 0 ? html`
             <div class="steps">
               ${this.steps.map(step => html`
                 <div class="step">
                   ${this.renderStepIcon(step.done)}
-                  <span>${step.label}</span>
+                  <span class="step-text">
+                    <span>${step.label}</span>
+                    ${step.detail ? html`<span class="step-detail">${step.detail}</span>` : ''}
+                  </span>
                 </div>
               `)}
             </div>

@@ -6,6 +6,8 @@ import { authService, type AuthUser } from '../services/auth-service';
 import { chatHistoryService, ChatHistoryService, type ChatThread } from '../services/chat-history-service';
 import { uiConfig } from '../config/ui-config';
 import { initTheme, toggleTheme, getTheme, type Theme } from '../services/theme-service';
+import { isLocationCached } from '../services/geolocation-service';
+import type { ThinkingStep } from './chat/a2ui-thinking-indicator';
 
 @customElement('a2ui-app')
 export class A2UIApp extends LitElement {
@@ -225,6 +227,9 @@ export class A2UIApp extends LitElement {
   // ── Theme ───────────────────────────────────────────────
   @state() private theme: Theme = 'dark';
 
+  // ── Thinking steps (drives the loading indicator) ──────
+  @state() private thinkingSteps: ThinkingStep[] = [];
+
   private chatService = new ChatService();
 
   // ── History / back-button navigation ────────────────────
@@ -381,13 +386,60 @@ export class A2UIApp extends LitElement {
     this.persistThread();
     this.isLoading = true;
 
+    // Build dynamic steps array that reflects real operations
+    const steps: ThinkingStep[] = [];
+    const willSearch = this.chatService.willSearch(message);
+    const locationCached = isLocationCached();
+
+    // Helper to update the reactive property
+    const push = (label: string, detail?: string) => {
+      steps.push({ label, done: false, detail });
+      this.thinkingSteps = [...steps];
+    };
+    const done = (index: number) => {
+      steps[index] = { ...steps[index], done: true };
+      this.thinkingSteps = [...steps];
+    };
+
+    // Step 1: Analyzing (always)
+    push('Analyzing your message');
+
     try {
       const response = await this.chatService.sendMessage(
         message,
         this.selectedProvider,
         this.selectedModel,
-        this.messages
+        this.messages,
+        // Progress callback — driven by real lifecycle events
+        (phase) => {
+          switch (phase) {
+            case 'location':
+              done(0); // analyzing done
+              if (!locationCached) {
+                push('Getting your location');
+              }
+              break;
+            case 'location-done':
+              // Mark location step done if it was shown
+              if (!locationCached && steps.length > 1) done(1);
+              break;
+            case 'searching':
+              push('Searching the web', `"${message.slice(0, 60)}${message.length > 60 ? '…' : ''}"`);
+              break;
+            case 'search-done': {
+              const searchIdx = steps.findIndex(s => s.label.startsWith('Searching'));
+              if (searchIdx >= 0) done(searchIdx);
+              break;
+            }
+            case 'generating':
+              push('Generating response');
+              break;
+          }
+        },
       );
+
+      // Mark all steps done
+      steps.forEach((_, i) => done(i));
 
       const provider = this.providers.find(p => p.id === this.selectedProvider);
       const model = provider?.models.find(m => m.id === this.selectedModel);
@@ -414,6 +466,7 @@ export class A2UIApp extends LitElement {
       this.persistThread();
     } finally {
       this.isLoading = false;
+      this.thinkingSteps = [];
     }
   }
 
@@ -533,6 +586,7 @@ export class A2UIApp extends LitElement {
           .messages=${this.messages}
           .isLoading=${this.isLoading}
           .suggestions=${this.suggestions}
+          .thinkingSteps=${this.thinkingSteps}
           @send-message=${this.handleSendMessage}
         ></a2ui-chat-container>
       </main>

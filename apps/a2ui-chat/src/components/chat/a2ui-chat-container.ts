@@ -1,6 +1,7 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, property, query } from 'lit/decorators.js';
 import type { ChatMessage } from '../../services/chat-service';
+import type { ThinkingStep } from './a2ui-thinking-indicator';
 import { uiConfig } from '../../config/ui-config';
 
 @customElement('a2ui-chat-container')
@@ -17,6 +18,7 @@ export class A2UIChatContainer extends LitElement {
       flex: 1;
       overflow-y: auto;
       padding: var(--a2ui-space-6) 0;
+      scroll-behavior: smooth;
     }
 
     .messages-wrapper {
@@ -138,34 +140,125 @@ export class A2UIChatContainer extends LitElement {
     a2ui-thinking-indicator {
       margin-bottom: var(--a2ui-space-4);
     }
+
+    /* Scroll-to-bottom FAB */
+    .scroll-fab {
+      position: absolute;
+      bottom: 0;
+      left: 50%;
+      transform: translateX(-50%) translateY(8px) scale(0.9);
+      opacity: 0;
+      pointer-events: none;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: var(--a2ui-bg-secondary);
+      border: 1px solid var(--a2ui-border-default);
+      color: var(--a2ui-text-secondary);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: var(--a2ui-shadow-md);
+      transition: opacity 0.2s ease, transform 0.2s ease, background-color 0.15s ease;
+      z-index: 10;
+    }
+
+    .scroll-fab.visible {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateX(-50%) translateY(0) scale(1);
+    }
+
+    .scroll-fab:hover {
+      background: var(--a2ui-bg-tertiary);
+      color: var(--a2ui-text-primary);
+      border-color: var(--a2ui-accent);
+    }
+
+    .messages-area {
+      position: relative;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
   `;
 
   @property({ type: Array }) messages: ChatMessage[] = [];
   @property({ type: Boolean }) isLoading = false;
   @property({ type: Array }) suggestions: string[] = [];
+  @property({ type: Array }) thinkingSteps: ThinkingStep[] = [];
 
   @query('.messages-container') private messagesContainer!: HTMLElement;
 
+  /** True when the user hasn't scrolled far from the bottom */
+  private _userNearBottom = true;
+  private _showScrollFab = false;
+
   connectedCallback() {
     super.connectedCallback();
-    // Apply animation attributes from config
     if (uiConfig.animateWelcome) {
       this.setAttribute('animate-welcome', '');
     }
   }
 
+  firstUpdated() {
+    // Listen for scroll events on the messages container
+    this.messagesContainer?.addEventListener('scroll', this._onScroll, { passive: true });
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    this.messagesContainer?.removeEventListener('scroll', this._onScroll);
+  }
+
+  private _onScroll = () => {
+    const el = this.messagesContainer;
+    if (!el) return;
+    const threshold = 120; // px from bottom
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < threshold;
+    this._userNearBottom = nearBottom;
+
+    // Show/hide the FAB — only when there's meaningful scroll distance
+    const scrollRemaining = el.scrollHeight - el.scrollTop - el.clientHeight;
+    const shouldShow = scrollRemaining > 300;
+    if (shouldShow !== this._showScrollFab) {
+      this._showScrollFab = shouldShow;
+      const fab = this.shadowRoot?.querySelector('.scroll-fab');
+      fab?.classList.toggle('visible', shouldShow);
+    }
+  };
+
   updated(changedProperties: Map<string, unknown>) {
     if (changedProperties.has('messages') || changedProperties.has('isLoading')) {
-      this.scrollToBottom();
+      // Auto-scroll only if user is near the bottom (don't hijack if they scrolled up)
+      if (this._userNearBottom) {
+        this.scrollToBottom();
+      } else if (changedProperties.has('messages')) {
+        // If they scrolled up but a new user message was just added, scroll anyway
+        const prev = changedProperties.get('messages') as ChatMessage[] | undefined;
+        if (prev && this.messages.length > prev.length) {
+          const lastNew = this.messages[this.messages.length - 1];
+          if (lastNew.role === 'user') {
+            this.scrollToBottom();
+          }
+        }
+      }
     }
   }
 
   private scrollToBottom() {
     requestAnimationFrame(() => {
-      if (this.messagesContainer) {
-        this.messagesContainer.scrollTop = this.messagesContainer.scrollHeight;
-      }
+      const el = this.messagesContainer;
+      if (!el) return;
+      el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+      this._userNearBottom = true;
     });
+  }
+
+  private _handleScrollFabClick() {
+    this.scrollToBottom();
   }
 
   private handleSuggestionClick(suggestion: string) {
@@ -188,40 +281,49 @@ export class A2UIChatContainer extends LitElement {
   }
 
   private renderLoading() {
-    return html`<a2ui-thinking-indicator></a2ui-thinking-indicator>`;
+    return html`<a2ui-thinking-indicator .steps=${this.thinkingSteps}></a2ui-thinking-indicator>`;
   }
 
   render() {
     const hasMessages = this.messages.length > 0;
 
     return html`
-      <div class="messages-container">
-        ${hasMessages ? html`
-          <div class="messages-wrapper">
-            ${this.messages.map(msg => html`
-              <a2ui-chat-message
-                .message=${msg}
-              ></a2ui-chat-message>
-            `)}
-            ${this.isLoading ? this.renderLoading() : ''}
-          </div>
-        ` : html`
-          <div class="welcome">
-            <h1 class="welcome-title">How can I help you today?</h1>
-            <p class="welcome-subtitle">
-              I can search the web, analyze data, create charts, and more.
-            </p>
-            ${uiConfig.maxSuggestions > 0 && this.suggestions.length > 0 ? html`
-              <div class="suggestions">
-                ${this.suggestions.slice(0, uiConfig.maxSuggestions).map(s => html`
-                  <button class="suggestion" @click=${() => this.handleSuggestionClick(s)}>
-                    ${s}
-                  </button>
-                `)}
-              </div>
-            ` : ''}
-          </div>
-        `}
+      <div class="messages-area">
+        <div class="messages-container">
+          ${hasMessages ? html`
+            <div class="messages-wrapper">
+              ${this.messages.map(msg => html`
+                <a2ui-chat-message
+                  .message=${msg}
+                ></a2ui-chat-message>
+              `)}
+              ${this.isLoading ? this.renderLoading() : ''}
+            </div>
+          ` : html`
+            <div class="welcome">
+              <h1 class="welcome-title">How can I help you today?</h1>
+              <p class="welcome-subtitle">
+                I can search the web, analyze data, create charts, and more.
+              </p>
+              ${uiConfig.maxSuggestions > 0 && this.suggestions.length > 0 ? html`
+                <div class="suggestions">
+                  ${this.suggestions.slice(0, uiConfig.maxSuggestions).map(s => html`
+                    <button class="suggestion" @click=${() => this.handleSuggestionClick(s)}>
+                      ${s}
+                    </button>
+                  `)}
+                </div>
+              ` : ''}
+            </div>
+          `}
+        </div>
+
+        <!-- Scroll-to-bottom FAB (appears when user scrolls up) -->
+        <button class="scroll-fab" @click=${this._handleScrollFabClick} title="Scroll to bottom">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z"/>
+          </svg>
+        </button>
       </div>
       
       <div class="input-container">

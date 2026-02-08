@@ -108,12 +108,19 @@ class HistoryMessage(BaseModel):
     content: str = Field(..., max_length=10_000)
 
 
+class UserLocation(BaseModel):
+    lat: float
+    lng: float
+    label: Optional[str] = None
+
+
 class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=10_000)
     provider: Optional[str] = Field(None, max_length=50)
     model: Optional[str] = Field(None, max_length=100)
     history: List[HistoryMessage] = Field(default_factory=list)
     enableWebSearch: bool = False
+    userLocation: Optional[UserLocation] = None
 
     @field_validator("history")
     @classmethod
@@ -175,12 +182,14 @@ async def chat(request: Request, body: ChatRequest):
     if body.provider and body.model:
         try:
             history_dicts = [h.model_dump() for h in body.history]
+            location_dict = body.userLocation.model_dump() if body.userLocation else None
             response = await llm_service.generate(
                 body.message,
                 body.provider,
                 body.model,
                 history=history_dicts,
                 enable_web_search=body.enableWebSearch,
+                user_location=location_dict,
             )
             return JSONResponse(content=response)
         except ValueError as e:

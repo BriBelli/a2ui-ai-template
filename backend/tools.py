@@ -149,16 +149,16 @@ class WebSearchTool:
             # No results but search succeeded - inform LLM
             return "[Web search found no relevant results]"
         
-        context_parts = ["[Web Search Results]"]
+        context_parts = ["[Web Search Results — REAL, CURRENT data. Use these facts in your answer.]"]
         
         if search_results.get("answer"):
-            context_parts.append(f"Summary: {search_results['answer']}")
+            context_parts.append(f"Direct answer: {search_results['answer']}")
         
-        for i, result in enumerate(results[:3], 1):
+        for i, result in enumerate(results[:5], 1):
             context_parts.append(
                 f"\n{i}. {result['title']}\n"
                 f"   URL: {result['url']}\n"
-                f"   {result['content'][:300]}..."
+                f"   {result['content'][:400]}"
             )
         
         # Include image URLs if available
