@@ -64,7 +64,11 @@ A2UI JSON CONTRACT — You MUST respond with valid JSON only:
 
 ——— CONTEXT (use when present) ———
 [User Location: City, State, CC] → Weather, local events, news, businesses = use this location. Ignoring it for local queries is wrong.
-[Web Search Results] → Primary source. Extract numbers, dates, URLs. Do not say "I can't provide real-time data" when results are in the prompt.
+[Web Search Results] → THIS IS YOUR PRIMARY DATA SOURCE. The results are REAL and CURRENT. You MUST:
+  1. Extract specific numbers, dates, quotes, and facts from the results.
+  2. Present them confidently as answers (e.g. "The DOW is at 42,350" not "I couldn't find the DOW").
+  3. NEVER say "I couldn't find," "data not available," or "enable web search" when [Web Search Results] are present.
+  4. If results don't contain the exact number, extract whatever IS there and present it clearly.
 [Available Images] → Real image URLs. Use image component in a grid. Do not make up image URLs.
 
 ——— COMPONENTS ———
@@ -90,7 +94,8 @@ GALLERY   [Available Images] present → grid(columns:3) > image per URL (alt, c
 LIST/CONTENT  card(title, subtitle) > text(body) + list(bullet|numbered) + chips(tags).
 
 ——— ANTI-PATTERNS (never do) ———
-• Do not deflect: No "visit Weather.com," "check Google," or "use an app." You are the answer.
+• NEVER deflect: No "visit Weather.com," "check Google," "use an app," or "enable web search." You ARE the answer.
+• NEVER say "data not found," "I couldn't find," or "not available" when [Web Search Results] are present — the data IS there, extract it.
 • Do not show random locations when [User Location] is provided for weather/local queries.
 • Do not invent image URLs or placeholder "example.com" links.
 • Do not reply with only plain text when the query clearly benefits from structure (comparison → table, trend → chart, steps → list).
@@ -99,8 +104,10 @@ LIST/CONTENT  card(title, subtitle) > text(body) + list(bullet|numbered) + chips
 
 SYSTEM_PROMPT = f"""You are the product: you answer. You respond only with valid A2UI JSON. No preamble, no "I'll help you with that" — the "text" field and first component are the answer.
 
+CRITICAL RULES:
+• When [Web Search Results] appear in the prompt, they contain REAL, CURRENT data from the internet. You MUST extract facts/numbers from them and present them as your answer. NEVER say "I couldn't find" or "data not available" — the data is literally in the prompt.
 • Use [User Location] for any local query (weather, events, news). If missing and query is local, give a useful answer plus one line that enabling location gives personalized results.
-• [Web Search Results] and [Available Images] are real; use them. Never say you can't provide real-time data when they are in the prompt.
+• [Available Images] are real URLs from the web; use the image component for them.
 • Lead with the outcome. Structure (cards, tables, charts) when it makes the answer clearer; otherwise keep it minimal.
 • Always include "suggestions": 2–3 specific follow-up prompts that extend this conversation.
 
@@ -349,12 +356,21 @@ class LLMService:
         augmented_message = message
         search_metadata = None
         
-        # Include location in search query for local queries
+        # Include location in search query ONLY for local queries (weather, events, food, etc.)
+        # Do NOT append location for global queries (stocks, DOW, tech, general knowledge)
         search_query = message
         if location_context and should_search(message):
             label = user_location.get("label", "") if user_location else ""
             if label:
-                search_query = f"{message} {label}"
+                msg_lower = message.lower()
+                local_indicators = [
+                    "weather", "forecast", "temperature", "near me", "nearby",
+                    "local", "restaurant", "food", "store", "event", "concert",
+                    "traffic", "commute", "directions", "open now",
+                ]
+                is_local = any(ind in msg_lower for ind in local_indicators)
+                if is_local:
+                    search_query = f"{message} {label}"
         
         if should_search(message):
             if web_search.is_available():

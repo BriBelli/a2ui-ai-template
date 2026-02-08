@@ -83,15 +83,43 @@ export class ChatService {
     }
   }
 
+  /**
+   * Lightweight check — mirrors backend's should_search().
+   * Used to predict whether the backend will search so the
+   * thinking indicator can show the right steps immediately.
+   */
+  willSearch(message: string): boolean {
+    const m = message.toLowerCase();
+    const indicators = [
+      'current', 'latest', 'today', 'now', 'recent', 'right now',
+      'these days', 'nowadays', 'trending', 'popular',
+      'getting noticed', 'going viral',
+      'price', 'stock', 'market', 'trading', 'bitcoin', 'crypto',
+      'weather', 'forecast', 'temperature',
+      'news', 'headlines', 'score', 'game',
+      'what is the', 'how much', 'who won', 'who is',
+      'compare', 'vs', 'versus',
+      'show me', 'pictures of', 'photos of', 'images of',
+      'artwork', 'art', 'design',
+      '2024', '2025', '2026',
+    ];
+    return indicators.some(i => m.includes(i));
+  }
+
+  /** Callback type for reporting progress during sendMessage. */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   async sendMessage(
     message: string,
     provider?: string,
     model?: string,
-    history?: ChatMessage[]
+    history?: ChatMessage[],
+    onProgress?: (phase: 'location' | 'location-done' | 'searching' | 'search-done' | 'generating') => void,
   ): Promise<ChatResponse> {
     try {
-      // Attempt to get user location (non-blocking, cached after first grant)
+      // Phase 1: Location
+      onProgress?.('location');
       const location = await getUserLocation();
+      onProgress?.('location-done');
 
       // Build request body
       const body: Record<string, unknown> = { 
@@ -113,6 +141,12 @@ export class ChatService {
         body.history = historyMessages;
       }
 
+      // Phase 2: Searching (predicted; actual search happens server-side)
+      if (this.willSearch(message)) {
+        onProgress?.('searching');
+      }
+
+      // Phase 3: API call (search + LLM generation happen here)
       const response = await fetch(`${this.baseUrl}/chat`, {
         method: 'POST',
         headers: this.getHeaders(),
@@ -124,6 +158,10 @@ export class ChatService {
       }
       // A2UI API response data
       const data = await response.json();
+
+      onProgress?.('search-done');
+      onProgress?.('generating');
+
       if (data.a2ui) {
         console.log('[A2UI] API response a2ui:', JSON.stringify(data.a2ui, null, 2));
       }

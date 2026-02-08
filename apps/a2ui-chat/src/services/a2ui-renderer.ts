@@ -74,7 +74,7 @@ export class A2UIRenderer {
           <a2ui-grid
             .id=${id}
             .columns=${props.columns || 2}
-            .gap=${props.gap || 'md'}
+            .gap=${props.gap || 'lg'}
           >
             ${renderedChildren}
           </a2ui-grid>

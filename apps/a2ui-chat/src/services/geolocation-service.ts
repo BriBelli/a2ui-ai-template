@@ -67,6 +67,11 @@ export async function getUserLocation(): Promise<UserLocation | null> {
   }
 }
 
+/** True if location is already cached (i.e. won't block). */
+export function isLocationCached(): boolean {
+  return cached !== null;
+}
+
 /** Clear cached location (e.g. on logout). */
 export function clearLocationCache() {
   cached = null;
