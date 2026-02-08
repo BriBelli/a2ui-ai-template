@@ -1,0 +1,26 @@
+{
+  "name": "how-to",
+  "description": "Step-by-step instructions or tutorial",
+  "match": ["how to", "steps", "tutorial", "guide", "instructions", "recipe"],
+  "template": {
+    "version": "1.0",
+    "components": [
+      {
+        "id": "root",
+        "type": "container",
+        "props": { "layout": "vertical", "gap": "md" },
+        "children": [
+          {
+            "id": "steps-card",
+            "type": "card",
+            "props": { "title": "{{title}}" },
+            "children": [
+              { "id": "steps", "type": "list", "props": { "variant": "numbered", "items": "{{steps}}" } }
+            ]
+          },
+          { "id": "tip", "type": "text", "props": { "content": "{{tip}}", "variant": "caption" } }
+        ]
+      }
+    ]
+  }
+}

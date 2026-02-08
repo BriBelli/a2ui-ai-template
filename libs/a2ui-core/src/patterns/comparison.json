@@ -1,0 +1,48 @@
+{
+  "name": "comparison",
+  "description": "Side-by-side comparison of two or more options",
+  "match": ["compare", "vs", "versus", "difference", "better"],
+  "template": {
+    "version": "1.0",
+    "components": [
+      {
+        "id": "root",
+        "type": "container",
+        "props": { "layout": "vertical", "gap": "md" },
+        "children": [
+          {
+            "id": "cards",
+            "type": "grid",
+            "props": { "columns": 2, "gap": "md" },
+            "children": [
+              {
+                "id": "option-a",
+                "type": "card",
+                "props": { "title": "{{optionA}}" },
+                "children": [
+                  { "id": "list-a", "type": "list", "props": { "variant": "bullet", "items": "{{featuresA}}" } }
+                ]
+              },
+              {
+                "id": "option-b",
+                "type": "card",
+                "props": { "title": "{{optionB}}" },
+                "children": [
+                  { "id": "list-b", "type": "list", "props": { "variant": "bullet", "items": "{{featuresB}}" } }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "comparison-table",
+            "type": "data-table",
+            "props": {
+              "columns": "{{comparisonColumns}}",
+              "data": "{{comparisonRows}}"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

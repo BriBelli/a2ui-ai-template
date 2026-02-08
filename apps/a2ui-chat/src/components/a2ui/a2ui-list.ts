@@ -88,7 +88,8 @@ export class A2UIList extends LitElement {
       color: var(--a2ui-text-primary);
     }
 
-    .item-text.completed {
+    /* Strikethrough only in checklist mode */
+    .checklist .item-text.completed {
       text-decoration: line-through;
       color: var(--a2ui-text-tertiary);
     }

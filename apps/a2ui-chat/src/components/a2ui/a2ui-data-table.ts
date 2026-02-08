@@ -72,11 +72,11 @@ export class A2UIDataTable extends LitElement {
   }
 
   private getCellClass(value: unknown, key: string): string {
-    const strValue = String(value);
+    const strValue = String(value).trim();
     
-    // Detect positive/negative changes
-    if (strValue.startsWith('+')) return 'positive';
-    if (strValue.startsWith('-') && strValue.includes('%')) return 'negative';
+    // Only style values that look like numeric changes (e.g. "+5.2%", "-1.3%")
+    if (/^\+\d/.test(strValue)) return 'positive';
+    if (/^-\d.*%$/.test(strValue)) return 'negative';
     
     // Style stock symbols
     if (key === 'symbol') return 'symbol';

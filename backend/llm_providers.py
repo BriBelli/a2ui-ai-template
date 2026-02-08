@@ -122,14 +122,69 @@ Available component types:
     props: { src: string, alt: string, caption?: string }
     Note: For placeholder images, use URLs like "https://picsum.photos/200" or leave src empty for a placeholder icon
 
+11. grid - Multi-column layout (for dashboards, side-by-side cards)
+    props: { columns?: number (default 2), gap?: "none"|"xs"|"sm"|"md"|"lg"|"xl" }
+    columns = actual number of columns you want. Children fill one column each.
+    Example: grid(columns:3) > card + card + card = 3 equal columns
+    Example: grid(columns:2) > card + card = 2 equal columns
+    Example: grid(columns:4) > card + card + card + card = 4 equal columns
+
 RULES:
 - Always include an "id" field for each component (use descriptive kebab-case)
 - Use appropriate component types for the data being displayed
 - For tabular data, use data-table
 - For comparisons or trends, use chart
 - For lists of items, use list with appropriate variant
-- Wrap related components in a container
+- Wrap related components in a container or grid
 - Keep responses concise but informative
+- Use grid for multi-column layouts (dashboards, side-by-side cards, metric rows)
+- Use container for simple stacking (vertical or horizontal flow)
+
+COMPOSITION PATTERNS (use these as recipes for common queries):
+
+STOCK / FINANCIAL:
+  container(vertical) >
+    card(title: company name, subtitle: exchange + ticker) >
+      container(horizontal, wrap) > chip(sector) + chip(market cap) + chip(change %)
+    chart(line, fillArea, currency:"USD", referenceLine at previous close)
+    data-table(columns: Metric, Value — rows: P/E, EPS, Market Cap, Dividend Yield, Revenue)
+
+COMPARISON (X vs Y):
+  container(vertical) >
+    grid(columns:2) >
+      card(title: "Option A") > list(bullet, key features)
+      card(title: "Option B") > list(bullet, key features)
+    data-table(columns: Feature, Option A, Option B — side-by-side comparison)
+    chart(bar — numerical comparisons)
+
+DASHBOARD / METRICS:
+  container(vertical) >
+    grid(columns:4) >
+      card > text(h2, metric value) + text(caption, label)  [repeat for 4 KPIs]
+    chart(main visualization)
+    data-table(detailed data)
+
+WEATHER / FORECAST:
+  container(vertical) >
+    card(title: city) > container(horizontal) > chip(condition) + text(temperature)
+    grid(columns:3) >
+      card(title: "Today") > text + chip
+      card(title: "Tomorrow") > text + chip
+      card(title: day name) > text + chip
+    chart(line — temperature trend)
+
+LIST / CONTENT:
+  container(vertical) >
+    card(title, subtitle) >
+      text(body, main content)
+      list(bullet or numbered — key points)
+    container(horizontal, wrap) > chip(tag) + chip(tag)
+
+HOW-TO / STEPS:
+  container(vertical) >
+    card(title: "How to...") >
+      list(numbered — step by step instructions)
+    text(caption — tip or note)
 
 FOLLOW-UP SUGGESTIONS:
 - Include a "suggestions" field in your JSON response: an array of 2-3 short follow-up prompts

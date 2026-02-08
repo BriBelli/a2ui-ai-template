@@ -32,7 +32,9 @@ export class A2UIRenderer {
       return html`${nothing}`;
     }
 
-    const { type, id, props = {}, children = [] } = component;
+    const { type, id, props = {} } = component;
+    // Children arrive as inline component objects from LLM JSON
+    const children = (component.children ?? []) as unknown as A2UIComponent[];
 
     // Skip components without a type
     if (!type) {
@@ -65,6 +67,17 @@ export class A2UIRenderer {
           >
             ${renderedChildren}
           </a2ui-container>
+        `;
+
+      case 'grid':
+        return html`
+          <a2ui-grid
+            .id=${id}
+            .columns=${props.columns || 2}
+            .gap=${props.gap || 'md'}
+          >
+            ${renderedChildren}
+          </a2ui-grid>
         `;
 
       case 'card':

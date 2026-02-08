@@ -1,0 +1,32 @@
+{
+  "name": "content",
+  "description": "Article or informational content with key points and tags",
+  "match": ["explain", "what is", "how does", "article", "guide", "learn"],
+  "template": {
+    "version": "1.0",
+    "components": [
+      {
+        "id": "root",
+        "type": "container",
+        "props": { "layout": "vertical", "gap": "md" },
+        "children": [
+          {
+            "id": "content-card",
+            "type": "card",
+            "props": { "title": "{{title}}", "subtitle": "{{subtitle}}" },
+            "children": [
+              { "id": "body", "type": "text", "props": { "content": "{{body}}", "variant": "body" } },
+              { "id": "key-points", "type": "list", "props": { "variant": "bullet", "items": "{{keyPoints}}" } }
+            ]
+          },
+          {
+            "id": "tags",
+            "type": "container",
+            "props": { "layout": "horizontal", "gap": "sm", "wrap": true },
+            "children": "{{tagChips}}"
+          }
+        ]
+      }
+    ]
+  }
+}

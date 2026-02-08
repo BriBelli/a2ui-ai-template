@@ -26,10 +26,17 @@ export interface UIConfig {
   animateWelcome: boolean;
 
   /**
-   * Show suggestion prompts on the welcome screen.
-   * Data is provided separately — this just toggles visibility.
+   * Maximum number of suggestions to show (welcome screen + per-response).
+   * 0 = off, 1 = one suggestion, 2 = two, etc.
+   * Data is provided separately — this just caps how many are displayed.
    */
-  suggestions: boolean;
+  maxSuggestions: number;
+
+  /**
+   * Persist chat threads to localStorage so conversations
+   * survive page refreshes. Threads are scoped per user.
+   */
+  persistChat: boolean;
 }
 
 export interface AIConfig {
@@ -58,7 +65,8 @@ export const uiConfig: UIConfig = {
   loadingStyle: 'chat',
   animateMessages: true,
   animateWelcome: true,
-  suggestions: true,
+  maxSuggestions: 3,
+  persistChat: true,
 };
 
 /**

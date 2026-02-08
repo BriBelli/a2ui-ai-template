@@ -1,0 +1,77 @@
+{
+  "name": "weather",
+  "description": "Weather forecast with current conditions and multi-day outlook",
+  "match": ["weather", "forecast", "temperature", "climate"],
+  "template": {
+    "version": "1.0",
+    "components": [
+      {
+        "id": "root",
+        "type": "container",
+        "props": { "layout": "vertical", "gap": "md" },
+        "children": [
+          {
+            "id": "current",
+            "type": "card",
+            "props": { "title": "{{city}}" },
+            "children": [
+              {
+                "id": "current-row",
+                "type": "container",
+                "props": { "layout": "horizontal", "gap": "sm" },
+                "children": [
+                  { "id": "temp", "type": "text", "props": { "content": "{{temperature}}", "variant": "h1" } },
+                  { "id": "condition", "type": "chip", "props": { "label": "{{condition}}", "variant": "primary" } }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "forecast-grid",
+            "type": "grid",
+            "props": { "columns": 3, "gap": "sm" },
+            "children": [
+              {
+                "id": "day-1",
+                "type": "card",
+                "props": { "title": "{{day1Name}}" },
+                "children": [
+                  { "id": "day-1-temp", "type": "text", "props": { "content": "{{day1Temp}}", "variant": "h3" } },
+                  { "id": "day-1-cond", "type": "chip", "props": { "label": "{{day1Condition}}" } }
+                ]
+              },
+              {
+                "id": "day-2",
+                "type": "card",
+                "props": { "title": "{{day2Name}}" },
+                "children": [
+                  { "id": "day-2-temp", "type": "text", "props": { "content": "{{day2Temp}}", "variant": "h3" } },
+                  { "id": "day-2-cond", "type": "chip", "props": { "label": "{{day2Condition}}" } }
+                ]
+              },
+              {
+                "id": "day-3",
+                "type": "card",
+                "props": { "title": "{{day3Name}}" },
+                "children": [
+                  { "id": "day-3-temp", "type": "text", "props": { "content": "{{day3Temp}}", "variant": "h3" } },
+                  { "id": "day-3-cond", "type": "chip", "props": { "label": "{{day3Condition}}" } }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "temp-chart",
+            "type": "chart",
+            "props": {
+              "chartType": "line",
+              "title": "Temperature Trend",
+              "data": "{{tempChartData}}",
+              "options": { "fillArea": true }
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

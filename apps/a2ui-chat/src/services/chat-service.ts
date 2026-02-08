@@ -114,8 +114,12 @@ export class ChatService {
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-
-      return await response.json();
+      // A2UI API response data
+      const data = await response.json();
+      if (data.a2ui) {
+        console.log('[A2UI] API response a2ui:', JSON.stringify(data.a2ui, null, 2));
+      }
+      return data;
     } catch (error) {
       console.error('Chat API error:', error);
       // Return mock data for demo when backend is unavailable

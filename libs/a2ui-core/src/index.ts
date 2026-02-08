@@ -5,3 +5,4 @@ export * from './types';
 export * from './schema';
 export * from './registry';
 export * from './utils';
+export * from './patterns';

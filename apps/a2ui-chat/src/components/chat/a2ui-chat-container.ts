@@ -61,7 +61,7 @@ export class A2UIChatContainer extends LitElement {
       font-size: var(--a2ui-text-3xl);
       font-weight: var(--a2ui-font-medium);
       color: var(--a2ui-text-primary);
-      margin-bottom: var(--a2ui-space-3);
+      margin-bottom: var(--a2ui-space-0);
     }
 
     .welcome-subtitle {
@@ -207,13 +207,13 @@ export class A2UIChatContainer extends LitElement {
           </div>
         ` : html`
           <div class="welcome">
-            <h1 class="welcome-title">Hello! How can I help you today?</h1>
+            <h1 class="welcome-title">How can I help you today?</h1>
             <p class="welcome-subtitle">
-              Ask me anything. I can search the web, analyze data, create charts, and more.
+              I can search the web, analyze data, create charts, and more.
             </p>
-            ${uiConfig.suggestions && this.suggestions.length > 0 ? html`
+            ${uiConfig.maxSuggestions > 0 && this.suggestions.length > 0 ? html`
               <div class="suggestions">
-                ${this.suggestions.map(s => html`
+                ${this.suggestions.slice(0, uiConfig.maxSuggestions).map(s => html`
                   <button class="suggestion" @click=${() => this.handleSuggestionClick(s)}>
                     ${s}
                   </button>

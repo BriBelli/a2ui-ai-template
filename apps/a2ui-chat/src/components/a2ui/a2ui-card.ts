@@ -5,14 +5,16 @@ import { customElement, property } from 'lit/decorators.js';
 export class A2UICard extends LitElement {
   static styles = css`
     :host {
-      display: block;
+      display: flex;
+      flex-direction: column;
+      flex: 1;
     }
 
     .card {
-      background: var(--a2ui-bg-secondary);
-      border: 1px solid var(--a2ui-border-subtle);
+      flex: 1;
+      background: var(--a2ui-bg-tertiary);
       border-radius: var(--a2ui-radius-lg);
-      padding: var(--a2ui-space-4);
+      padding: var(--a2ui-space-5);
       transition: all var(--a2ui-transition-fast);
     }
 

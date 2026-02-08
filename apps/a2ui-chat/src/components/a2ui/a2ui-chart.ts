@@ -306,7 +306,9 @@ export class A2UIChart extends LitElement {
               color: '#9aa0a6',
               padding: 16,
               usePointStyle: true,
-              pointStyleWidth: 8,
+              pointStyle: 'circle',
+              boxWidth: 8,
+              boxHeight: 8,
               font: {
                 family: 'Google Sans, Roboto, sans-serif',
                 size: 11,

@@ -20,6 +20,7 @@ import './components/a2ui/a2ui-link';
 import './components/a2ui/a2ui-chip';
 import './components/a2ui/a2ui-button';
 import './components/a2ui/a2ui-container';
+import './components/a2ui/a2ui-grid';
 import './components/a2ui/a2ui-image';
 
 console.log('A2UI Chat Application loaded');

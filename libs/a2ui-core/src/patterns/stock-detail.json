@@ -1,0 +1,55 @@
+{
+  "name": "stock-detail",
+  "description": "Stock / financial instrument detail view with chart and metrics",
+  "match": ["stock", "share", "ticker", "financial", "earnings", "market cap"],
+  "template": {
+    "version": "1.0",
+    "components": [
+      {
+        "id": "root",
+        "type": "container",
+        "props": { "layout": "vertical", "gap": "md" },
+        "children": [
+          {
+            "id": "header",
+            "type": "card",
+            "props": { "title": "{{company}}", "subtitle": "{{exchange}} · {{ticker}}" },
+            "children": [
+              {
+                "id": "tags",
+                "type": "container",
+                "props": { "layout": "horizontal", "gap": "sm", "wrap": true },
+                "children": [
+                  { "id": "chip-sector", "type": "chip", "props": { "label": "{{sector}}", "variant": "default" } },
+                  { "id": "chip-cap", "type": "chip", "props": { "label": "{{marketCap}}", "variant": "primary" } },
+                  { "id": "chip-change", "type": "chip", "props": { "label": "{{change}}", "variant": "{{changeVariant}}" } }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "price-chart",
+            "type": "chart",
+            "props": {
+              "chartType": "line",
+              "title": "{{ticker}} Price",
+              "data": { "labels": "{{priceLabels}}", "datasets": "{{priceDatasets}}" },
+              "options": { "fillArea": true, "currency": "USD", "referenceLine": "{{previousClose}}", "referenceLabel": "Previous close" }
+            }
+          },
+          {
+            "id": "metrics-table",
+            "type": "data-table",
+            "props": {
+              "columns": [
+                { "key": "metric", "label": "Metric" },
+                { "key": "value", "label": "Value", "align": "right" }
+              ],
+              "data": "{{metricsRows}}"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
