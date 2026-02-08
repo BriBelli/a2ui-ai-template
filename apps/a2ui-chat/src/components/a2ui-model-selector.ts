@@ -188,25 +188,19 @@ export class A2UIModelSelector extends LitElement {
       <div class="selector-container">
         <div class="selector-group">
           ${this.selectedProvider ? this.getProviderIcon(this.selectedProvider) : ''}
-          <select 
-            .value=${this.selectedProvider}
-            @change=${this.handleProviderChange}
-          >
-            <option value="" disabled>Select Provider</option>
+          <select @change=${this.handleProviderChange}>
+            <option value="" disabled ?selected=${!this.selectedProvider}>Select Provider</option>
             ${this.providers.map(p => html`
-              <option value=${p.id}>${p.name}</option>
+              <option value=${p.id} ?selected=${p.id === this.selectedProvider}>${p.name}</option>
             `)}
           </select>
         </div>
 
         ${this.models.length > 0 ? html`
           <div class="selector-group">
-            <select 
-              .value=${this.selectedModel}
-              @change=${this.handleModelChange}
-            >
+            <select @change=${this.handleModelChange}>
               ${this.models.map(m => html`
-                <option value=${m.id}>${m.name}</option>
+                <option value=${m.id} ?selected=${m.id === this.selectedModel}>${m.name}</option>
               `)}
             </select>
           </div>

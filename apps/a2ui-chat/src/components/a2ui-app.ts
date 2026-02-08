@@ -97,34 +97,173 @@ export class A2UIApp extends LitElement {
       padding: var(--a2ui-space-2);
     }
 
-    /* ── User info ───────────────────────────────────────── */
+    /* ── Avatar & popover ────────────────────────────────── */
 
-    .user-info {
-      display: flex;
-      align-items: center;
-      gap: var(--a2ui-space-2);
-      font-size: var(--a2ui-text-sm);
-      color: var(--a2ui-text-secondary);
+    .avatar-wrapper {
+      position: relative;
     }
 
-    .user-avatar {
-      width: 28px;
-      height: 28px;
+    .avatar-btn {
+      width: 32px;
+      height: 32px;
       border-radius: var(--a2ui-radius-full);
       background: var(--a2ui-accent);
       color: var(--a2ui-text-inverse);
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 11px;
+      font-size: 12px;
       font-weight: var(--a2ui-font-medium);
       overflow: hidden;
+      border: 2px solid transparent;
+      cursor: pointer;
+      padding: 0;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
     }
 
-    .user-avatar img {
+    .avatar-btn:hover,
+    .avatar-btn.active {
+      border-color: var(--a2ui-accent);
+      box-shadow: 0 0 0 2px var(--a2ui-accent-subtle);
+    }
+
+    .avatar-btn img {
       width: 100%;
       height: 100%;
       object-fit: cover;
+    }
+
+    /* ── User menu popover ────────────────────────────────── */
+
+    .user-menu-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 99;
+    }
+
+    .user-menu {
+      position: absolute;
+      top: calc(100% + 8px);
+      right: 0;
+      width: 240px;
+      background: var(--a2ui-bg-secondary);
+      border: 1px solid var(--a2ui-border-default);
+      border-radius: var(--a2ui-radius-lg);
+      box-shadow: var(--a2ui-shadow-lg);
+      z-index: 100;
+      overflow: hidden;
+      transform-origin: top right;
+      animation: menuIn 0.15s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    @keyframes menuIn {
+      from {
+        opacity: 0;
+        transform: scale(0.95) translateY(-4px);
+      }
+      to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+      }
+    }
+
+    .user-menu-header {
+      padding: var(--a2ui-space-4);
+      border-bottom: 1px solid var(--a2ui-border-subtle);
+      display: flex;
+      align-items: center;
+      gap: var(--a2ui-space-3);
+    }
+
+    .user-menu-avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: var(--a2ui-radius-full);
+      background: var(--a2ui-accent);
+      color: var(--a2ui-text-inverse);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-weight: var(--a2ui-font-medium);
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+
+    .user-menu-avatar img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .user-menu-info {
+      min-width: 0;
+    }
+
+    .user-menu-name {
+      font-size: var(--a2ui-text-sm);
+      font-weight: var(--a2ui-font-medium);
+      color: var(--a2ui-text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .user-menu-email {
+      font-size: var(--a2ui-text-xs);
+      color: var(--a2ui-text-tertiary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .user-menu-body {
+      padding: var(--a2ui-space-2) 0;
+    }
+
+    .menu-item {
+      display: flex;
+      align-items: center;
+      gap: var(--a2ui-space-3);
+      width: 100%;
+      padding: var(--a2ui-space-2) var(--a2ui-space-4);
+      background: none;
+      border: none;
+      font-family: var(--a2ui-font-family);
+      font-size: var(--a2ui-text-sm);
+      color: var(--a2ui-text-primary);
+      cursor: pointer;
+      transition: background-color 0.1s ease;
+      text-align: left;
+    }
+
+    .menu-item:hover {
+      background: var(--a2ui-bg-hover);
+    }
+
+    .menu-item svg {
+      width: 16px;
+      height: 16px;
+      color: var(--a2ui-text-secondary);
+      flex-shrink: 0;
+    }
+
+    .menu-item .theme-label {
+      flex: 1;
+    }
+
+    .menu-divider {
+      height: 1px;
+      background: var(--a2ui-border-subtle);
+      margin: var(--a2ui-space-1) 0;
+    }
+
+    .menu-item.danger {
+      color: var(--a2ui-error);
+    }
+
+    .menu-item.danger svg {
+      color: var(--a2ui-error);
     }
 
     /* ── Auth loading / welcome ───────────────────────────── */
@@ -226,6 +365,9 @@ export class A2UIApp extends LitElement {
 
   // ── Theme ───────────────────────────────────────────────
   @state() private theme: Theme = 'dark';
+
+  // ── User menu ──────────────────────────────────────────
+  @state() private showUserMenu = false;
 
   // ── Thinking steps (drives the loading indicator) ──────
   @state() private thinkingSteps: ThinkingStep[] = [];
@@ -401,9 +543,6 @@ export class A2UIApp extends LitElement {
       this.thinkingSteps = [...steps];
     };
 
-    // Step 1: Analyzing (always)
-    push('Analyzing your message');
-
     try {
       const response = await this.chatService.sendMessage(
         message,
@@ -414,15 +553,15 @@ export class A2UIApp extends LitElement {
         (phase) => {
           switch (phase) {
             case 'location':
-              done(0); // analyzing done
               if (!locationCached) {
                 push('Getting your location');
               }
               break;
-            case 'location-done':
-              // Mark location step done if it was shown
-              if (!locationCached && steps.length > 1) done(1);
+            case 'location-done': {
+              const locIdx = steps.findIndex(s => s.label.startsWith('Getting'));
+              if (locIdx >= 0) done(locIdx);
               break;
+            }
             case 'searching':
               push('Searching the web', `"${message.slice(0, 60)}${message.length > 60 ? '…' : ''}"`);
               break;
@@ -482,11 +621,20 @@ export class A2UIApp extends LitElement {
     }
   }
 
+  private toggleUserMenu() {
+    this.showUserMenu = !this.showUserMenu;
+  }
+
+  private closeUserMenu() {
+    this.showUserMenu = false;
+  }
+
   private handleToggleTheme() {
     this.theme = toggleTheme();
   }
 
   private async handleLogout() {
+    this.showUserMenu = false;
     await authService.logout();
   }
 
@@ -543,17 +691,6 @@ export class A2UIApp extends LitElement {
         </div>
 
         <div class="header-right">
-          ${this.user ? html`
-            <div class="user-info">
-              <div class="user-avatar">
-                ${this.user.picture
-                  ? html`<img src=${this.user.picture} alt="" />`
-                  : this.getInitials(this.user)}
-              </div>
-              <!--<span>${this.user.email}</span>-->
-            </div>
-          ` : ''}
-
           ${this.messages.length > 0 ? html`
             <button class="header-btn" @click=${this.clearChat}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
@@ -563,21 +700,71 @@ export class A2UIApp extends LitElement {
             </button>
           ` : ''}
 
-          <button class="header-btn icon-btn" @click=${this.handleToggleTheme} title="${this.theme === 'dark' ? 'Light mode' : 'Dark mode'}">
-            ${this.theme === 'dark' ? html`
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zM2 13h2c.55 0 1-.45 1-1s-.45-1-1-1H2c-.55 0-1 .45-1 1s.45 1 1 1zm18 0h2c.55 0 1-.45 1-1s-.45-1-1-1h-2c-.55 0-1 .45-1 1s.45 1 1 1zM11 2v2c0 .55.45 1 1 1s1-.45 1-1V2c0-.55-.45-1-1-1s-1 .45-1 1zm0 18v2c0 .55.45 1 1 1s1-.45 1-1v-2c0-.55-.45-1-1-1s-1 .45-1 1zM5.99 4.58a.996.996 0 00-1.41 0 .996.996 0 000 1.41l1.06 1.06c.39.39 1.03.39 1.41 0s.39-1.03 0-1.41L5.99 4.58zm12.37 12.37a.996.996 0 00-1.41 0 .996.996 0 000 1.41l1.06 1.06c.39.39 1.03.39 1.41 0a.996.996 0 000-1.41l-1.06-1.06zm1.06-10.96a.996.996 0 000-1.41.996.996 0 00-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06zM7.05 18.36a.996.996 0 000-1.41.996.996 0 00-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06z"/>
-              </svg>
-            ` : html`
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 3a9 9 0 109 9c0-.46-.04-.92-.1-1.36a5.389 5.389 0 01-4.4 2.26 5.403 5.403 0 01-3.14-9.8c-.44-.06-.9-.1-1.36-.1z"/>
-              </svg>
-            `}
-          </button>
+          ${this.user ? html`
+            <div class="avatar-wrapper">
+              <button
+                class="avatar-btn ${this.showUserMenu ? 'active' : ''}"
+                @click=${this.toggleUserMenu}
+                title=${this.user.name || this.user.email || 'Account'}
+              >
+                ${this.user.picture
+                  ? html`<img src=${this.user.picture} alt="" />`
+                  : this.getInitials(this.user)}
+              </button>
 
-          <button class="header-btn" @click=${this.handleLogout}>
-            Logout
-          </button>
+              ${this.showUserMenu ? html`
+                <div class="user-menu-backdrop" @click=${this.closeUserMenu}></div>
+                <div class="user-menu">
+                  <div class="user-menu-header">
+                    <div class="user-menu-avatar">
+                      ${this.user.picture
+                        ? html`<img src=${this.user.picture} alt="" />`
+                        : this.getInitials(this.user)}
+                    </div>
+                    <div class="user-menu-info">
+                      ${this.user.name ? html`<div class="user-menu-name">${this.user.name}</div>` : ''}
+                      ${this.user.email ? html`<div class="user-menu-email">${this.user.email}</div>` : ''}
+                    </div>
+                  </div>
+
+                  <div class="user-menu-body">
+                    <!-- Theme toggle -->
+                    <button class="menu-item" @click=${this.handleToggleTheme}>
+                      ${this.theme === 'dark' ? html`
+                        <svg viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zM2 13h2c.55 0 1-.45 1-1s-.45-1-1-1H2c-.55 0-1 .45-1 1s.45 1 1 1zm18 0h2c.55 0 1-.45 1-1s-.45-1-1-1h-2c-.55 0-1 .45-1 1s.45 1 1 1zM11 2v2c0 .55.45 1 1 1s1-.45 1-1V2c0-.55-.45-1-1-1s-1 .45-1 1zm0 18v2c0 .55.45 1 1 1s1-.45 1-1v-2c0-.55-.45-1-1-1s-1 .45-1 1zM5.99 4.58a.996.996 0 00-1.41 0 .996.996 0 000 1.41l1.06 1.06c.39.39 1.03.39 1.41 0s.39-1.03 0-1.41L5.99 4.58zm12.37 12.37a.996.996 0 00-1.41 0 .996.996 0 000 1.41l1.06 1.06c.39.39 1.03.39 1.41 0a.996.996 0 000-1.41l-1.06-1.06zm1.06-10.96a.996.996 0 000-1.41.996.996 0 00-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06zM7.05 18.36a.996.996 0 000-1.41.996.996 0 00-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06z"/>
+                        </svg>
+                        <span class="theme-label">Light mode</span>
+                      ` : html`
+                        <svg viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M12 3a9 9 0 109 9c0-.46-.04-.92-.1-1.36a5.389 5.389 0 01-4.4 2.26 5.403 5.403 0 01-3.14-9.8c-.44-.06-.9-.1-1.36-.1z"/>
+                        </svg>
+                        <span class="theme-label">Dark mode</span>
+                      `}
+                    </button>
+
+                    <!-- Settings -->
+                    <button class="menu-item" @click=${() => { /* TODO: open settings */ this.closeUserMenu(); }}>
+                      <svg viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.488.488 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1112 8.4a3.6 3.6 0 010 7.2z"/>
+                      </svg>
+                      <span>Settings</span>
+                    </button>
+
+                    <div class="menu-divider"></div>
+
+                    <!-- Logout -->
+                    <button class="menu-item danger" @click=${this.handleLogout}>
+                      <svg viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/>
+                      </svg>
+                      <span>Sign out</span>
+                    </button>
+                  </div>
+                </div>
+              ` : ''}
+            </div>
+          ` : ''}
         </div>
       </header>
 
