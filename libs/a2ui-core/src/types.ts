@@ -9,6 +9,12 @@
 
 /**
  * Base component interface - all A2UI components extend this
+ *
+ * Supports two child formats:
+ * - **Flat / referenced**: `children` is `string[]` of component IDs
+ *   (used with `A2UIResponse.root` for the original A2UI spec)
+ * - **Nested / inline**: `children` is `A2UIComponent[]` of inline objects
+ *   (natural format for LLM-generated responses)
  */
 export interface A2UIComponent {
   /** Unique identifier for the component */
@@ -17,8 +23,11 @@ export interface A2UIComponent {
   type: string;
   /** Component properties specific to the type */
   props?: Record<string, unknown>;
-  /** Child component IDs (references to other components in the flat list) */
-  children?: string[];
+  /**
+   * Child components — either string IDs (flat/referenced mode)
+   * or inline A2UIComponent objects (nested mode, typical of LLM output).
+   */
+  children?: string[] | A2UIComponent[];
   /** Event handlers mapped to action names */
   events?: Record<string, A2UIAction>;
   /** Data bindings for reactive updates */
@@ -54,15 +63,21 @@ export interface A2UIAccessibility {
 }
 
 /**
- * The complete A2UI response from an agent
+ * The complete A2UI response from an agent.
+ *
+ * Supports two modes:
+ * - **Flat**: `components` is a flat list, `root` points to the entry component,
+ *   and children are string ID references. (Original A2UI spec.)
+ * - **Nested**: `components` contains top-level components with inline children.
+ *   `root` is optional in this mode. (Natural LLM output format.)
  */
 export interface A2UIResponse {
   /** Version of the A2UI specification */
   version: string;
-  /** Flat list of all components (referenced by ID) */
+  /** List of components (flat with ID references, or nested with inline children) */
   components: A2UIComponent[];
-  /** Root component ID to start rendering from */
-  root: string;
+  /** Root component ID to start rendering from (required in flat mode, optional in nested) */
+  root?: string;
   /** Initial data model for bindings */
   data?: Record<string, unknown>;
   /** Metadata about the response */

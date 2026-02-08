@@ -16,7 +16,7 @@ export class A2UIChatInput extends LitElement {
       background: var(--a2ui-bg-input);
       border: 1px solid var(--a2ui-border-default);
       border-radius: var(--a2ui-radius-2xl);
-      transition: all var(--a2ui-transition-fast);
+      transition: border-color var(--a2ui-transition-fast), box-shadow var(--a2ui-transition-fast);
       position: relative;
     }
 
@@ -60,7 +60,7 @@ export class A2UIChatInput extends LitElement {
       border-radius: var(--a2ui-radius-full);
       color: var(--a2ui-text-inverse);
       cursor: pointer;
-      transition: all var(--a2ui-transition-fast);
+      transition: transform var(--a2ui-transition-fast);
       flex-shrink: 0;
       position: absolute;
       right: 6px;

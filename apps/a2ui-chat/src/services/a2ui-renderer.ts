@@ -33,8 +33,8 @@ export class A2UIRenderer {
     }
 
     const { type, id, props = {} } = component;
-    // Children arrive as inline component objects from LLM JSON
-    const children = (component.children ?? []) as unknown as A2UIComponent[];
+    // Children can be inline A2UIComponent[] (LLM output) or string[] (flat mode)
+    const children = (component.children ?? []) as A2UIComponent[];
 
     // Skip components without a type
     if (!type) {

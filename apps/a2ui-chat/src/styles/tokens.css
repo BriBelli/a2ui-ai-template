@@ -1,8 +1,15 @@
-/* A2UI Design Tokens - Google AI Mode Style */
+/*
+ * A2UI Design Tokens
+ *
+ * White-label ready: teams override these --a2ui-* variables
+ * with their own design system tokens. Only color tokens change
+ * between themes — typography, spacing, radii stay the same.
+ */
 
-:root {
-  /* ========== Colors - Dark Mode (Google AI) ========== */
-  
+/* ========== Dark Theme (default) ========== */
+
+:root,
+:root[data-theme="dark"] {
   /* Backgrounds */
   --a2ui-bg-app: #1a1a1a;
   --a2ui-bg-primary: #1f1f1f;
@@ -52,12 +59,75 @@
   --a2ui-shadow-md: 0 2px 6px rgba(0, 0, 0, 0.4);
   --a2ui-shadow-lg: 0 4px 12px rgba(0, 0, 0, 0.5);
   --a2ui-shadow-xl: 0 8px 24px rgba(0, 0, 0, 0.6);
-  
-  /* ========== Typography ========== */
-  
+
+  /* Scrollbar */
+  color-scheme: dark;
+}
+
+/* ========== Light Theme ========== */
+
+:root[data-theme="light"] {
+  /* Backgrounds */
+  --a2ui-bg-app: #f8f9fa;
+  --a2ui-bg-primary: #ffffff;
+  --a2ui-bg-secondary: #f1f3f4;
+  --a2ui-bg-tertiary: #e8eaed;
+  --a2ui-bg-elevated: #ffffff;
+  --a2ui-bg-input: #f1f3f4;
+  --a2ui-bg-input-focus: #e8eaed;
+  --a2ui-bg-hover: rgba(0, 0, 0, 0.04);
+  --a2ui-bg-active: rgba(0, 0, 0, 0.08);
+
+  /* Text */
+  --a2ui-text-primary: #202124;
+  --a2ui-text-secondary: #5f6368;
+  --a2ui-text-tertiary: #80868b;
+  --a2ui-text-disabled: #bdc1c6;
+  --a2ui-text-inverse: #ffffff;
+
+  /* Accent / Brand */
+  --a2ui-accent: #1a73e8;
+  --a2ui-accent-hover: #1967d2;
+  --a2ui-accent-active: #185abc;
+  --a2ui-accent-subtle: rgba(26, 115, 232, 0.1);
+
+  /* Links */
+  --a2ui-link: #1a73e8;
+  --a2ui-link-hover: #1967d2;
+  --a2ui-link-visited: #8430ce;
+
+  /* Semantic */
+  --a2ui-success: #1e8e3e;
+  --a2ui-success-bg: rgba(30, 142, 62, 0.1);
+  --a2ui-warning: #f9ab00;
+  --a2ui-warning-bg: rgba(249, 171, 0, 0.1);
+  --a2ui-error: #d93025;
+  --a2ui-error-bg: rgba(217, 48, 37, 0.1);
+  --a2ui-info: #1a73e8;
+  --a2ui-info-bg: rgba(26, 115, 232, 0.1);
+
+  /* Borders */
+  --a2ui-border-default: rgba(0, 0, 0, 0.12);
+  --a2ui-border-strong: rgba(0, 0, 0, 0.2);
+  --a2ui-border-subtle: rgba(0, 0, 0, 0.06);
+
+  /* Shadows */
+  --a2ui-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.1);
+  --a2ui-shadow-md: 0 2px 6px rgba(0, 0, 0, 0.15);
+  --a2ui-shadow-lg: 0 4px 12px rgba(0, 0, 0, 0.15);
+  --a2ui-shadow-xl: 0 8px 24px rgba(0, 0, 0, 0.2);
+
+  /* Scrollbar */
+  color-scheme: light;
+}
+
+/* ========== Shared Tokens (theme-independent) ========== */
+
+:root {
+  /* Typography */
   --a2ui-font-family: 'Google Sans', 'Roboto', -apple-system, BlinkMacSystemFont, sans-serif;
   --a2ui-font-mono: 'Roboto Mono', 'Fira Code', monospace;
-  
+
   /* Font Sizes */
   --a2ui-text-xs: 11px;
   --a2ui-text-sm: 12px;
@@ -66,19 +136,18 @@
   --a2ui-text-xl: 18px;
   --a2ui-text-2xl: 22px;
   --a2ui-text-3xl: 28px;
-  
+
   /* Font Weights */
   --a2ui-font-normal: 400;
   --a2ui-font-medium: 500;
   --a2ui-font-bold: 700;
-  
+
   /* Line Heights */
   --a2ui-leading-tight: 1.25;
   --a2ui-leading-normal: 1.5;
   --a2ui-leading-relaxed: 1.75;
-  
-  /* ========== Spacing ========== */
-  
+
+  /* Spacing */
   --a2ui-space-0: 0;
   --a2ui-space-1: 4px;
   --a2ui-space-2: 8px;
@@ -90,9 +159,8 @@
   --a2ui-space-10: 40px;
   --a2ui-space-12: 48px;
   --a2ui-space-16: 64px;
-  
-  /* ========== Border Radius ========== */
-  
+
+  /* Border Radius */
   --a2ui-radius-none: 0;
   --a2ui-radius-sm: 4px;
   --a2ui-radius-md: 8px;
@@ -100,24 +168,21 @@
   --a2ui-radius-xl: 16px;
   --a2ui-radius-2xl: 24px;
   --a2ui-radius-full: 9999px;
-  
-  /* ========== Transitions ========== */
-  
+
+  /* Transitions */
   --a2ui-transition-fast: 150ms ease;
   --a2ui-transition-normal: 200ms ease;
   --a2ui-transition-slow: 300ms ease;
-  
-  /* ========== Z-Index ========== */
-  
+
+  /* Z-Index */
   --a2ui-z-base: 0;
   --a2ui-z-dropdown: 100;
   --a2ui-z-sticky: 200;
   --a2ui-z-modal: 300;
   --a2ui-z-toast: 400;
   --a2ui-z-tooltip: 500;
-  
-  /* ========== Layout ========== */
-  
+
+  /* Layout */
   --a2ui-chat-max-width: 768px;
   --a2ui-sidebar-width: 280px;
   --a2ui-header-height: 64px;

@@ -36,7 +36,7 @@ export class A2UIModelSelector extends LitElement {
       font-size: var(--a2ui-text-sm);
       color: var(--a2ui-text-primary);
       cursor: pointer;
-      transition: all var(--a2ui-transition-fast);
+      transition: border-color var(--a2ui-transition-fast), box-shadow var(--a2ui-transition-fast);
       background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='%239aa0a6'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
       background-repeat: no-repeat;
       background-position: right 8px center;

@@ -56,6 +56,7 @@ class WebSearchTool:
                 max_results=max_results,
                 search_depth=search_depth,
                 include_answer=True,
+                include_images=True,
             )
             
             # Format results
@@ -68,11 +69,22 @@ class WebSearchTool:
                     "score": item.get("score", 0),
                 })
             
+            # Collect image URLs returned by Tavily
+            images = response.get("images", [])
+            # Tavily returns images as list of strings (URLs) or dicts
+            image_urls = []
+            for img in images:
+                if isinstance(img, str):
+                    image_urls.append(img)
+                elif isinstance(img, dict) and img.get("url"):
+                    image_urls.append(img["url"])
+            
             return {
                 "success": True,
                 "query": query,
                 "answer": response.get("answer"),
                 "results": results,
+                "images": image_urls[:6],  # Cap at 6 images
             }
             
         except ImportError:
@@ -149,6 +161,14 @@ class WebSearchTool:
                 f"   {result['content'][:300]}..."
             )
         
+        # Include image URLs if available
+        images = search_results.get("images", [])
+        if images:
+            context_parts.append("\n[Available Images]")
+            for i, url in enumerate(images, 1):
+                context_parts.append(f"  {i}. {url}")
+            context_parts.append("[End of Available Images]")
+        
         context_parts.append("\n[End of Search Results]\n")
         
         return "\n".join(context_parts)
@@ -172,6 +192,8 @@ def should_search(message: str) -> bool:
         # Temporal cues
         "current", "latest", "today", "now", "recent", "right now",
         "this week", "this month", "this year", "yesterday",
+        "these days", "nowadays", "trending", "popular",
+        "getting noticed", "going viral", "buzzing",
         # Financial / markets
         "price", "stock", "market", "trading", "index", "fund",
         "dow", "djia", "nasdaq", "s&p", "sp500", "s&p500",
@@ -190,6 +212,10 @@ def should_search(message: str) -> bool:
         "where is", "when is", "is it",
         "compare", "vs", "versus",
         "result", "update", "status",
+        # Visual / discovery — benefit from image search
+        "show me", "pictures of", "photos of", "images of",
+        "what does", "look like", "artwork", "art",
+        "design", "architecture", "fashion",
         # Year references
         "2024", "2025", "2026",
     ]

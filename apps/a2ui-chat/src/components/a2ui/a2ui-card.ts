@@ -15,7 +15,7 @@ export class A2UICard extends LitElement {
       background: var(--a2ui-bg-tertiary);
       border-radius: var(--a2ui-radius-lg);
       padding: var(--a2ui-space-5);
-      transition: all var(--a2ui-transition-fast);
+      transition: border-color var(--a2ui-transition-fast), box-shadow var(--a2ui-transition-fast);
     }
 
     .card:hover {

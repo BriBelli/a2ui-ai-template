@@ -5,6 +5,7 @@ import { ChatService, type ChatMessage, type LLMProvider } from '../services/cha
 import { authService, type AuthUser } from '../services/auth-service';
 import { chatHistoryService, ChatHistoryService, type ChatThread } from '../services/chat-history-service';
 import { uiConfig } from '../config/ui-config';
+import { initTheme, toggleTheme, getTheme, type Theme } from '../services/theme-service';
 
 @customElement('a2ui-app')
 export class A2UIApp extends LitElement {
@@ -81,13 +82,17 @@ export class A2UIApp extends LitElement {
       font-family: var(--a2ui-font-family);
       font-size: var(--a2ui-text-sm);
       cursor: pointer;
-      transition: all var(--a2ui-transition-fast);
+      transition: background-color var(--a2ui-transition-fast), color var(--a2ui-transition-fast), border-color var(--a2ui-transition-fast);
     }
 
     .header-btn:hover {
       background: var(--a2ui-bg-hover);
       color: var(--a2ui-text-primary);
       border-color: var(--a2ui-accent);
+    }
+
+    .header-btn.icon-btn {
+      padding: var(--a2ui-space-2);
     }
 
     /* ── User info ───────────────────────────────────────── */
@@ -184,7 +189,7 @@ export class A2UIApp extends LitElement {
       font-weight: var(--a2ui-font-medium);
       font-family: var(--a2ui-font-family);
       cursor: pointer;
-      transition: all 0.15s ease;
+      transition: background-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
     }
 
     .get-started-btn:hover {
@@ -217,6 +222,9 @@ export class A2UIApp extends LitElement {
   @state() private user: AuthUser | null = null;
   @state() private showLogin = false;
 
+  // ── Theme ───────────────────────────────────────────────
+  @state() private theme: Theme = 'dark';
+
   private chatService = new ChatService();
 
   // ── History / back-button navigation ────────────────────
@@ -226,6 +234,8 @@ export class A2UIApp extends LitElement {
 
   async connectedCallback() {
     super.connectedCallback();
+    initTheme();
+    this.theme = getTheme();
     window.addEventListener('popstate', this.boundPopstate);
 
     authService.addEventListener('change', () => {
@@ -419,6 +429,10 @@ export class A2UIApp extends LitElement {
     }
   }
 
+  private handleToggleTheme() {
+    this.theme = toggleTheme();
+  }
+
   private async handleLogout() {
     await authService.logout();
   }
@@ -495,6 +509,18 @@ export class A2UIApp extends LitElement {
               Clear
             </button>
           ` : ''}
+
+          <button class="header-btn icon-btn" @click=${this.handleToggleTheme} title="${this.theme === 'dark' ? 'Light mode' : 'Dark mode'}">
+            ${this.theme === 'dark' ? html`
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zM2 13h2c.55 0 1-.45 1-1s-.45-1-1-1H2c-.55 0-1 .45-1 1s.45 1 1 1zm18 0h2c.55 0 1-.45 1-1s-.45-1-1-1h-2c-.55 0-1 .45-1 1s.45 1 1 1zM11 2v2c0 .55.45 1 1 1s1-.45 1-1V2c0-.55-.45-1-1-1s-1 .45-1 1zm0 18v2c0 .55.45 1 1 1s1-.45 1-1v-2c0-.55-.45-1-1-1s-1 .45-1 1zM5.99 4.58a.996.996 0 00-1.41 0 .996.996 0 000 1.41l1.06 1.06c.39.39 1.03.39 1.41 0s.39-1.03 0-1.41L5.99 4.58zm12.37 12.37a.996.996 0 00-1.41 0 .996.996 0 000 1.41l1.06 1.06c.39.39 1.03.39 1.41 0a.996.996 0 000-1.41l-1.06-1.06zm1.06-10.96a.996.996 0 000-1.41.996.996 0 00-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06zM7.05 18.36a.996.996 0 000-1.41.996.996 0 00-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06z"/>
+              </svg>
+            ` : html`
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 3a9 9 0 109 9c0-.46-.04-.92-.1-1.36a5.389 5.389 0 01-4.4 2.26 5.403 5.403 0 01-3.14-9.8c-.44-.06-.9-.1-1.36-.1z"/>
+              </svg>
+            `}
+          </button>
 
           <button class="header-btn" @click=${this.handleLogout}>
             Logout

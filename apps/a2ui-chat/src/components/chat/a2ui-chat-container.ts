@@ -87,7 +87,7 @@ export class A2UIChatContainer extends LitElement {
       font-size: var(--a2ui-text-sm);
       font-family: var(--a2ui-font-family);
       cursor: pointer;
-      transition: all 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+      transition: border-color 0.2s cubic-bezier(0.22, 1, 0.36, 1), transform 0.2s cubic-bezier(0.22, 1, 0.36, 1);
     }
 
     /* Suggestion animations (when enabled) */

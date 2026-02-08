@@ -19,7 +19,7 @@ export class A2UIButton extends LitElement {
       font-weight: var(--a2ui-font-medium);
       border-radius: var(--a2ui-radius-lg);
       cursor: pointer;
-      transition: all var(--a2ui-transition-fast);
+      transition: background-color var(--a2ui-transition-fast), color var(--a2ui-transition-fast), transform var(--a2ui-transition-fast), box-shadow var(--a2ui-transition-fast);
       border: none;
       outline: none;
     }

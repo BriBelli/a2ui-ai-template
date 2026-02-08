@@ -64,7 +64,7 @@ export class A2UILogin extends LitElement {
       display: flex;
       align-items: center;
       justify-content: center;
-      transition: all 0.15s ease;
+      transition: background-color 0.15s ease, color 0.15s ease;
     }
 
     .close-btn:hover {
@@ -142,7 +142,7 @@ export class A2UILogin extends LitElement {
       font-weight: var(--a2ui-font-medium);
       font-family: var(--a2ui-font-family);
       cursor: pointer;
-      transition: all 0.15s ease;
+      transition: background-color 0.15s ease;
       margin-top: var(--a2ui-space-2);
     }
 
@@ -219,7 +219,7 @@ export class A2UILogin extends LitElement {
       font-size: var(--a2ui-text-md);
       font-family: var(--a2ui-font-family);
       cursor: pointer;
-      transition: all 0.15s ease;
+      transition: background-color 0.15s ease, border-color 0.15s ease;
       display: flex;
       align-items: center;
       justify-content: center;

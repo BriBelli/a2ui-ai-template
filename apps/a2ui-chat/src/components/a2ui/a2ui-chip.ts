@@ -16,7 +16,7 @@ export class A2UIChip extends LitElement {
       font-size: var(--a2ui-text-sm);
       font-weight: var(--a2ui-font-medium);
       border-radius: var(--a2ui-radius-full);
-      transition: all var(--a2ui-transition-fast);
+      transition: background-color var(--a2ui-transition-fast), color var(--a2ui-transition-fast);
     }
 
     .chip.clickable {

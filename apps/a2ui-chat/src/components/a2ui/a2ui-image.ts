@@ -37,13 +37,21 @@ export class A2UIImage extends LitElement {
 
     .placeholder {
       display: flex;
+      flex-direction: column;
       align-items: center;
       justify-content: center;
+      gap: var(--a2ui-space-2);
       width: 100%;
-      aspect-ratio: 1;
+      padding: var(--a2ui-space-6) var(--a2ui-space-4);
       background: linear-gradient(135deg, var(--a2ui-bg-tertiary), var(--a2ui-bg-elevated));
       color: var(--a2ui-text-tertiary);
       font-size: var(--a2ui-text-2xl);
+    }
+
+    .placeholder-alt {
+      font-size: var(--a2ui-text-sm);
+      color: var(--a2ui-text-tertiary);
+      text-align: center;
     }
 
     .caption {
@@ -96,6 +104,7 @@ export class A2UIImage extends LitElement {
         ${showPlaceholder ? html`
           <div class="placeholder">
             ${this.fallbackIcon}
+            ${this.alt ? html`<span class="placeholder-alt">${this.alt}</span>` : ''}
           </div>
         ` : html`
           <img

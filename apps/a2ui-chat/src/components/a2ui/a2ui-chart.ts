@@ -40,6 +40,11 @@ interface ChartOptions {
   referenceLabel?: string;
 }
 
+/** Read a CSS custom property from :root. */
+function rootToken(name: string): string {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
 /**
  * Crosshair plugin -- draws a vertical dashed line at the hovered point.
  * Gives that Google Finance feel on line charts.
@@ -61,7 +66,7 @@ const crosshairPlugin: Plugin = {
     ctx.moveTo(x, topY);
     ctx.lineTo(x, bottomY);
     ctx.lineWidth = 1;
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+    ctx.strokeStyle = rootToken('--a2ui-border-strong') || 'rgba(255, 255, 255, 0.2)';
     ctx.setLineDash([4, 4]);
     ctx.stroke();
     ctx.restore();
@@ -87,12 +92,12 @@ const referenceLinePlugin: Plugin = {
     ctx.moveTo(chart.chartArea.left, y);
     ctx.lineTo(chart.chartArea.right, y);
     ctx.lineWidth = 1;
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+    ctx.strokeStyle = rootToken('--a2ui-border-default') || 'rgba(255, 255, 255, 0.15)';
     ctx.setLineDash([3, 5]);
     ctx.stroke();
 
     if (refConfig.label) {
-      ctx.fillStyle = 'rgba(154, 160, 166, 0.8)';
+      ctx.fillStyle = rootToken('--a2ui-text-secondary') || 'rgba(154, 160, 166, 0.8)';
       ctx.font = '10px Google Sans, Roboto, sans-serif';
       ctx.textAlign = 'right';
       ctx.fillText(
@@ -122,7 +127,7 @@ export class A2UIChart extends LitElement {
     }
 
     .chart-container:hover {
-      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+      box-shadow: var(--a2ui-shadow-lg);
     }
 
     .chart-header {
@@ -223,12 +228,24 @@ export class A2UIChart extends LitElement {
     return value.toLocaleString();
   }
 
+  /** Read a CSS custom property from the document root. */
+  private token(name: string): string {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  }
+
   private renderChart() {
     if (!this.canvas) return;
 
     this.chart?.destroy();
     const ctx = this.canvas.getContext('2d');
     if (!ctx) return;
+
+    // Resolve theme-aware colors from tokens
+    const textSecondary = this.token('--a2ui-text-secondary') || '#9aa0a6';
+    const textTertiary = this.token('--a2ui-text-tertiary') || '#71767b';
+    const textPrimary = this.token('--a2ui-text-primary') || '#e3e3e3';
+    const bgApp = this.token('--a2ui-bg-app') || '#1a1a1a';
+    const borderSubtle = this.token('--a2ui-border-subtle') || 'rgba(255,255,255,0.06)';
 
     const isLine = this.chartType === 'line';
     const isBar = this.chartType === 'bar';
@@ -264,7 +281,7 @@ export class A2UIChart extends LitElement {
         pointRadius: isLine ? 0 : undefined,
         pointHoverRadius: isLine ? 5 : undefined,
         pointHoverBackgroundColor: isLine ? color : undefined,
-        pointHoverBorderColor: isLine ? '#1a1a1a' : undefined,
+        pointHoverBorderColor: isLine ? bgApp : undefined,
         pointHoverBorderWidth: isLine ? 2 : undefined,
         borderRadius: isBar ? 4 : undefined,
         maxBarThickness: isBar ? 48 : undefined,
@@ -303,7 +320,7 @@ export class A2UIChart extends LitElement {
             display: showLegend,
             position: 'bottom',
             labels: {
-              color: '#9aa0a6',
+              color: textSecondary,
               padding: 16,
               usePointStyle: true,
               pointStyle: 'circle',
@@ -317,10 +334,10 @@ export class A2UIChart extends LitElement {
           },
           tooltip: {
             enabled: true,
-            backgroundColor: 'rgba(32, 33, 36, 0.95)',
-            titleColor: '#e3e3e3',
-            bodyColor: '#9aa0a6',
-            borderColor: 'rgba(255, 255, 255, 0.1)',
+            backgroundColor: bgApp,
+            titleColor: textPrimary,
+            bodyColor: textSecondary,
+            borderColor: borderSubtle,
             borderWidth: 1,
             cornerRadius: 8,
             padding: { top: 8, bottom: 8, left: 12, right: 12 },
@@ -355,14 +372,14 @@ export class A2UIChart extends LitElement {
           x: {
             grid: {
               display: showGrid,
-              color: 'rgba(255, 255, 255, 0.04)',
+              color: borderSubtle,
               drawTicks: false,
             },
             border: {
               display: false,
             },
             ticks: {
-              color: '#71767b',
+              color: textTertiary,
               maxRotation: 0,
               padding: 8,
               font: {
@@ -376,14 +393,14 @@ export class A2UIChart extends LitElement {
           y: {
             grid: {
               display: true,
-              color: 'rgba(255, 255, 255, 0.04)',
+              color: borderSubtle,
               drawTicks: false,
             },
             border: {
               display: false,
             },
             ticks: {
-              color: '#71767b',
+              color: textTertiary,
               padding: 8,
               font: {
                 family: 'Google Sans, Roboto, sans-serif',

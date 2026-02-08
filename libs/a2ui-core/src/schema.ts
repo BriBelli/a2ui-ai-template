@@ -43,11 +43,11 @@ export function validateResponse(response: unknown): ValidationResult {
     });
   }
 
-  if (!res.root || typeof res.root !== 'string') {
+  if (res.root !== undefined && typeof res.root !== 'string') {
     errors.push({
       path: 'root',
-      message: 'Root component ID is required and must be a string',
-      code: 'MISSING_FIELD',
+      message: 'Root component ID must be a string when provided',
+      code: 'INVALID_TYPE',
     });
   }
 
@@ -58,51 +58,75 @@ export function validateResponse(response: unknown): ValidationResult {
       code: 'INVALID_TYPE',
     });
   } else {
-    // Validate each component
+    // Detect mode: flat (children are string IDs) vs nested (children are inline objects)
+    const isNested = res.components.some(
+      (c) => c && typeof c === 'object' && Array.isArray((c as Record<string, unknown>).children)
+        && ((c as Record<string, unknown>).children as unknown[]).length > 0
+        && typeof ((c as Record<string, unknown>).children as unknown[])[0] === 'object'
+    );
+
+    // Collect all component IDs (recursively for nested mode)
     const componentIds = new Set<string>();
-    res.components.forEach((comp, index) => {
-      const compErrors = validateComponent(comp, `components[${index}]`);
-      errors.push(...compErrors);
-
-      if (comp && typeof comp === 'object' && 'id' in comp) {
-        const id = (comp as { id: string }).id;
-        if (componentIds.has(id)) {
-          errors.push({
-            path: `components[${index}].id`,
-            message: `Duplicate component ID: ${id}`,
-            code: 'DUPLICATE_ID',
-          });
+    const collectIds = (comps: unknown[]) => {
+      for (const comp of comps) {
+        if (comp && typeof comp === 'object' && 'id' in comp) {
+          componentIds.add((comp as { id: string }).id);
+          const children = (comp as Record<string, unknown>).children;
+          if (Array.isArray(children)) collectIds(children);
         }
-        componentIds.add(id);
       }
-    });
+    };
+    collectIds(res.components);
 
-    // Validate root exists
+    // Validate each component
+    const validateTree = (comps: unknown[], pathPrefix: string) => {
+      comps.forEach((comp, index) => {
+        const compPath = `${pathPrefix}[${index}]`;
+        const compErrors = validateComponent(comp, compPath);
+        errors.push(...compErrors);
+
+        if (comp && typeof comp === 'object' && 'id' in comp) {
+          const id = (comp as { id: string }).id;
+          // Duplicate check (collected above)
+          const children = (comp as Record<string, unknown>).children;
+          if (Array.isArray(children)) {
+            if (isNested) {
+              // Nested mode: validate inline children recursively
+              validateTree(children, `${compPath}.children`);
+            } else {
+              // Flat mode: validate string references
+              children.forEach((childId, childIndex) => {
+                if (typeof childId === 'string' && !componentIds.has(childId)) {
+                  errors.push({
+                    path: `${compPath}.children[${childIndex}]`,
+                    message: `Child component "${childId}" not found`,
+                    code: 'INVALID_REFERENCE',
+                  });
+                }
+              });
+            }
+          }
+        }
+      });
+    };
+
+    validateTree(res.components, 'components');
+
+    // Validate root exists (only required in flat mode)
     if (res.root && typeof res.root === 'string' && !componentIds.has(res.root)) {
       errors.push({
         path: 'root',
         message: `Root component "${res.root}" not found in components`,
         code: 'INVALID_REFERENCE',
       });
+    } else if (!isNested && !res.root) {
+      // Flat mode requires root
+      errors.push({
+        path: 'root',
+        message: 'Root component ID is required in flat (referenced) mode',
+        code: 'MISSING_FIELD',
+      });
     }
-
-    // Validate child references
-    res.components.forEach((comp, index) => {
-      if (comp && typeof comp === 'object' && 'children' in comp) {
-        const children = (comp as { children?: string[] }).children;
-        if (Array.isArray(children)) {
-          children.forEach((childId, childIndex) => {
-            if (!componentIds.has(childId)) {
-              errors.push({
-                path: `components[${index}].children[${childIndex}]`,
-                message: `Child component "${childId}" not found`,
-                code: 'INVALID_REFERENCE',
-              });
-            }
-          });
-        }
-      }
-    });
   }
 
   return { valid: errors.length === 0, errors };
@@ -144,7 +168,7 @@ export function validateComponent(component: unknown, path: string = ''): Valida
   if (comp.children !== undefined && !Array.isArray(comp.children)) {
     errors.push({
       path: `${path}.children`,
-      message: 'Children must be an array of strings',
+      message: 'Children must be an array (of string IDs or inline components)',
       code: 'INVALID_TYPE',
     });
   }
