@@ -28,7 +28,7 @@ export interface ChatResponse {
   a2ui?: A2UIResponse;
   suggestions?: string[];
   /** Backend metadata about search/tools used (for thinking indicator). */
-  _search?: { searched: boolean; success?: boolean; results_count?: number; images_count?: number; error?: string };
+  _search?: { searched: boolean; success?: boolean; results_count?: number; images_count?: number; error?: string; query?: string };
   _location?: boolean;
 }
 
@@ -106,6 +106,22 @@ export class ChatService {
     return indicators.some(i => m.includes(i));
   }
 
+  /**
+   * Check if a message would benefit from the user's location.
+   * Only local queries (weather, nearby, events, food) need it.
+   */
+  needsLocation(message: string): boolean {
+    const m = message.toLowerCase();
+    const localIndicators = [
+      'weather', 'forecast', 'temperature',
+      'near me', 'nearby', 'local',
+      'restaurant', 'food', 'store', 'shop',
+      'event', 'concert', 'traffic', 'commute',
+      'directions', 'open now', 'closest',
+    ];
+    return localIndicators.some(i => m.includes(i));
+  }
+
   /** Callback type for reporting progress during sendMessage. */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   async sendMessage(
@@ -113,13 +129,16 @@ export class ChatService {
     provider?: string,
     model?: string,
     history?: ChatMessage[],
-    onProgress?: (phase: 'location' | 'location-done' | 'searching' | 'search-done' | 'generating') => void,
+    onProgress?: (phase: 'location' | 'location-done' | 'searching' | 'search-done' | 'generating', detail?: string) => void,
   ): Promise<ChatResponse> {
     try {
-      // Phase 1: Location
-      onProgress?.('location');
-      const location = await getUserLocation();
-      onProgress?.('location-done');
+      // Phase 1: Location — only fetch if the query is location-relevant
+      let location = null;
+      if (this.needsLocation(message)) {
+        onProgress?.('location');
+        location = await getUserLocation();
+        onProgress?.('location-done');
+      }
 
       // Build request body
       const body: Record<string, unknown> = { 
@@ -159,7 +178,9 @@ export class ChatService {
       // A2UI API response data
       const data = await response.json();
 
-      onProgress?.('search-done');
+      // Pass the rewritten search query back so the thinking indicator can display it
+      const rewrittenQuery = data._search?.query;
+      onProgress?.('search-done', rewrittenQuery);
       onProgress?.('generating');
 
       if (data.a2ui) {

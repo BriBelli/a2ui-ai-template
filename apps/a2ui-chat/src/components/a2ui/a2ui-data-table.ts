@@ -14,6 +14,9 @@ export class A2UIDataTable extends LitElement {
     :host {
       display: block;
       overflow-x: auto;
+      background: var(--a2ui-bg-tertiary);
+      border-radius: var(--a2ui-radius-lg);
+      padding: var(--a2ui-space-2) var(--a2ui-space-3);
     }
 
     .table {

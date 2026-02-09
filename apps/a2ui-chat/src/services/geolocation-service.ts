@@ -32,13 +32,16 @@ export async function getUserLocation(): Promise<UserLocation | null> {
   try {
     const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
       navigator.geolocation.getCurrentPosition(resolve, reject, {
-        enableHighAccuracy: false,
-        timeout: 5000,
-        maximumAge: 300_000, // Cache for 5 min
+        enableHighAccuracy: true,   // Use GPS/WiFi, not IP-based
+        timeout: 10_000,            // GPS can take longer
+        maximumAge: 600_000,        // Cache for 10 min
       });
     });
 
-    cached = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+    const { latitude: lat, longitude: lng, accuracy } = pos.coords;
+    console.log(`[Geo] Browser returned: ${lat.toFixed(4)}, ${lng.toFixed(4)} (±${Math.round(accuracy)}m)`);
+
+    cached = { lat, lng };
 
     // Best-effort reverse geocode via free Nominatim API
     try {
@@ -55,14 +58,16 @@ export async function getUserLocation(): Promise<UserLocation | null> {
         if (data.address?.state) parts.push(data.address.state);
         if (data.address?.country_code) parts.push(data.address.country_code.toUpperCase());
         if (parts.length) cached.label = parts.join(', ');
+        console.log(`[Geo] Resolved to: ${cached.label}`);
       }
     } catch {
       // Reverse geocode failed — lat/lng alone is still useful
+      console.warn('[Geo] Reverse geocode failed, using raw coordinates');
     }
 
     return cached;
-  } catch {
-    // Denied or timed out
+  } catch (err) {
+    console.warn('[Geo] Location unavailable:', err);
     return null;
   }
 }

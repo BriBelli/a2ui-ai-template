@@ -1,76 +1,37 @@
 {
   "name": "dashboard",
-  "description": "Metrics dashboard with KPI cards, chart, and detail table",
-  "match": ["dashboard", "overview", "summary", "metrics", "kpi"],
+  "description": "Metrics dashboard with KPI stats, chart, and detail table",
+  "match": ["dashboard", "overview", "summary", "metrics", "kpi", "top stocks"],
   "template": {
     "version": "1.0",
     "components": [
       {
-        "id": "root",
-        "type": "container",
-        "props": { "layout": "vertical", "gap": "md" },
+        "id": "kpi-grid",
+        "type": "grid",
+        "props": { "columns": 4 },
         "children": [
-          {
-            "id": "kpis",
-            "type": "grid",
-            "props": { "columns": 4, "gap": "md" },
-            "children": [
-              {
-                "id": "kpi-1",
-                "type": "card",
-                "props": {},
-                "children": [
-                  { "id": "kpi-1-value", "type": "text", "props": { "content": "{{kpi1Value}}", "variant": "h2" } },
-                  { "id": "kpi-1-label", "type": "text", "props": { "content": "{{kpi1Label}}", "variant": "caption" } }
-                ]
-              },
-              {
-                "id": "kpi-2",
-                "type": "card",
-                "props": {},
-                "children": [
-                  { "id": "kpi-2-value", "type": "text", "props": { "content": "{{kpi2Value}}", "variant": "h2" } },
-                  { "id": "kpi-2-label", "type": "text", "props": { "content": "{{kpi2Label}}", "variant": "caption" } }
-                ]
-              },
-              {
-                "id": "kpi-3",
-                "type": "card",
-                "props": {},
-                "children": [
-                  { "id": "kpi-3-value", "type": "text", "props": { "content": "{{kpi3Value}}", "variant": "h2" } },
-                  { "id": "kpi-3-label", "type": "text", "props": { "content": "{{kpi3Label}}", "variant": "caption" } }
-                ]
-              },
-              {
-                "id": "kpi-4",
-                "type": "card",
-                "props": {},
-                "children": [
-                  { "id": "kpi-4-value", "type": "text", "props": { "content": "{{kpi4Value}}", "variant": "h2" } },
-                  { "id": "kpi-4-label", "type": "text", "props": { "content": "{{kpi4Label}}", "variant": "caption" } }
-                ]
-              }
-            ]
-          },
-          {
-            "id": "main-chart",
-            "type": "chart",
-            "props": {
-              "chartType": "{{chartType}}",
-              "title": "{{chartTitle}}",
-              "data": "{{chartData}}"
-            }
-          },
-          {
-            "id": "detail-table",
-            "type": "data-table",
-            "props": {
-              "columns": "{{tableColumns}}",
-              "data": "{{tableRows}}"
-            }
-          }
+          { "id": "kpi-1", "type": "stat", "props": { "label": "{{kpi1Label}}", "value": "{{kpi1Value}}", "trend": "{{kpi1Trend}}", "description": "{{kpi1Desc}}" } },
+          { "id": "kpi-2", "type": "stat", "props": { "label": "{{kpi2Label}}", "value": "{{kpi2Value}}", "trend": "{{kpi2Trend}}", "description": "{{kpi2Desc}}" } },
+          { "id": "kpi-3", "type": "stat", "props": { "label": "{{kpi3Label}}", "value": "{{kpi3Value}}", "trend": "{{kpi3Trend}}", "description": "{{kpi3Desc}}" } },
+          { "id": "kpi-4", "type": "stat", "props": { "label": "{{kpi4Label}}", "value": "{{kpi4Value}}", "trend": "{{kpi4Trend}}", "description": "{{kpi4Desc}}" } }
         ]
+      },
+      {
+        "id": "main-chart",
+        "type": "chart",
+        "props": {
+          "chartType": "{{chartType}}",
+          "title": "{{chartTitle}}",
+          "data": "{{chartData}}"
+        }
+      },
+      {
+        "id": "detail-table",
+        "type": "data-table",
+        "props": {
+          "columns": "{{tableColumns}}",
+          "data": "{{tableRows}}"
+        }
       }
     ]
   }

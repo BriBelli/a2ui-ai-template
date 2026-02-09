@@ -2,13 +2,21 @@ import { LitElement, html, css } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 
 /**
- * A2UI Grid — simple CSS Grid layout.
+ * A2UI Grid — CSS class-based grid layout.
  *
- * columns = the actual number of columns you want.
- *   grid(columns: 4) → 4 equal columns
- *   grid(columns: 2) → 2 equal columns
+ * Usage (declarative):
+ *   <a2ui-grid columns="3" spacing="lg">
+ *     <a2ui-card>...</a2ui-card>
+ *     <a2ui-card>...</a2ui-card>
+ *     <a2ui-card>...</a2ui-card>
+ *   </a2ui-grid>
  *
- * Children fill one column each by default.
+ * CSS classes generated:
+ *   .grid          — always present
+ *   .cols-{1–6}    — column count
+ *   .spacing-{size} — gap between items
+ *
+ * Responsive: collapses to single column below 600px.
  */
 @customElement('a2ui-grid')
 export class A2UIGrid extends LitElement {
@@ -17,35 +25,47 @@ export class A2UIGrid extends LitElement {
       display: block;
     }
 
+    /* ── Base ─────────────────────────────── */
     .grid {
       display: grid;
-      grid-template-columns: repeat(var(--cols, 2), 1fr);
     }
 
-    .gap-none { gap: 0; }
-    .gap-xs   { gap: var(--a2ui-space-1); }
-    .gap-sm   { gap: var(--a2ui-space-2); }
-    .gap-md   { gap: var(--a2ui-space-4); }
-    .gap-lg   { gap: var(--a2ui-space-6); }
-    .gap-xl   { gap: var(--a2ui-space-8); }
+    /* ── Column classes ───────────────────── */
+    .cols-1 { grid-template-columns: 1fr; }
+    .cols-2 { grid-template-columns: repeat(2, 1fr); }
+    .cols-3 { grid-template-columns: repeat(3, 1fr); }
+    .cols-4 { grid-template-columns: repeat(4, 1fr); }
+    .cols-5 { grid-template-columns: repeat(5, 1fr); }
+    .cols-6 { grid-template-columns: repeat(6, 1fr); }
 
+    /* ── Spacing (gap) classes ────────────── */
+    .spacing-none { gap: 0; }
+    .spacing-xs   { gap: 4px; }
+    .spacing-sm   { gap: 8px; }
+    .spacing-md   { gap: 16px; }
+    .spacing-lg   { gap: 24px; }
+    .spacing-xl   { gap: 32px; }
+
+    /* ── Slotted children ────────────────── */
     ::slotted(*) {
       min-width: 0;
     }
 
+    /* ── Responsive: stack on mobile ─────── */
     @media (max-width: 600px) {
-      .grid {
+      .cols-2, .cols-3, .cols-4, .cols-5, .cols-6 {
         grid-template-columns: 1fr;
       }
     }
   `;
 
   @property({ type: Number }) columns = 2;
-  @property({ type: String }) gap: 'none' | 'xs' | 'sm' | 'md' | 'lg' | 'xl' = 'md';
+  @property({ type: String }) spacing: 'none' | 'xs' | 'sm' | 'md' | 'lg' | 'xl' = 'lg';
 
   render() {
+    const cols = Math.min(Math.max(this.columns, 1), 6);
     return html`
-      <div class="grid gap-${this.gap}" style="--cols: ${this.columns}">
+      <div class="grid cols-${cols} spacing-${this.spacing}">
         <slot></slot>
       </div>
     `;
