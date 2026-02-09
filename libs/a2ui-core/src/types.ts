@@ -261,25 +261,82 @@ export interface IconProps {
   color?: string;
 }
 
+// ============================================
+// New Component Types (Atomic Design)
+// ============================================
+
+export interface StatProps {
+  label: string;
+  value: string;
+  trend?: string;
+  trendDirection?: 'up' | 'down' | 'neutral';
+  description?: string;
+}
+
+export interface SeparatorProps {
+  orientation?: 'horizontal' | 'vertical';
+  label?: string;
+}
+
+export interface AccordionItemProps {
+  id: string;
+  title: string;
+  content: string;
+}
+
+export interface AccordionProps {
+  items: AccordionItemProps[];
+  multiple?: boolean;
+}
+
+export interface TabItemProps {
+  id: string;
+  label: string;
+  count?: number;
+  content: string;
+}
+
+export interface TabsProps {
+  tabs: TabItemProps[];
+}
+
+export interface AlertProps {
+  variant?: 'default' | 'info' | 'success' | 'warning' | 'error';
+  title?: string;
+  description?: string;
+}
+
 /**
  * Map of built-in component types to their props
  */
 export interface A2UIBuiltinComponents {
+  // Atoms
   card: CardProps;
   button: ButtonProps;
   'text-field': TextFieldProps;
   text: TextProps;
   image: ImageProps;
-  container: ContainerProps;
+  chip: ChipProps;
+  divider: DividerProps;
+  icon: IconProps;
+  separator: SeparatorProps;
+  progress: ProgressProps;
+
+  // Molecules
+  stat: StatProps;
   list: ListProps;
   select: SelectProps;
   checkbox: CheckboxProps;
   slider: SliderProps;
   'date-picker': DatePickerProps;
-  chip: ChipProps;
-  divider: DividerProps;
-  progress: ProgressProps;
-  icon: IconProps;
+  'data-table': Record<string, unknown>;
+  chart: Record<string, unknown>;
+  accordion: AccordionProps;
+  tabs: TabsProps;
+  alert: AlertProps;
+
+  // Organisms (Layout)
+  container: ContainerProps;
 }
 
 export type A2UIBuiltinComponentType = keyof A2UIBuiltinComponents;

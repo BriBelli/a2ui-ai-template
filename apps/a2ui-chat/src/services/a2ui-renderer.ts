@@ -160,6 +160,68 @@ export class A2UIRenderer {
           ></a2ui-image>
         `;
 
+      /* ── New Atomic / Molecular components ── */
+
+      case 'stat':
+        return html`
+          <a2ui-stat
+            .id=${id}
+            .label=${props.label || ''}
+            .value=${props.value || ''}
+            .trend=${props.trend || ''}
+            .trendDirection=${props.trendDirection || 'neutral'}
+            .description=${props.description || ''}
+          ></a2ui-stat>
+        `;
+
+      case 'separator':
+        return html`
+          <a2ui-separator
+            .id=${id}
+            .orientation=${props.orientation || 'horizontal'}
+            .label=${props.label || ''}
+          ></a2ui-separator>
+        `;
+
+      case 'progress':
+        return html`
+          <a2ui-progress
+            .id=${id}
+            .label=${props.label || ''}
+            .value=${props.value || 0}
+            .max=${props.max || 100}
+            .variant=${props.variant || 'default'}
+            .showValue=${props.showValue !== false}
+          ></a2ui-progress>
+        `;
+
+      case 'accordion':
+        return html`
+          <a2ui-accordion
+            .id=${id}
+            .items=${props.items || []}
+            .multiple=${props.multiple || false}
+          ></a2ui-accordion>
+        `;
+
+      case 'tabs':
+        return html`
+          <a2ui-tabs
+            .id=${id}
+            .tabs=${props.tabs || []}
+          ></a2ui-tabs>
+        `;
+
+      case 'alert':
+        return html`
+          <a2ui-alert
+            .id=${id}
+            .variant=${props.variant || 'default'}
+            .alertTitle=${props.title || ''}
+            .description=${props.description || ''}
+          ></a2ui-alert>
+        `;
+
       default:
         console.warn(`Unknown A2UI component type: ${type}`);
         return html`
