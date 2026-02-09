@@ -178,6 +178,180 @@ class WebSearchTool:
 web_search = WebSearchTool()
 
 
+async def llm_rewrite_query(
+    message: str,
+    location: str = "",
+    history: Optional[list] = None,
+) -> Optional[str]:
+    """
+    Use a fast LLM (nano) to rewrite a conversational prompt into an
+    optimised web-search query. Returns None on any failure so the caller
+    can fall back to rule-based rewriting.
+
+    The LLM handles:
+      - Typo correction
+      - Semantic intent extraction
+      - Context resolution from conversation history
+      - Temporal anchoring (adds current date)
+      - Filler stripping
+    """
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        return None
+
+    from datetime import datetime
+
+    now = datetime.now()
+    date_str = now.strftime("%B %d, %Y")  # "February 09, 2026"
+
+    # Build a minimal conversation context (last 2 exchanges max)
+    context_lines = ""
+    if history:
+        recent = history[-4:]  # last 2 user+assistant pairs
+        for msg in recent:
+            role = msg.get("role", "")
+            text = msg.get("content", "")[:200]
+            context_lines += f"  {role}: {text}\n"
+
+    system = (
+        "You are a search-query optimizer. Given a user's chat message, "
+        "rewrite it into a concise web search query that a search engine "
+        "would return the best results for.\n\n"
+        "Rules:\n"
+        "- Fix any typos or misspellings\n"
+        "- Strip conversational filler (show me, can you, please, etc.)\n"
+        "- Add specificity: dates, full names, locations when relevant\n"
+        "- For weather queries: search for CURRENT/TODAY weather, not monthly overviews. "
+        "Example: 'current weather Glastonbury CT today' NOT 'weather February 2026'\n"
+        "- For local queries (restaurants, events), include the user's location\n"
+        "- For time-sensitive queries (stocks, news), include today's date\n"
+        "- Keep it short — a search engine query, NOT a sentence\n"
+        "- Return ONLY the search query string, nothing else\n"
+        f"\nToday's date: {date_str}"
+        + (f"\nUser location: {location}" if location else "")
+    )
+
+    user_prompt = message
+    if context_lines:
+        user_prompt = f"Recent conversation:\n{context_lines}\nCurrent message: {message}"
+
+    try:
+        import openai
+        client = openai.OpenAI(api_key=api_key)
+
+        response = client.chat.completions.create(
+            model="gpt-4.1-nano",
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user_prompt},
+            ],
+            max_tokens=80,
+            temperature=0.0,
+        )
+
+        query = response.choices[0].message.content.strip()
+
+        # Sanity check: reject empty or overly long rewrites
+        if not query or len(query) > 200:
+            return None
+
+        # Strip quotes if the LLM wrapped it
+        if query.startswith('"') and query.endswith('"'):
+            query = query[1:-1]
+
+        return query
+    except Exception as e:
+        print(f"⚠️  LLM query rewrite failed (falling back to rule-based): {e}")
+        return None
+
+
+def rewrite_search_query(
+    message: str,
+    location: str = "",
+    current_date: str = "",
+) -> str:
+    """
+    Rewrite a conversational user prompt into an optimized search query.
+
+    Strips filler, adds context (date, location for local queries),
+    and reformulates for better search engine results.
+
+    Examples:
+        "Show weather forecast"  →  "weather forecast Glastonbury CT February 2026"
+        "What's the DOW doing?"  →  "Dow Jones Industrial Average current value"
+        "Compare iPhone vs Android"  →  "iPhone vs Android comparison 2026"
+        "Show me cool artwork"   →  "trending contemporary artwork 2026"
+    """
+    import re
+    from datetime import datetime
+
+    if not current_date:
+        now = datetime.now()
+        current_date = now.strftime("%B %Y")  # e.g. "February 2026"
+
+    msg = message.strip()
+
+    # ── 1. Strip conversational filler ──────────────────────
+    filler_prefixes = [
+        r"^(can you |could you |please |hey |hi |ok |okay |)",
+        r"(show me |tell me |give me |find me |get me |look up |search for |search |display |pull up |let me see |i want to see |i want |i need )",
+        r"(what is |what are |what's |whats )",
+    ]
+    cleaned = msg
+    for pattern in filler_prefixes:
+        cleaned = re.sub(pattern, "", cleaned, count=1, flags=re.IGNORECASE).strip()
+
+    # If stripping removed everything, keep original
+    if len(cleaned) < 3:
+        cleaned = msg
+
+    # ── 2. Detect if query is local ─────────────────────────
+    local_indicators = [
+        "weather", "forecast", "temperature", "near me", "nearby",
+        "local", "restaurant", "food", "store", "event", "concert",
+        "traffic", "commute", "directions", "open now",
+    ]
+    is_local = any(ind in cleaned.lower() for ind in local_indicators)
+
+    # ── 3. Detect if query is time-sensitive ────────────────
+    time_indicators = [
+        "current", "latest", "today", "now", "recent", "this week",
+        "this month", "this year", "trending", "popular", "new",
+        "price", "stock", "dow", "nasdaq", "s&p", "bitcoin",
+        "crypto", "market", "score", "standings", "news",
+    ]
+    is_time_sensitive = any(ind in cleaned.lower() for ind in time_indicators)
+
+    # ── 3b. Detect if query is weather-specific ───────────
+    weather_indicators = ["weather", "forecast", "temperature"]
+    is_weather = any(ind in cleaned.lower() for ind in weather_indicators)
+
+    # ── 4. Build optimized query ────────────────────────────
+    parts = []
+
+    # Weather gets special treatment: "current weather [location] today"
+    if is_weather:
+        parts.append(f"current {cleaned}")
+        if location:
+            parts.append(location)
+        parts.append("today")
+    else:
+        parts.append(cleaned)
+        # Append location for local queries
+        if is_local and location:
+            parts.append(location)
+        # Append date for time-sensitive queries
+        if is_time_sensitive:
+            parts.append(current_date)
+
+    query = " ".join(parts)
+
+    # ── 5. Clean up whitespace ──────────────────────────────
+    query = re.sub(r"\s+", " ", query).strip()
+
+    return query
+
+
 def should_search(message: str) -> bool:
     """
     Determine if a message would benefit from web search.

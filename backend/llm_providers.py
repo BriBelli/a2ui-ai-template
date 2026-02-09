@@ -58,7 +58,7 @@ A2UI JSON CONTRACT — You MUST respond with valid JSON only:
 • Lead with the answer: "text" or the first card title should state the direct answer (like a featured snippet). No "Here are some thoughts..." — give the outcome first.
 • Answer the question they meant: If they ask "weather" and [User Location] exists, that means "weather for MY location." If they ask "best X," give a ranked/specific answer, not "it depends."
 • One idea per card when possible. Use grid only when comparing (2+ items) or dashboard (4+ metrics). Avoid walls of cards.
-• Use real data only: From [Web Search Results] or [Available Images]. Never invent URLs, prices, or forecasts. If you lack data, say so in a caption and still provide useful structure.
+• Use real data only: From [Web Search Results] or [Available Images]. NEVER invent, extrapolate, or guess numbers, temperatures, forecasts, prices, or stats. Only display values that appear verbatim in the search results. If a specific data point isn't in the results, omit it — do NOT fill in gaps with plausible-sounding fiction.
 • Suggestions = 2–3 contextual, one-tap next steps (e.g. "10-day forecast for [their city]", "Compare with Boston"). Never generic ("Learn more", "Search the web").
 • Every component needs "id" (kebab-case). Nest children inside container/card/grid; no orphan components.
 
@@ -85,7 +85,7 @@ button    props: label, variant?
 image     props: src, alt, caption? — ONLY when src is from [Available Images] or user. Never fabricate URLs.
 
 ——— PATTERNS (default shapes; use unless a simpler response fits) ———
-WEATHER   card(title: [User Location] or city) > chip(condition) + text(temp). Then grid(columns:3) of cards for Today/Tomorrow/Day3 + chart(line) for temp trend. Data from search.
+WEATHER   card(title: [User Location] or city) > chip(condition) + text(temp + details). ONLY show data points that appear in [Web Search Results]. Do NOT invent multi-day forecasts, hourly temps, or precipitation numbers. If search has today's temp and conditions, show those. If search has a few days, show those. Never fill in missing days with guesses. chart ONLY if search results contain enough numeric data points.
 STOCK     card(title, subtitle ticker) > chips(sector, cap, %). chart(line, fillArea, currency USD, referenceLine). data-table(Metric, Value).
 COMPARE   grid(columns:2) > card per option > list(bullet). data-table(Feature, A, B). chart(bar) if numeric.
 DASHBOARD grid(columns:4) > card per KPI (text h2 + caption). chart. data-table.
@@ -100,6 +100,7 @@ LIST/CONTENT  card(title, subtitle) > text(body) + list(bullet|numbered) + chips
 • Do not invent image URLs or placeholder "example.com" links.
 • Do not reply with only plain text when the query clearly benefits from structure (comparison → table, trend → chart, steps → list).
 • Do not give generic suggestions; every suggestion must be specific to this response and one click away from a concrete next answer.
+• NEVER fabricate weather forecasts: Do not invent temperatures, conditions, or precipitation for days/times not explicitly stated in search results. Showing "Rainy, 38°F" when the search doesn't say that is misinformation. Only display what the search data actually contains.
 """
 
 SYSTEM_PROMPT = f"""You are the product: you answer. You respond only with valid A2UI JSON. No preamble, no "I'll help you with that" — the "text" field and first component are the answer.
@@ -335,7 +336,7 @@ class LLMService:
         user_location: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Generate a response using the specified provider and model."""
-        from tools import web_search, should_search
+        from tools import web_search, should_search, rewrite_search_query, llm_rewrite_query
         
         provider = self.get_provider(provider_id)
         if not provider:
@@ -343,44 +344,40 @@ class LLMService:
         
         # Build location context prefix
         location_context = ""
+        location_label = ""
         if user_location:
-            label = user_location.get("label", "")
+            location_label = user_location.get("label", "")
             lat = user_location.get("lat")
             lng = user_location.get("lng")
-            if label:
-                location_context = f"[User Location: {label} ({lat}, {lng})]\n"
+            if location_label:
+                location_context = f"[User Location: {location_label} ({lat}, {lng})]\n"
             elif lat and lng:
                 location_context = f"[User Location: {lat}, {lng}]\n"
         
-        # Perform web search if enabled and query seems to need current info
+        # Perform web search if query seems to need current info
         augmented_message = message
         search_metadata = None
         
-        # Include location in search query ONLY for local queries (weather, events, food, etc.)
-        # Do NOT append location for global queries (stocks, DOW, tech, general knowledge)
-        search_query = message
-        if location_context and should_search(message):
-            label = user_location.get("label", "") if user_location else ""
-            if label:
-                msg_lower = message.lower()
-                local_indicators = [
-                    "weather", "forecast", "temperature", "near me", "nearby",
-                    "local", "restaurant", "food", "store", "event", "concert",
-                    "traffic", "commute", "directions", "open now",
-                ]
-                is_local = any(ind in msg_lower for ind in local_indicators)
-                if is_local:
-                    search_query = f"{message} {label}"
-        
         if should_search(message):
+            # Rewrite the conversational prompt into an optimised search query.
+            # Try LLM-based rewriter first (handles typos, context, intent);
+            # fall back to rule-based if the LLM call fails or is unavailable.
+            search_query = await llm_rewrite_query(
+                message,
+                location=location_label,
+                history=history,
+            )
+            if not search_query:
+                search_query = rewrite_search_query(message, location=location_label)
+            
             if web_search.is_available():
-                print(f"🔍 Performing web search for: {search_query[:80]}...")
+                print(f"🔍 Search: \"{search_query[:100]}\"  ← \"{message[:60]}\"")
+
                 try:
                     search_results = await web_search.search(search_query)
                     context = web_search.format_for_context(search_results)
                     
                     if context:
-                        # Search succeeded - add context
                         augmented_message = f"{context}\n\nUser question: {message}"
                         image_count = len(search_results.get('images', []))
                         print(f"✓ Web search complete, {len(search_results.get('results', []))} results, {image_count} images")
@@ -389,23 +386,24 @@ class LLMService:
                             "success": True,
                             "results_count": len(search_results.get('results', [])),
                             "images_count": image_count,
+                            "query": search_query,
                         }
                     else:
-                        # Search failed - continue without context
                         error_type = search_results.get('error', 'unknown')
                         print(f"⚠️  Web search failed ({error_type}), continuing without search results")
                         search_metadata = {
                             "searched": True,
                             "success": False,
-                            "error": error_type
+                            "error": error_type,
+                            "query": search_query,
                         }
                 except Exception as e:
-                    # Catch any unexpected errors and continue gracefully
                     print(f"⚠️  Web search error (continuing anyway): {e}")
                     search_metadata = {
                         "searched": True,
                         "success": False,
-                        "error": "exception"
+                        "error": "exception",
+                        "query": search_query,
                     }
             else:
                 print("ℹ️  Web search requested but not configured, using AI knowledge only")

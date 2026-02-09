@@ -531,6 +531,7 @@ export class A2UIApp extends LitElement {
     // Build dynamic steps array that reflects real operations
     const steps: ThinkingStep[] = [];
     const willSearch = this.chatService.willSearch(message);
+    const needsLocation = this.chatService.needsLocation(message);
     const locationCached = isLocationCached();
 
     // Helper to update the reactive property
@@ -550,10 +551,10 @@ export class A2UIApp extends LitElement {
         this.selectedModel,
         this.messages,
         // Progress callback — driven by real lifecycle events
-        (phase) => {
+        (phase, detail) => {
           switch (phase) {
             case 'location':
-              if (!locationCached) {
+              if (needsLocation && !locationCached) {
                 push('Getting your location');
               }
               break;
@@ -563,11 +564,17 @@ export class A2UIApp extends LitElement {
               break;
             }
             case 'searching':
-              push('Searching the web', `"${message.slice(0, 60)}${message.length > 60 ? '…' : ''}"`);
+              push('Searching the web');
               break;
             case 'search-done': {
               const searchIdx = steps.findIndex(s => s.label.startsWith('Searching'));
-              if (searchIdx >= 0) done(searchIdx);
+              if (searchIdx >= 0) {
+                // Update the step with the rewritten query from the backend
+                if (detail) {
+                  steps[searchIdx] = { ...steps[searchIdx], detail: `"${detail}"` };
+                }
+                done(searchIdx);
+              }
               break;
             }
             case 'generating':
