@@ -23,7 +23,6 @@ from slowapi.errors import RateLimitExceeded
 import uvicorn
 
 from openai_service import get_openai_completion
-from a2ui_responses import get_a2ui_response
 from llm_providers import llm_service
 
 
@@ -199,15 +198,20 @@ async def chat(request: Request, body: ChatRequest):
                 status_code=400,
             )
         except Exception as e:
-            # Log full error server-side; return generic message to client
             print(f"LLM error: {e}")
-            response = get_a2ui_response(body.message)
-            response["_error"] = "An error occurred while generating the response"
-            return JSONResponse(content=response)
+            return JSONResponse(
+                content={
+                    "text": "Something went wrong generating a response. Please try again.",
+                    "_error": str(e),
+                },
+                status_code=500,
+            )
 
-    # Otherwise use mock/fallback responses
-    response = get_a2ui_response(body.message)
-    return JSONResponse(content=response)
+    # No provider selected — tell the client to pick one
+    return JSONResponse(
+        content={"error": "No LLM provider selected. Choose a provider and model from the dropdown."},
+        status_code=400,
+    )
 
 
 # Legacy OpenAI completion endpoint

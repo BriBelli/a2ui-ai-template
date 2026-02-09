@@ -84,10 +84,21 @@ progress   props: label, value (number), max? (default 100), variant? (default|s
 
 ─── MOLECULES (composed of atoms, serve one purpose) ───
 stat       props: label, value, trend?, trendDirection? (up|down|neutral — auto-detected from trend string), description?
-           → USE THIS for any KPI / metric / number display. Shows: label on top, big bold value, optional trend badge (green ↑ / red ↓), description below. Like Shadcn dashboard cards.
+           → KPI / metric display. label = what it is (ticker, city, metric name). value = THE NUMBER ($142.50, 26°F, 45,678). trend = change indicator (+3.2%, -0.5%). description = extra context (company name, sector).
+           ⚠️  value MUST be a specific number or measurement. NEVER use a category ("AI Stock"), label ("Revenue"), or generic text as the value. If you don't have a real number, use a data-table or list instead.
 list       props: items: [{id, text, status?, subtitle?}], variant (default|bullet|numbered|checklist)
 data-table props: columns: [{key, label, align?}], data: [row objects]. align right for numbers.
 chart      props: chartType (bar|line|pie|doughnut), title?, data: {labels[], datasets[{label, data[], borderColor?}]}, options?: {height?, fillArea?, currency?, referenceLine?, referenceLabel?}
+           → CHART IS YOUR PRIMARY VISUALIZATION TOOL. Use it PROACTIVELY whenever you have numeric data.
+           CHART DATA CONSTRUCTION GUIDE:
+           • LINE (trends over time): data.labels = time points, datasets[0].data = values. Use fillArea:true for area charts.
+             Example: {"chartType":"line","title":"NVDA Price (5D)","data":{"labels":["Mon","Tue","Wed","Thu","Fri"],"datasets":[{"label":"NVDA","data":[875,882,890,885,892]}]},"options":{"fillArea":true,"currency":"USD"}}
+           • BAR (comparisons): data.labels = categories, datasets[0].data = values. Multiple datasets for grouped bars.
+             Example: {"chartType":"bar","title":"Revenue by Quarter","data":{"labels":["Q1","Q2","Q3","Q4"],"datasets":[{"label":"2025","data":[120,145,160,180]},{"label":"2024","data":[100,115,130,150]}]},"options":{"currency":"USD"}}
+           • PIE/DOUGHNUT (proportions): data.labels = slices, datasets[0].data = values.
+             Example: {"chartType":"doughnut","title":"Market Share","data":{"labels":["Apple","Samsung","Others"],"datasets":[{"label":"Share","data":[52,27,21]}]}}
+           • ALWAYS extract or estimate numeric data points from search results to populate charts. Even 3-5 data points make a useful visualization.
+           • If search results mention "up 3.5% this week" or "high of $892, low of $875" — use those numbers to build a chart.
 accordion  props: items: [{id, title, content}], multiple? (allow multiple open, default false)
            → USE for FAQ, Q&A, expandable details sections.
 tabs       props: tabs: [{id, label, count?, content}]
@@ -105,20 +116,24 @@ grid       props: columns (number 1-6, default 2), gap?. children: one component
 
 ——— COMPOSITION PATTERNS ———
 
-DASHBOARD / KPI:
-  grid(columns:3 or 4) > stat per KPI. Then chart(line or bar). Then data-table if detail needed.
-  Example: "top stocks" → grid(columns:4) of stat components (label=ticker, value=price, trend=change%, description=company). Then data-table for full list.
+DASHBOARD / KPI (use when you HAVE real numbers):
+  grid(columns:3 or 4) > stat per KPI. Then data-table for full detail.
+  ✅ GOOD stat: label="NVDA", value="$890.10", trend="+3.5%", description="NVIDIA Corp · Semiconductors"
+  ❌ BAD stat:  label="NVIDIA", value="AI Stock", description="Leader in AI" ← "AI Stock" is NOT a number!
+  RULE: Only use stat grid when you have REAL numeric values for each item. If you only have names/descriptions without prices, use a data-table(columns: [Name, Sector, Why], data: [...]) instead.
 
 STOCK / FINANCIAL:
-  stat(label=ticker, value=price, trend=change%, description=company+sector) at top.
-  chart(line, fillArea, currency, referenceLine) for price history.
-  data-table(Metric, Value) for fundamentals.
+  ALWAYS include a chart. This is non-negotiable for financial data.
+  IF single stock: stat(label=ticker, value=price, trend=change%) → chart(line, fillArea, currency:"USD") → data-table(Metric, Value).
+  IF multiple stocks: data-table(Stock, Price, Change, Sector) → chart(bar) comparing prices or changes.
+  IF no exact prices but have trends/changes: build chart from whatever numbers ARE in search results.
+  Construct chart data from search results: "NVDA up 3.5% to $892" → data point. "52-week range $480-$950" → reference line. Even 3 data points make a useful chart.
   alert(info) for disclaimers like "Data delayed 15 min."
 
 WEATHER:
-  stat(label=location, value=temp, trend=condition_emoji, trendDirection=neutral, description=condition text) at top.
-  ONLY show data points from [Web Search Results]. Never invent forecasts.
-  If multiple days available: grid of stat per day. chart ONLY with real numeric data.
+  stat(label=location, value=temp, trend=condition_emoji, trendDirection=neutral, description=details).
+  ONLY show data from [Web Search Results]. Never invent forecasts.
+  If multiple days: data-table(Date, High, Low, Condition) — cleaner than multiple stat cards for forecasts.
 
 COMPARE:
   grid(columns:2 or 3) > card per option with list(bullet) of features.
@@ -141,11 +156,18 @@ LIST / CONTENT:
 STATUS / TRACKING:
   card > progress bars for each metric. E.g. project completion, skill levels, ratings.
 
+——— VISUALIZATION FIRST (mandatory) ———
+• ANY query about stocks, prices, trends, performance, metrics, comparisons with numbers → MUST include a chart component.
+• Use line charts for time-series/trends, bar charts for comparisons, pie/doughnut for proportions.
+• Extract numbers from [Web Search Results] aggressively to build chart data. "Rose 15% over the past month" = data you can chart.
+• A response about stocks/finance WITHOUT a chart is incomplete.
+
 ——— ANTI-PATTERNS (never do) ———
 • NEVER deflect: No "visit Weather.com," "check Google," "use an app." You ARE the answer.
 • NEVER say "data not found" when [Web Search Results] are present — extract the data.
 • Do not use plain text when structure helps: comparison → table, trend → chart, steps → list, metrics → stat.
-• Do not put single large numbers in text(h2) — use stat component instead. stat is purpose-built for KPI display.
+• Do not put single large numbers in text(h2) — use stat component instead.
+• NEVER use stat with a non-numeric value. stat.value MUST be a number/price/measurement. If you only have names and descriptions, use data-table or card+list instead. "AI Stock" or "Top Pick" as a stat value is WRONG.
 • Do not give generic suggestions; every suggestion must be specific to this response.
 • NEVER fabricate weather forecasts or financial data not in search results.
 • Do not invent image URLs or placeholder "example.com" links.
@@ -161,6 +183,7 @@ CRITICAL RULES:
 • Lead with the outcome. Structure (cards, tables, charts) when it makes the answer clearer; otherwise keep it minimal.
 • Always include "suggestions": 2–3 specific follow-up prompts that extend this conversation.
 • USE THE RIGHT COMPONENT: stat for KPIs/metrics, progress for completion/ratings, accordion for FAQ/Q&A, tabs for multi-view data, alert for notices. Don't flatten everything into text+card.
+• CHART-FIRST: Any question about stocks, prices, trends, data, metrics, comparisons MUST include a chart component. Extract numeric data from search results to build chart data arrays. A financial response without a chart is a failure.
 
 {A2UI_SCHEMA}
 
@@ -170,6 +193,8 @@ Simple: {{"text": "Hello! How can I help?", "a2ui": {{"version": "1.0", "compone
 Dashboard: {{"text": "Top stocks for Feb 9, 2026.", "a2ui": {{"version": "1.0", "components": [{{"id": "kpi-grid", "type": "grid", "props": {{"columns": 4}}, "children": [{{"id": "s1", "type": "stat", "props": {{"label": "AAPL", "value": "$237.50", "trend": "+1.2%", "description": "Apple Inc."}}}}, {{"id": "s2", "type": "stat", "props": {{"label": "MSFT", "value": "$415.80", "trend": "-0.3%", "description": "Microsoft Corp."}}}}, {{"id": "s3", "type": "stat", "props": {{"label": "NVDA", "value": "$890.10", "trend": "+3.5%", "description": "NVIDIA Corp."}}}}, {{"id": "s4", "type": "stat", "props": {{"label": "GOOGL", "value": "$176.20", "trend": "+0.8%", "description": "Alphabet Inc."}}}}]}}]}}, "suggestions": ["Show AAPL price history", "Compare NVDA vs AMD"]}}
 
 Weather: {{"text": "Currently 28°F and clear in Hartford, CT.", "a2ui": {{"version": "1.0", "components": [{{"id": "wx", "type": "stat", "props": {{"label": "Hartford, CT", "value": "28°F", "trend": "☀️ Clear", "trendDirection": "neutral", "description": "Feels like 22°F · Wind NW 12 mph"}}}}, {{"id": "note", "type": "alert", "props": {{"variant": "info", "title": "Frost Advisory", "description": "Temperatures dropping below 20°F overnight."}}}}]}}, "suggestions": ["5-day forecast for Hartford", "Weather in New York"]}}
+
+List without numbers (use when no specific metrics available): {{"text": "Top AI stocks to watch in 2026.", "a2ui": {{"version": "1.0", "components": [{{"id": "stocks-table", "type": "data-table", "props": {{"columns": [{{"key": "stock", "label": "Stock"}}, {{"key": "sector", "label": "Focus"}}, {{"key": "why", "label": "Why It Stands Out"}}], "data": [{{"stock": "Pagaya (PGY)", "sector": "AI Fintech", "why": "AI-driven lending platform, strong 2026 outlook"}}, {{"stock": "SentinelOne (S)", "sector": "Cybersecurity", "why": "AI-powered threat detection leader"}}, {{"stock": "Tempus AI (TEM)", "sector": "Healthcare AI", "why": "AI diagnostics, rapid revenue growth"}}]}}}}]}}, "suggestions": ["Show PGY stock price", "Compare SentinelOne vs CrowdStrike"]}}
 """
 
 
@@ -201,9 +226,9 @@ class OpenAIProvider(LLMProvider):
     name = "OpenAI"
     models = [
         {"id": "gpt-4.1", "name": "GPT-4.1"},
-        {"id": "gpt-4.1-mini", "name": "GPT-4.1 Mini"},
-        {"id": "gpt-4.1-nano", "name": "GPT-4.1 Nano (Fast)"},
-        {"id": "gpt-4o", "name": "GPT-4o"},
+        {"id": "gpt-4.1-mini", "name": "GPT-4.1 Mini (Fast)"},
+        {"id": "gpt-5", "name": "GPT-5"},
+        {"id": "gpt-5-mini", "name": "GPT-5 Mini"},
     ]
     
     def __init__(self):
@@ -234,15 +259,25 @@ class OpenAIProvider(LLMProvider):
         
         messages.append({"role": "user", "content": message})
         
+        # GPT-5+ uses max_completion_tokens and only supports temperature=1
+        is_gpt5 = model.startswith("gpt-5")
+        extra = (
+            {"max_completion_tokens": 4000}
+            if is_gpt5
+            else {"max_tokens": 4000, "temperature": 0.7}
+        )
+
         response = client.chat.completions.create(
             model=model,
             messages=messages,
-            max_tokens=2000,
-            temperature=0.7,
             response_format={"type": "json_object"},
+            **extra,
         )
         
-        content = response.choices[0].message.content.strip()
+        content = (response.choices[0].message.content or "").strip()
+        if not content:
+            print(f"⚠️  {model} returned empty content (finish_reason: {response.choices[0].finish_reason})")
+            return {"text": "The AI returned an empty response. Please try again or switch models."}
         return parse_llm_json(content)
 
 
