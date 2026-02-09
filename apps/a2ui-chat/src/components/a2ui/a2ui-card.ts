@@ -41,6 +41,9 @@ export class A2UICard extends LitElement {
     }
 
     .card-content {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
       color: var(--a2ui-text-primary);
     }
 

@@ -17,7 +17,7 @@ export class A2UIRenderer {
     }
 
     return html`
-      <div class="a2ui-root">
+      <div class="a2ui-root" style="display:flex; flex-direction:column; gap:16px">
         ${response.components.map(c => this.renderComponent(c))}
       </div>
     `;
@@ -62,7 +62,7 @@ export class A2UIRenderer {
           <a2ui-container
             .id=${id}
             .layout=${props.layout || 'vertical'}
-            .gap=${props.gap || 'md'}
+            .spacing=${props.gap || 'md'}
             .wrap=${props.wrap || false}
           >
             ${renderedChildren}
@@ -74,7 +74,7 @@ export class A2UIRenderer {
           <a2ui-grid
             .id=${id}
             .columns=${props.columns || 2}
-            .gap=${props.gap || 'lg'}
+            .spacing=${props.gap || 'lg'}
           >
             ${renderedChildren}
           </a2ui-grid>

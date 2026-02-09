@@ -84,32 +84,34 @@ export class A2UIChatMessage extends LitElement {
     }
 
     .bubble {
-      padding: var(--a2ui-space-3) var(--a2ui-space-4);
-      border-radius: var(--a2ui-radius-xl);
       max-width: 100%;
-      transition: box-shadow 0.15s ease;
-    }
-
-    .bubble:hover {
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
     }
 
     .user .bubble {
+      padding: var(--a2ui-space-3) var(--a2ui-space-4);
       background: var(--a2ui-accent);
       color: var(--a2ui-text-inverse);
+      border-radius: var(--a2ui-radius-xl);
       border-bottom-right-radius: var(--a2ui-radius-sm);
+      transition: box-shadow 0.15s ease;
+    }
+
+    .user .bubble:hover {
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
     }
 
     .assistant .bubble {
-      background: var(--a2ui-bg-secondary);
       color: var(--a2ui-text-primary);
-      border-bottom-left-radius: var(--a2ui-radius-sm);
     }
 
     .text-content {
       white-space: pre-wrap;
       word-break: break-word;
       line-height: var(--a2ui-leading-relaxed);
+    }
+
+    .assistant .text-content {
+      padding: var(--a2ui-space-1) 0;
     }
 
     .a2ui-content {

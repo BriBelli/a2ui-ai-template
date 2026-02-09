@@ -1,6 +1,23 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 
+/**
+ * A2UI Container — CSS class-based flexbox layout.
+ *
+ * Usage (declarative):
+ *   <a2ui-container layout="horizontal" spacing="md">
+ *     <a2ui-chip>Tag 1</a2ui-chip>
+ *     <a2ui-chip>Tag 2</a2ui-chip>
+ *   </a2ui-container>
+ *
+ * CSS classes generated:
+ *   .container      — always present (display: flex)
+ *   .vertical/.horizontal — direction
+ *   .spacing-{size} — gap between items
+ *   .wrap           — flex-wrap: wrap
+ *   .align-{value}  — align-items
+ *   .justify-{value} — justify-content
+ */
 @customElement('a2ui-container')
 export class A2UIContainer extends LitElement {
   static styles = css`
@@ -8,43 +25,42 @@ export class A2UIContainer extends LitElement {
       display: block;
     }
 
+    /* ── Base ─────────────────────────────── */
     .container {
       display: flex;
     }
 
-    .vertical {
-      flex-direction: column;
-    }
+    /* ── Direction ────────────────────────── */
+    .vertical   { flex-direction: column; }
+    .horizontal { flex-direction: row; }
 
-    .horizontal {
-      flex-direction: row;
-    }
+    /* ── Wrap ─────────────────────────────── */
+    .wrap { flex-wrap: wrap; }
 
-    .wrap {
-      flex-wrap: wrap;
-    }
+    /* ── Spacing (gap) classes ────────────── */
+    .spacing-none { gap: 0; }
+    .spacing-xs   { gap: 4px; }
+    .spacing-sm   { gap: 8px; }
+    .spacing-md   { gap: 16px; }
+    .spacing-lg   { gap: 24px; }
+    .spacing-xl   { gap: 32px; }
 
-    .gap-none { gap: 0; }
-    .gap-xs { gap: var(--a2ui-space-1); }
-    .gap-sm { gap: var(--a2ui-space-2); }
-    .gap-md { gap: var(--a2ui-space-4); }
-    .gap-lg { gap: var(--a2ui-space-6); }
-    .gap-xl { gap: var(--a2ui-space-8); }
-
-    .align-start { align-items: flex-start; }
-    .align-center { align-items: center; }
-    .align-end { align-items: flex-end; }
+    /* ── Alignment ────────────────────────── */
+    .align-start   { align-items: flex-start; }
+    .align-center  { align-items: center; }
+    .align-end     { align-items: flex-end; }
     .align-stretch { align-items: stretch; }
 
-    .justify-start { justify-content: flex-start; }
-    .justify-center { justify-content: center; }
-    .justify-end { justify-content: flex-end; }
+    /* ── Justification ────────────────────── */
+    .justify-start   { justify-content: flex-start; }
+    .justify-center  { justify-content: center; }
+    .justify-end     { justify-content: flex-end; }
     .justify-between { justify-content: space-between; }
-    .justify-around { justify-content: space-around; }
+    .justify-around  { justify-content: space-around; }
   `;
 
   @property({ type: String }) layout: 'vertical' | 'horizontal' = 'vertical';
-  @property({ type: String }) gap: 'none' | 'xs' | 'sm' | 'md' | 'lg' | 'xl' = 'md';
+  @property({ type: String }) spacing: 'none' | 'xs' | 'sm' | 'md' | 'lg' | 'xl' = 'md';
   @property({ type: Boolean }) wrap = false;
   @property({ type: String }) align: 'start' | 'center' | 'end' | 'stretch' = 'stretch';
   @property({ type: String }) justify: 'start' | 'center' | 'end' | 'between' | 'around' = 'start';
@@ -53,7 +69,7 @@ export class A2UIContainer extends LitElement {
     const classes = [
       'container',
       this.layout,
-      `gap-${this.gap}`,
+      `spacing-${this.spacing}`,
       `align-${this.align}`,
       `justify-${this.justify}`,
       this.wrap ? 'wrap' : '',
