@@ -784,6 +784,8 @@ export class A2UIApp extends LitElement {
           @send-message=${this.handleSendMessage}
         ></a2ui-chat-container>
       </main>
+
+      <a2ui-toast></a2ui-toast>
     `;
   }
 }

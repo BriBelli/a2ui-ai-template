@@ -3,6 +3,7 @@ import './styles/tokens.css';
 
 // Import all components
 import './components/a2ui-app';
+import './components/a2ui-toast';
 import './components/a2ui-model-selector';
 import './components/chat/a2ui-chat-container';
 import './components/chat/a2ui-chat-input';
