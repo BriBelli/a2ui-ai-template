@@ -1,6 +1,7 @@
 import type { A2UIResponse } from '@a2ui/core';
 import { aiConfig } from '../config/ui-config';
 import { getUserLocation } from './geolocation-service';
+import { toast } from './toast-service';
 
 export interface ChatMessage {
   id: string;
@@ -79,6 +80,7 @@ export class ChatService {
       return data.providers;
     } catch (error) {
       console.error('Failed to fetch providers:', error);
+      toast.error('Could not load AI providers. Is the backend running?');
       return [];
     }
   }
@@ -175,17 +177,9 @@ export class ChatService {
       // A2UI API response data
       const data = await response.json();
       if (!response.ok) {
-        // Surface the backend's actual error message
         const errMsg = data?.text || data?.error || `Server error (${response.status})`;
-        return {
-          text: errMsg,
-          a2ui: {
-            version: '1.0',
-            components: [
-              { id: 'err', type: 'alert', props: { variant: 'error', title: 'Error', description: errMsg } },
-            ],
-          },
-        };
+        toast.error(errMsg);
+        return { text: errMsg };
       }
 
       // Pass the rewritten search query back so the thinking indicator can display it
@@ -193,21 +187,14 @@ export class ChatService {
       onProgress?.('search-done', rewrittenQuery);
       onProgress?.('generating');
 
-      if (data.a2ui) {
-        console.log('[A2UI] API response a2ui:', JSON.stringify(data.a2ui, null, 2));
-      }
+      // if (data.a2ui) {
+      //   console.log('[A2UI] API response a2ui:', JSON.stringify(data.a2ui, null, 2));
+      // }
       return data;
     } catch (error) {
       console.error('Chat API error:', error);
-      return {
-        text: 'Unable to reach the AI service. Please check that the backend is running.',
-        a2ui: {
-          version: '1.0',
-          components: [
-            { id: 'err', type: 'alert', props: { variant: 'error', title: 'Connection Error', description: 'The backend at ' + this.baseUrl + ' is not responding. Start it with: cd backend && python3 app.py' } },
-          ],
-        },
-      };
+      toast.error('Unable to reach the AI service. Check that the backend is running.');
+      return { text: 'Connection error — the backend is not responding.' };
     }
   }
 }

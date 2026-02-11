@@ -54,7 +54,7 @@ const crosshairPlugin: Plugin = {
   afterDraw(chart) {
     const tooltip = chart.tooltip;
     if (!tooltip || !tooltip.getActiveElements().length) return;
-    if (chart.config.type !== 'line') return;
+    if (!('type' in chart.config) || chart.config.type !== 'line') return;
 
     const ctx = chart.ctx;
     const x = tooltip.caretX;
@@ -216,14 +216,21 @@ export class A2UIChart extends LitElement {
     return `rgba(${r}, ${g}, ${b}, ${alpha})`;
   }
 
+  /** Valid ISO 4217 currency codes are 3 uppercase letters. */
+  private static CURRENCY_RE = /^[A-Z]{3}$/;
+
   private formatValue(value: number): string {
-    if (this.options.currency) {
-      return new Intl.NumberFormat('en-US', {
-        style: 'currency',
-        currency: this.options.currency,
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 2,
-      }).format(value);
+    if (this.options.currency && A2UIChart.CURRENCY_RE.test(this.options.currency)) {
+      try {
+        return new Intl.NumberFormat('en-US', {
+          style: 'currency',
+          currency: this.options.currency,
+          minimumFractionDigits: 0,
+          maximumFractionDigits: 2,
+        }).format(value);
+      } catch {
+        // Fall through to default formatting if currency is unrecognised
+      }
     }
     return value.toLocaleString();
   }

@@ -346,7 +346,8 @@ export class A2UIApp extends LitElement {
   @state() private providers: LLMProvider[] = [];
   @state() private selectedProvider = '';
   @state() private selectedModel = '';
-  private activeThreadId: string | null = null;
+  @state() private activeThreadId: string | null = null;
+  @state() private threads: ChatThread[] = [];
 
   // ── Suggestions (data can come from AI, config, or any source) ──
   private suggestions = [
@@ -399,6 +400,7 @@ export class A2UIApp extends LitElement {
         // Scope localStorage to this user
         chatHistoryService.setUser(this.user?.sub ?? null);
         this.restoreLastThread();
+        this.refreshThreadList();
         this.loadProviders();
       }
     });
@@ -407,6 +409,7 @@ export class A2UIApp extends LitElement {
     if (authService.isAuthenticated) {
       chatHistoryService.setUser(authService.user?.sub ?? null);
       this.restoreLastThread();
+      this.refreshThreadList();
       await this.loadProviders();
     }
   }
@@ -434,6 +437,7 @@ export class A2UIApp extends LitElement {
       this.savedMessages = [...this.messages];
       this.messages = [];
       this.activeThreadId = null;
+      this.refreshThreadList();
     }
   }
 
@@ -526,6 +530,7 @@ export class A2UIApp extends LitElement {
     }
 
     this.persistThread();
+    this.refreshThreadList();
     this.isLoading = true;
 
     // Build dynamic steps array that reflects real operations
@@ -601,6 +606,7 @@ export class A2UIApp extends LitElement {
       }];
 
       this.persistThread();
+      this.refreshThreadList();
     } catch (error) {
       console.error('Chat error:', error);
       this.messages = [...this.messages, {
@@ -610,22 +616,89 @@ export class A2UIApp extends LitElement {
         timestamp: Date.now(),
       }];
       this.persistThread();
+      this.refreshThreadList();
     } finally {
       this.isLoading = false;
       this.thinkingSteps = [];
     }
   }
 
-  private clearChat() {
-    // Persist before clearing so the thread stays in history
+  // ── Thread tab management ─────────────────────────────
+
+  /** Start a brand-new chat (the "+" button). */
+  private newChat() {
     this.persistThread();
     this.messages = [];
     this.activeThreadId = null;
     this.savedMessages = [];
     sessionStorage.removeItem(A2UIApp.ACTIVE_KEY);
+    this.refreshThreadList();
     if (history.state?.a2ui === 'chat') {
       history.back();
     }
+  }
+
+  /** Switch to an existing thread tab. */
+  private switchThread(e: CustomEvent<{ threadId: string }>) {
+    const { threadId } = e.detail;
+    if (threadId === this.activeThreadId) return;
+
+    // Save current conversation first
+    this.persistThread();
+
+    const thread = chatHistoryService.getThread(threadId);
+    if (thread) {
+      this.activeThreadId = thread.id;
+      this.messages = thread.messages;
+      this.savedMessages = [];
+      sessionStorage.setItem(A2UIApp.ACTIVE_KEY, thread.id);
+
+      // Restore provider/model if the thread stored them
+      if (thread.provider) this.selectedProvider = thread.provider;
+      if (thread.model) this.selectedModel = thread.model;
+
+      // Push a chat history entry so back-button still works
+      if (history.state?.a2ui !== 'chat') {
+        history.pushState({ a2ui: 'chat', threadId: thread.id }, '');
+      } else {
+        history.replaceState({ a2ui: 'chat', threadId: thread.id }, '');
+      }
+    }
+    this.refreshThreadList();
+  }
+
+  /** Delete a thread via the tab close button. */
+  private deleteThread(e: CustomEvent<{ threadId: string }>) {
+    const { threadId } = e.detail;
+    chatHistoryService.deleteThread(threadId);
+
+    if (this.activeThreadId === threadId) {
+      this.messages = [];
+      this.activeThreadId = null;
+      this.savedMessages = [];
+      sessionStorage.removeItem(A2UIApp.ACTIVE_KEY);
+      if (history.state?.a2ui === 'chat') {
+        history.back();
+      }
+    }
+    this.refreshThreadList();
+  }
+
+  /** Rename a thread via double-click inline edit. */
+  private renameThread(e: CustomEvent<{ threadId: string; title: string }>) {
+    const { threadId, title } = e.detail;
+    const thread = chatHistoryService.getThread(threadId);
+    if (thread) {
+      thread.title = title;
+      thread.updatedAt = Date.now();
+      chatHistoryService.saveThread(thread);
+      this.refreshThreadList();
+    }
+  }
+
+  /** Reload the thread list from storage. */
+  private refreshThreadList() {
+    this.threads = chatHistoryService.getThreads();
   }
 
   private toggleUserMenu() {
@@ -698,15 +771,6 @@ export class A2UIApp extends LitElement {
         </div>
 
         <div class="header-right">
-          ${this.messages.length > 0 ? html`
-            <button class="header-btn" @click=${this.clearChat}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
-              </svg>
-              Clear
-            </button>
-          ` : ''}
-
           ${this.user ? html`
             <div class="avatar-wrapper">
               <button
@@ -775,6 +839,15 @@ export class A2UIApp extends LitElement {
         </div>
       </header>
 
+      <a2ui-thread-tabs
+        .threads=${this.threads}
+        .activeThreadId=${this.activeThreadId}
+        @new-chat=${this.newChat}
+        @switch-thread=${this.switchThread}
+        @delete-thread=${this.deleteThread}
+        @rename-thread=${this.renameThread}
+      ></a2ui-thread-tabs>
+
       <main class="main">
         <a2ui-chat-container
           .messages=${this.messages}
@@ -784,6 +857,8 @@ export class A2UIApp extends LitElement {
           @send-message=${this.handleSendMessage}
         ></a2ui-chat-container>
       </main>
+
+      <a2ui-toast></a2ui-toast>
     `;
   }
 }
