@@ -167,10 +167,11 @@ export class A2UIChatInput extends LitElement {
 
   render() {
     return html`
-      <div class="input-container ${this.disabled ? 'disabled' : ''}">
+      <div class="input-container ${this.disabled ? 'disabled' : ''}" role="group" aria-label="Message composer">
         <textarea
           rows="1"
           placeholder="Ask me anything..."
+          aria-label="Message input"
           .value=${this.value}
           ?disabled=${this.disabled}
           @input=${this.handleInput}
@@ -178,10 +179,11 @@ export class A2UIChatInput extends LitElement {
         ></textarea>
         <button 
           class="send-button"
+          aria-label="Send message"
           ?disabled=${!this.value.trim() || this.disabled}
           @click=${this.sendMessage}
         >
-          <svg class="send-icon" viewBox="0 0 24 24" fill="currentColor">
+          <svg class="send-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
             <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
           </svg>
         </button>

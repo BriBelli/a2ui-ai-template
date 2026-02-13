@@ -897,7 +897,7 @@ export class A2UIApp extends LitElement {
     if (!this.isAuthenticated) {
       return html`
         <div class="welcome-page">
-          <div class="welcome-logo"></div>
+          <div class="welcome-logo" aria-hidden="true"></div>
           <h1>Welcome to A2UI Chat</h1>
           <p>
             AI-powered assistant with rich interactive responses. Sign in to get
@@ -915,10 +915,10 @@ export class A2UIApp extends LitElement {
 
     // Authenticated — full chat UI
     return html`
-      <header class="header">
+      <header class="header" role="banner">
         <div class="header-left">
-          <div class="logo">
-            <div class="logo-icon"></div>
+          <div class="logo" aria-label="A2UI Chat">
+            <div class="logo-icon" aria-hidden="true"></div>
             <span>A2UI Chat</span>
           </div>
           <div class="divider"></div>
@@ -938,6 +938,9 @@ export class A2UIApp extends LitElement {
                     class="avatar-btn ${this.showUserMenu ? "active" : ""}"
                     @click=${this.toggleUserMenu}
                     title=${this.user.name || this.user.email || "Account"}
+                    aria-label="User menu"
+                    aria-haspopup="true"
+                    aria-expanded=${this.showUserMenu}
                   >
                     ${this.user.picture
                       ? html`<img src=${this.user.picture} alt="" />`
@@ -950,7 +953,7 @@ export class A2UIApp extends LitElement {
                           class="user-menu-backdrop"
                           @click=${this.closeUserMenu}
                         ></div>
-                        <div class="user-menu">
+                        <div class="user-menu" role="menu" aria-label="User menu">
                           <div class="user-menu-header">
                             <div class="user-menu-avatar">
                               ${this.user.picture
@@ -975,6 +978,7 @@ export class A2UIApp extends LitElement {
                             <!-- Theme toggle -->
                             <button
                               class="menu-item"
+                              role="menuitem"
                               @click=${this.handleToggleTheme}
                             >
                               ${this.theme === "dark"
@@ -1005,6 +1009,7 @@ export class A2UIApp extends LitElement {
                             <!-- Settings -->
                             <button
                               class="menu-item"
+                              role="menuitem"
                               @click=${() => {
                                 /* TODO: open settings */ this.closeUserMenu();
                               }}
@@ -1022,6 +1027,7 @@ export class A2UIApp extends LitElement {
                             <!-- Logout -->
                             <button
                               class="menu-item danger"
+                              role="menuitem"
                               @click=${this.handleLogout}
                             >
                               <svg viewBox="0 0 24 24" fill="currentColor">
