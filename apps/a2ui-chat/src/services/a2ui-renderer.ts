@@ -3,24 +3,85 @@ import type { A2UIResponse, A2UIComponent } from '@a2ui/core';
 
 /**
  * A2UI Renderer for Lit Web Components
- * 
+ *
  * This service maps A2UI protocol components to their
  * Lit Web Component implementations.
  */
 export class A2UIRenderer {
   /**
-   * Render an A2UI response to Lit templates
+   * Render an A2UI response to Lit templates.
+   *
+   * Consecutive top-level `stat` components are automatically grouped
+   * into a horizontal grid row so they sit side-by-side on desktop
+   * and stack on narrow / mobile viewports.
    */
   static render(response: A2UIResponse): TemplateResult {
     if (!response || !response.components) {
       return html`${nothing}`;
     }
 
+    // Group consecutive stat components into grid wrappers
+    const grouped = this.groupConsecutiveStats(response.components);
+
     return html`
       <div class="a2ui-root" style="display:flex; flex-direction:column; gap:16px">
-        ${response.components.map(c => this.renderComponent(c))}
+        ${grouped.map((item) => {
+          if (Array.isArray(item)) {
+            // Stat group → render as a horizontal grid
+            const cols = Math.min(item.length, 6);
+            return html`
+              <a2ui-grid
+                .columns=${String(cols)}
+                .spacing=${'lg'}
+                .minItemWidth=${'180px'}
+              >
+                ${item.map((c) => this.renderComponent(c))}
+              </a2ui-grid>
+            `;
+          }
+          return this.renderComponent(item);
+        })}
       </div>
     `;
+  }
+
+  /**
+   * Walk the components array and collect runs of consecutive `stat`
+   * components into sub-arrays.  Non-stat components pass through as-is.
+   *
+   * e.g. [stat, stat, stat, chart, table]
+   *   → [[stat, stat, stat], chart, table]
+   */
+  private static groupConsecutiveStats(
+    components: A2UIComponent[]
+  ): (A2UIComponent | A2UIComponent[])[] {
+    const result: (A2UIComponent | A2UIComponent[])[] = [];
+    let statRun: A2UIComponent[] = [];
+
+    for (const c of components) {
+      if (c && typeof c === 'object' && c.type === 'stat') {
+        statRun.push(c);
+      } else {
+        // Flush any accumulated stat run
+        if (statRun.length > 1) {
+          result.push(statRun);
+        } else if (statRun.length === 1) {
+          // Single stat — no need to grid-wrap, render normally
+          result.push(statRun[0]);
+        }
+        statRun = [];
+        result.push(c);
+      }
+    }
+
+    // Flush trailing stats
+    if (statRun.length > 1) {
+      result.push(statRun);
+    } else if (statRun.length === 1) {
+      result.push(statRun[0]);
+    }
+
+    return result;
   }
 
   /**
@@ -43,8 +104,8 @@ export class A2UIRenderer {
     }
 
     // Render children recursively
-    const renderedChildren = Array.isArray(children) 
-      ? children.map(child => this.renderComponent(child))
+    const renderedChildren = Array.isArray(children)
+      ? children.map((child) => this.renderComponent(child))
       : [];
 
     switch (type) {
@@ -73,8 +134,9 @@ export class A2UIRenderer {
         return html`
           <a2ui-grid
             .id=${id}
-            .columns=${props.columns || 2}
+            .columns=${props.columns ?? 'auto'}
             .spacing=${props.gap || 'lg'}
+            .minItemWidth=${props.minItemWidth || '150px'}
           >
             ${renderedChildren}
           </a2ui-grid>

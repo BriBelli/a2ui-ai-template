@@ -38,6 +38,10 @@ interface ChartOptions {
   referenceLine?: number;
   /** Label for the reference line */
   referenceLabel?: string;
+  /** Label for the X axis (e.g. "Stock Ticker", "Month") */
+  xAxisLabel?: string;
+  /** Label for the Y axis (e.g. "Price (USD)", "Trending Score") */
+  yAxisLabel?: string;
 }
 
 /** Read a CSS custom property from :root. */
@@ -385,6 +389,19 @@ export class A2UIChart extends LitElement {
             border: {
               display: false,
             },
+            ...(this.options.xAxisLabel ? {
+              title: {
+                display: true,
+                text: this.options.xAxisLabel,
+                color: textSecondary,
+                font: {
+                  family: 'Google Sans, Roboto, sans-serif',
+                  size: 11,
+                  weight: '500' as const,
+                },
+                padding: { top: 8 },
+              },
+            } : {}),
             ticks: {
               color: textTertiary,
               maxRotation: 0,
@@ -406,6 +423,19 @@ export class A2UIChart extends LitElement {
             border: {
               display: false,
             },
+            ...(this.options.yAxisLabel ? {
+              title: {
+                display: true,
+                text: this.options.yAxisLabel,
+                color: textSecondary,
+                font: {
+                  family: 'Google Sans, Roboto, sans-serif',
+                  size: 11,
+                  weight: '500' as const,
+                },
+                padding: { bottom: 8 },
+              },
+            } : {}),
             ticks: {
               color: textTertiary,
               padding: 8,

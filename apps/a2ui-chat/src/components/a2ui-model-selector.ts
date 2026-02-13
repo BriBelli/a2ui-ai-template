@@ -105,6 +105,40 @@ export class A2UIModelSelector extends LitElement {
       color: var(--a2ui-text-tertiary);
       padding: var(--a2ui-space-2);
     }
+
+    /* ── Responsive: Tablet (≤768px) ──────────────────── */
+
+    @media (max-width: 768px) {
+      select {
+        min-width: 110px;
+        font-size: var(--a2ui-text-xs);
+        padding: var(--a2ui-space-1) var(--a2ui-space-6) var(--a2ui-space-1) var(--a2ui-space-2);
+      }
+
+      .status {
+        font-size: 10px;
+      }
+    }
+
+    /* ── Responsive: Mobile (≤480px) ─────────────────── */
+
+    @media (max-width: 480px) {
+      .selector-container {
+        gap: var(--a2ui-space-1);
+      }
+
+      select {
+        min-width: 0;
+        max-width: 100px;
+        padding: 2px var(--a2ui-space-5) 2px var(--a2ui-space-2);
+        font-size: 11px;
+        background-position: right 4px center;
+      }
+
+      .status {
+        display: none;
+      }
+    }
   `;
 
   @property({ type: Array }) providers: LLMProvider[] = [];

@@ -106,7 +106,9 @@ export class A2UIToast extends LitElement {
   @state() private toasts: ToastItem[] = [];
   private removing = new Set<string>();
 
-  private listener = (items: ToastItem[]) => { this.toasts = items; };
+  private listener = (items: ToastItem[]) => {
+    this.toasts = items;
+  };
 
   connectedCallback() {
     super.connectedCallback();
@@ -146,17 +148,20 @@ export class A2UIToast extends LitElement {
     if (!this.toasts.length) return nothing;
 
     return html`
-      ${this.toasts.map(t => html`
+      ${this.toasts.map(
+        (t) => html`
         <div class="toast ${this.removing.has(t.id) ? 'removing' : ''}">
           ${this.iconFor(t.variant)}
           <span class="toast-message">${t.message}</span>
-          <button class="toast-close" @click=${() => this.handleDismiss(t.id)} aria-label="Dismiss">
+          <button class="toast-close" @click=${() =>
+            this.handleDismiss(t.id)} aria-label="Dismiss">
             <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
               <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
             </svg>
           </button>
         </div>
-      `)}
+      `
+      )}
     `;
   }
 }

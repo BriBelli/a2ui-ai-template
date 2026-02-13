@@ -39,19 +39,20 @@ export class ChatHistoryService {
     if (!raw) return [];
     try {
       const threads: ChatThread[] = JSON.parse(raw);
-      return threads.sort((a, b) => b.updatedAt - a.updatedAt);
+      // Sort by creation time (oldest first) so tabs stay in stable order
+      return threads.sort((a, b) => a.createdAt - b.createdAt);
     } catch {
       return [];
     }
   }
 
   getThread(id: string): ChatThread | null {
-    return this.getThreads().find(t => t.id === id) ?? null;
+    return this.getThreads().find((t) => t.id === id) ?? null;
   }
 
   saveThread(thread: ChatThread): void {
     const threads = this.getThreads();
-    const idx = threads.findIndex(t => t.id === thread.id);
+    const idx = threads.findIndex((t) => t.id === thread.id);
     if (idx >= 0) {
       threads[idx] = thread;
     } else {
@@ -61,7 +62,7 @@ export class ChatHistoryService {
   }
 
   deleteThread(id: string): void {
-    this.write(this.getThreads().filter(t => t.id !== id));
+    this.write(this.getThreads().filter((t) => t.id !== id));
   }
 
   clearAll(): void {

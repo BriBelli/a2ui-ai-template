@@ -6,8 +6,11 @@ Provides tool integrations for enhanced AI capabilities:
 - More tools can be added here
 """
 
+import logging
 import os
 from typing import Any, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
 
 
 class WebSearchTool:
@@ -38,7 +41,7 @@ class WebSearchTool:
             Dict with 'results' list, optional 'answer' summary, and 'success' flag
         """
         if not self.is_available():
-            print("⚠️  Web search: No API key configured")
+            logger.warning("Web search: No API key configured")
             return {
                 "success": False,
                 "error": "not_configured",
@@ -88,7 +91,7 @@ class WebSearchTool:
             }
             
         except ImportError:
-            print("⚠️  Web search: Tavily package not installed")
+            logger.warning("Web search: Tavily package not installed")
             return {
                 "success": False,
                 "error": "package_missing",
@@ -100,7 +103,7 @@ class WebSearchTool:
             
             # Detect common error types
             if "rate limit" in error_msg or "429" in error_msg:
-                print("⚠️  Web search: Rate limit exceeded")
+                logger.warning("Web search: Rate limit exceeded")
                 return {
                     "success": False,
                     "error": "rate_limit",
@@ -108,7 +111,7 @@ class WebSearchTool:
                     "results": []
                 }
             elif "401" in error_msg or "unauthorized" in error_msg or "invalid" in error_msg:
-                print("⚠️  Web search: Invalid API key")
+                logger.warning("Web search: Invalid API key")
                 return {
                     "success": False,
                     "error": "invalid_key",
@@ -116,7 +119,7 @@ class WebSearchTool:
                     "results": []
                 }
             elif "timeout" in error_msg:
-                print(f"⚠️  Web search: Timeout - {e}")
+                logger.warning("Web search: Timeout - %s", e)
                 return {
                     "success": False,
                     "error": "timeout",
@@ -124,7 +127,7 @@ class WebSearchTool:
                     "results": []
                 }
             else:
-                print(f"⚠️  Web search failed: {e}")
+                logger.warning("Web search failed: %s", e)
                 return {
                     "success": False,
                     "error": "unknown",
@@ -261,7 +264,7 @@ async def llm_rewrite_query(
 
         return query
     except Exception as e:
-        print(f"⚠️  LLM query rewrite failed (falling back to rule-based): {e}")
+        logger.warning("LLM query rewrite failed (falling back to rule-based): %s", e)
         return None
 
 
@@ -396,3 +399,4 @@ def should_search(message: str) -> bool:
     
     message_lower = message.lower()
     return any(indicator in message_lower for indicator in search_indicators)
+    

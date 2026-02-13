@@ -1,15 +1,28 @@
-import { LitElement, html, css } from 'lit';
-import { customElement, state } from 'lit/decorators.js';
-import type { A2UIResponse } from '@a2ui/core';
-import { ChatService, type ChatMessage, type LLMProvider } from '../services/chat-service';
-import { authService, type AuthUser } from '../services/auth-service';
-import { chatHistoryService, ChatHistoryService, type ChatThread } from '../services/chat-history-service';
-import { uiConfig } from '../config/ui-config';
-import { initTheme, toggleTheme, getTheme, type Theme } from '../services/theme-service';
-import { isLocationCached } from '../services/geolocation-service';
-import type { ThinkingStep } from './chat/a2ui-thinking-indicator';
+import { LitElement, html, css } from "lit";
+import { customElement, state } from "lit/decorators.js";
+import type { A2UIResponse } from "@a2ui/core";
+import {
+  ChatService,
+  type ChatMessage,
+  type LLMProvider,
+} from "../services/chat-service";
+import { authService, type AuthUser } from "../services/auth-service";
+import {
+  chatHistoryService,
+  ChatHistoryService,
+  type ChatThread,
+} from "../services/chat-history-service";
+import { uiConfig } from "../config/ui-config";
+import {
+  initTheme,
+  toggleTheme,
+  getTheme,
+  type Theme,
+} from "../services/theme-service";
+import { isLocationCached } from "../services/geolocation-service";
+import type { ThinkingStep } from "./chat/a2ui-thinking-indicator";
 
-@customElement('a2ui-app')
+@customElement("a2ui-app")
 export class A2UIApp extends LitElement {
   static styles = css`
     :host {
@@ -84,7 +97,10 @@ export class A2UIApp extends LitElement {
       font-family: var(--a2ui-font-family);
       font-size: var(--a2ui-text-sm);
       cursor: pointer;
-      transition: background-color var(--a2ui-transition-fast), color var(--a2ui-transition-fast), border-color var(--a2ui-transition-fast);
+      transition:
+        background-color var(--a2ui-transition-fast),
+        color var(--a2ui-transition-fast),
+        border-color var(--a2ui-transition-fast);
     }
 
     .header-btn:hover {
@@ -118,7 +134,9 @@ export class A2UIApp extends LitElement {
       border: 2px solid transparent;
       cursor: pointer;
       padding: 0;
-      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+      transition:
+        border-color 0.15s ease,
+        box-shadow 0.15s ease;
     }
 
     .avatar-btn:hover,
@@ -285,7 +303,9 @@ export class A2UIApp extends LitElement {
     }
 
     @keyframes spin {
-      to { transform: rotate(360deg); }
+      to {
+        transform: rotate(360deg);
+      }
     }
 
     .welcome-page {
@@ -330,7 +350,10 @@ export class A2UIApp extends LitElement {
       font-weight: var(--a2ui-font-medium);
       font-family: var(--a2ui-font-family);
       cursor: pointer;
-      transition: background-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+      transition:
+        background-color 0.15s ease,
+        transform 0.15s ease,
+        box-shadow 0.15s ease;
     }
 
     .get-started-btn:hover {
@@ -338,24 +361,136 @@ export class A2UIApp extends LitElement {
       transform: translateY(-1px);
       box-shadow: 0 4px 16px rgba(138, 180, 248, 0.3);
     }
+
+    /* ── Responsive: Tablet (≤768px) ──────────────────── */
+
+    @media (max-width: 768px) {
+      .header {
+        height: 56px;
+        padding: 0 var(--a2ui-space-4);
+      }
+
+      .logo {
+        font-size: var(--a2ui-text-lg);
+      }
+
+      .logo-icon {
+        width: 28px;
+        height: 28px;
+      }
+
+      .divider {
+        height: 20px;
+      }
+
+      .welcome-page {
+        padding: var(--a2ui-space-6);
+      }
+
+      .welcome-page h1 {
+        font-size: var(--a2ui-text-2xl);
+      }
+
+      .welcome-page p {
+        font-size: var(--a2ui-text-md);
+      }
+    }
+
+    /* ── Responsive: Mobile (≤480px) ─────────────────── */
+
+    @media (max-width: 480px) {
+      .header {
+        height: auto;
+        flex-wrap: wrap;
+        padding: var(--a2ui-space-2) var(--a2ui-space-3);
+        gap: var(--a2ui-space-2);
+      }
+
+      .header-left {
+        flex: 1;
+        min-width: 0;
+        gap: var(--a2ui-space-2);
+      }
+
+      .header-right {
+        flex-shrink: 0;
+      }
+
+      .logo {
+        font-size: var(--a2ui-text-md);
+        gap: var(--a2ui-space-1);
+      }
+
+      .logo span {
+        display: none;
+      }
+
+      .logo-icon {
+        width: 28px;
+        height: 28px;
+      }
+
+      .divider {
+        display: none;
+      }
+
+      .header-btn {
+        padding: var(--a2ui-space-1) var(--a2ui-space-2);
+        font-size: var(--a2ui-text-xs);
+      }
+
+      .avatar-btn {
+        width: 28px;
+        height: 28px;
+        font-size: 11px;
+      }
+
+      .user-menu {
+        width: calc(100vw - var(--a2ui-space-6));
+        right: calc(-1 * var(--a2ui-space-3));
+      }
+
+      .welcome-page {
+        padding: var(--a2ui-space-4);
+        gap: var(--a2ui-space-4);
+      }
+
+      .welcome-logo {
+        width: 44px;
+        height: 44px;
+      }
+
+      .welcome-page h1 {
+        font-size: var(--a2ui-text-xl);
+      }
+
+      .welcome-page p {
+        font-size: var(--a2ui-text-sm);
+      }
+
+      .get-started-btn {
+        padding: var(--a2ui-space-3) var(--a2ui-space-6);
+        font-size: var(--a2ui-text-md);
+      }
+    }
   `;
 
   // ── Chat state ──────────────────────────────────────────
   @state() private messages: ChatMessage[] = [];
   @state() private isLoading = false;
   @state() private providers: LLMProvider[] = [];
-  @state() private selectedProvider = '';
-  @state() private selectedModel = '';
+  @state() private selectedProvider = "";
+  @state() private selectedModel = "";
   @state() private activeThreadId: string | null = null;
   @state() private threads: ChatThread[] = [];
 
   // ── Suggestions (data can come from AI, config, or any source) ──
   private suggestions = [
-    'Compare iPhone vs Android',
-    'Top 5 trending stocks',
-    'Show weather forecast',
-    'Explain machine learning',
-    'Create a task list',
+    "Compare iPhone vs Android",
+    "Top 5 trending stocks",
+    "Show weather forecast",
+    "Explain machine learning",
+    "Create a task list",
   ];
 
   // ── Auth state ──────────────────────────────────────────
@@ -365,7 +500,7 @@ export class A2UIApp extends LitElement {
   @state() private showLogin = false;
 
   // ── Theme ───────────────────────────────────────────────
-  @state() private theme: Theme = 'dark';
+  @state() private theme: Theme = "dark";
 
   // ── User menu ──────────────────────────────────────────
   @state() private showUserMenu = false;
@@ -384,9 +519,9 @@ export class A2UIApp extends LitElement {
     super.connectedCallback();
     initTheme();
     this.theme = getTheme();
-    window.addEventListener('popstate', this.boundPopstate);
+    window.addEventListener("popstate", this.boundPopstate);
 
-    authService.addEventListener('change', () => {
+    authService.addEventListener("change", () => {
       this.authLoading = authService.isLoading;
       this.isAuthenticated = authService.isAuthenticated;
       this.user = authService.user;
@@ -394,7 +529,7 @@ export class A2UIApp extends LitElement {
       if (this.isAuthenticated) {
         this.showLogin = false;
         // Pop the login modal entry so it doesn't linger in the stack
-        if (history.state?.a2ui === 'login') {
+        if (history.state?.a2ui === "login") {
           history.back();
         }
         // Scope localStorage to this user
@@ -416,7 +551,7 @@ export class A2UIApp extends LitElement {
 
   disconnectedCallback() {
     super.disconnectedCallback();
-    window.removeEventListener('popstate', this.boundPopstate);
+    window.removeEventListener("popstate", this.boundPopstate);
   }
 
   // Saved conversation for forward-button restore
@@ -426,29 +561,33 @@ export class A2UIApp extends LitElement {
     const state = history.state;
 
     if (!this.isAuthenticated) {
-      this.showLogin = state?.a2ui === 'login';
-    } else if (state?.a2ui === 'chat' && this.messages.length === 0 && this.savedMessages.length > 0) {
+      this.showLogin = state?.a2ui === "login";
+    } else if (
+      state?.a2ui === "chat" &&
+      this.messages.length === 0 &&
+      this.savedMessages.length > 0
+    ) {
       // Forward to active conversation → restore
       this.activeThreadId = state.threadId ?? this.activeThreadId;
       this.messages = this.savedMessages;
-    } else if (state?.a2ui !== 'chat' && this.messages.length > 0) {
+    } else if (state?.a2ui !== "chat" && this.messages.length > 0) {
       // Back from active conversation → save and clear
       this.persistThread();
       this.savedMessages = [...this.messages];
       this.messages = [];
       this.activeThreadId = null;
-      this.refreshThreadList();
     }
+    this.refreshThreadList();
   }
 
   private openLogin() {
     this.showLogin = true;
-    history.pushState({ a2ui: 'login' }, '');
+    history.pushState({ a2ui: "login" }, "");
   }
 
   private closeLogin() {
     this.showLogin = false;
-    if (history.state?.a2ui === 'login') {
+    if (history.state?.a2ui === "login") {
       history.back();
     }
   }
@@ -457,27 +596,36 @@ export class A2UIApp extends LitElement {
     this.providers = await this.chatService.getProviders();
     if (this.providers.length > 0) {
       this.selectedProvider = this.providers[0].id;
-      this.selectedModel = this.providers[0].models[0]?.id || '';
+      this.selectedModel = this.providers[0].models[0]?.id || "";
     }
   }
 
-  private handleModelChange(e: CustomEvent<{ provider: string; model: string }>) {
+  private handleModelChange(
+    e: CustomEvent<{ provider: string; model: string }>,
+  ) {
     this.selectedProvider = e.detail.provider;
     this.selectedModel = e.detail.model;
   }
 
   // ── Persistence helpers ──────────────────────────────────
 
-  private static readonly ACTIVE_KEY = 'a2ui_active_thread';
+  private static readonly ACTIVE_KEY = "a2ui_active_thread";
 
   /** Save the current thread to localStorage. */
   private persistThread() {
-    if (!uiConfig.persistChat || !this.activeThreadId || this.messages.length === 0) return;
+    if (
+      !uiConfig.persistChat ||
+      !this.activeThreadId ||
+      this.messages.length === 0
+    )
+      return;
 
     const existing = chatHistoryService.getThread(this.activeThreadId);
     const thread: ChatThread = {
       id: this.activeThreadId,
-      title: existing?.title ?? ChatHistoryService.titleFrom(this.messages[0].content),
+      title:
+        existing?.title ??
+        ChatHistoryService.titleFrom(this.messages[0].content),
       messages: this.messages,
       createdAt: existing?.createdAt ?? this.messages[0].timestamp,
       updatedAt: Date.now(),
@@ -515,18 +663,21 @@ export class A2UIApp extends LitElement {
       this.activeThreadId = crypto.randomUUID();
     }
 
-    this.messages = [...this.messages, {
-      id: crypto.randomUUID(),
-      role: 'user',
-      content: message,
-      timestamp: Date.now(),
-      avatarUrl: this.user?.picture || undefined,
-      avatarInitials: this.getInitials(this.user!),
-    }];
+    this.messages = [
+      ...this.messages,
+      {
+        id: crypto.randomUUID(),
+        role: "user",
+        content: message,
+        timestamp: Date.now(),
+        avatarUrl: this.user?.picture || undefined,
+        avatarInitials: this.getInitials(this.user!),
+      },
+    ];
 
     // Push history entry on first message so back clears the conversation
     if (isFirstMessage) {
-      history.pushState({ a2ui: 'chat', threadId: this.activeThreadId }, '');
+      history.pushState({ a2ui: "chat", threadId: this.activeThreadId }, "");
     }
 
     this.persistThread();
@@ -558,32 +709,39 @@ export class A2UIApp extends LitElement {
         // Progress callback — driven by real lifecycle events
         (phase, detail) => {
           switch (phase) {
-            case 'location':
+            case "location":
               if (needsLocation && !locationCached) {
-                push('Getting your location');
+                push("Getting your location");
               }
               break;
-            case 'location-done': {
-              const locIdx = steps.findIndex(s => s.label.startsWith('Getting'));
+            case "location-done": {
+              const locIdx = steps.findIndex((s) =>
+                s.label.startsWith("Getting"),
+              );
               if (locIdx >= 0) done(locIdx);
               break;
             }
-            case 'searching':
-              push('Searching the web');
+            case "searching":
+              push("Searching the web");
               break;
-            case 'search-done': {
-              const searchIdx = steps.findIndex(s => s.label.startsWith('Searching'));
+            case "search-done": {
+              const searchIdx = steps.findIndex((s) =>
+                s.label.startsWith("Searching"),
+              );
               if (searchIdx >= 0) {
                 // Update the step with the rewritten query from the backend
                 if (detail) {
-                  steps[searchIdx] = { ...steps[searchIdx], detail: `"${detail}"` };
+                  steps[searchIdx] = {
+                    ...steps[searchIdx],
+                    detail: `"${detail}"`,
+                  };
                 }
                 done(searchIdx);
               }
               break;
             }
-            case 'generating':
-              push('Generating response');
+            case "generating":
+              push("Generating response");
               break;
           }
         },
@@ -592,29 +750,37 @@ export class A2UIApp extends LitElement {
       // Mark all steps done
       steps.forEach((_, i) => done(i));
 
-      const provider = this.providers.find(p => p.id === this.selectedProvider);
-      const model = provider?.models.find(m => m.id === this.selectedModel);
+      const provider = this.providers.find(
+        (p) => p.id === this.selectedProvider,
+      );
+      const model = provider?.models.find((m) => m.id === this.selectedModel);
 
-      this.messages = [...this.messages, {
-        id: crypto.randomUUID(),
-        role: 'assistant',
-        content: response.text || '',
-        a2ui: response.a2ui,
-        timestamp: Date.now(),
-        model: model?.name || this.selectedModel,
-        suggestions: response.suggestions,
-      }];
+      this.messages = [
+        ...this.messages,
+        {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: response.text || "",
+          a2ui: response.a2ui,
+          timestamp: Date.now(),
+          model: model?.name || this.selectedModel,
+          suggestions: response.suggestions,
+        },
+      ];
 
       this.persistThread();
       this.refreshThreadList();
     } catch (error) {
-      console.error('Chat error:', error);
-      this.messages = [...this.messages, {
-        id: crypto.randomUUID(),
-        role: 'assistant',
-        content: 'Sorry, there was an error processing your request.',
-        timestamp: Date.now(),
-      }];
+      console.error("Chat error:", error);
+      this.messages = [
+        ...this.messages,
+        {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: "Sorry, there was an error processing your request.",
+          timestamp: Date.now(),
+        },
+      ];
       this.persistThread();
       this.refreshThreadList();
     } finally {
@@ -623,80 +789,71 @@ export class A2UIApp extends LitElement {
     }
   }
 
-  // ── Thread tab management ─────────────────────────────
-
-  /** Start a brand-new chat (the "+" button). */
   private newChat() {
+    // Persist current thread before starting fresh
     this.persistThread();
     this.messages = [];
     this.activeThreadId = null;
     this.savedMessages = [];
     sessionStorage.removeItem(A2UIApp.ACTIVE_KEY);
     this.refreshThreadList();
-    if (history.state?.a2ui === 'chat') {
+    if (history.state?.a2ui === "chat") {
       history.back();
     }
   }
 
-  /** Switch to an existing thread tab. */
   private switchThread(e: CustomEvent<{ threadId: string }>) {
     const { threadId } = e.detail;
     if (threadId === this.activeThreadId) return;
 
-    // Save current conversation first
+    // Save current thread first
     this.persistThread();
 
+    // Load requested thread
     const thread = chatHistoryService.getThread(threadId);
     if (thread) {
       this.activeThreadId = thread.id;
       this.messages = thread.messages;
-      this.savedMessages = [];
       sessionStorage.setItem(A2UIApp.ACTIVE_KEY, thread.id);
 
-      // Restore provider/model if the thread stored them
+      // Restore provider/model if saved
       if (thread.provider) this.selectedProvider = thread.provider;
       if (thread.model) this.selectedModel = thread.model;
 
-      // Push a chat history entry so back-button still works
-      if (history.state?.a2ui !== 'chat') {
-        history.pushState({ a2ui: 'chat', threadId: thread.id }, '');
-      } else {
-        history.replaceState({ a2ui: 'chat', threadId: thread.id }, '');
+      if (history.state?.a2ui !== "chat") {
+        history.pushState({ a2ui: "chat", threadId: thread.id }, "");
       }
     }
     this.refreshThreadList();
   }
 
-  /** Delete a thread via the tab close button. */
   private deleteThread(e: CustomEvent<{ threadId: string }>) {
     const { threadId } = e.detail;
     chatHistoryService.deleteThread(threadId);
 
-    if (this.activeThreadId === threadId) {
+    if (threadId === this.activeThreadId) {
+      // Deleted the active thread — clear UI
       this.messages = [];
       this.activeThreadId = null;
       this.savedMessages = [];
       sessionStorage.removeItem(A2UIApp.ACTIVE_KEY);
-      if (history.state?.a2ui === 'chat') {
+      if (history.state?.a2ui === "chat") {
         history.back();
       }
     }
     this.refreshThreadList();
   }
 
-  /** Rename a thread via double-click inline edit. */
   private renameThread(e: CustomEvent<{ threadId: string; title: string }>) {
     const { threadId, title } = e.detail;
     const thread = chatHistoryService.getThread(threadId);
     if (thread) {
       thread.title = title;
-      thread.updatedAt = Date.now();
       chatHistoryService.saveThread(thread);
-      this.refreshThreadList();
     }
+    this.refreshThreadList();
   }
 
-  /** Reload the thread list from storage. */
   private refreshThreadList() {
     this.threads = chatHistoryService.getThreads();
   }
@@ -721,7 +878,7 @@ export class A2UIApp extends LitElement {
   private getInitials(user: AuthUser): string {
     if (user.name) return user.name.charAt(0).toUpperCase();
     if (user.email) return user.email.charAt(0).toUpperCase();
-    return 'U';
+    return "U";
   }
 
   // ── Render ──────────────────────────────────────────────
@@ -742,14 +899,17 @@ export class A2UIApp extends LitElement {
         <div class="welcome-page">
           <div class="welcome-logo"></div>
           <h1>Welcome to A2UI Chat</h1>
-          <p>AI-powered assistant with rich interactive responses. Sign in to get started.</p>
+          <p>
+            AI-powered assistant with rich interactive responses. Sign in to get
+            started.
+          </p>
           <button class="get-started-btn" @click=${this.openLogin}>
             Get Started
           </button>
         </div>
-        ${this.showLogin ? html`
-          <a2ui-login @close=${this.closeLogin}></a2ui-login>
-        ` : ''}
+        ${this.showLogin
+          ? html` <a2ui-login @close=${this.closeLogin}></a2ui-login> `
+          : ""}
       `;
     }
 
@@ -771,71 +931,113 @@ export class A2UIApp extends LitElement {
         </div>
 
         <div class="header-right">
-          ${this.user ? html`
-            <div class="avatar-wrapper">
-              <button
-                class="avatar-btn ${this.showUserMenu ? 'active' : ''}"
-                @click=${this.toggleUserMenu}
-                title=${this.user.name || this.user.email || 'Account'}
-              >
-                ${this.user.picture
-                  ? html`<img src=${this.user.picture} alt="" />`
-                  : this.getInitials(this.user)}
-              </button>
+          ${this.user
+            ? html`
+                <div class="avatar-wrapper">
+                  <button
+                    class="avatar-btn ${this.showUserMenu ? "active" : ""}"
+                    @click=${this.toggleUserMenu}
+                    title=${this.user.name || this.user.email || "Account"}
+                  >
+                    ${this.user.picture
+                      ? html`<img src=${this.user.picture} alt="" />`
+                      : this.getInitials(this.user)}
+                  </button>
 
-              ${this.showUserMenu ? html`
-                <div class="user-menu-backdrop" @click=${this.closeUserMenu}></div>
-                <div class="user-menu">
-                  <div class="user-menu-header">
-                    <div class="user-menu-avatar">
-                      ${this.user.picture
-                        ? html`<img src=${this.user.picture} alt="" />`
-                        : this.getInitials(this.user)}
-                    </div>
-                    <div class="user-menu-info">
-                      ${this.user.name ? html`<div class="user-menu-name">${this.user.name}</div>` : ''}
-                      ${this.user.email ? html`<div class="user-menu-email">${this.user.email}</div>` : ''}
-                    </div>
-                  </div>
+                  ${this.showUserMenu
+                    ? html`
+                        <div
+                          class="user-menu-backdrop"
+                          @click=${this.closeUserMenu}
+                        ></div>
+                        <div class="user-menu">
+                          <div class="user-menu-header">
+                            <div class="user-menu-avatar">
+                              ${this.user.picture
+                                ? html`<img src=${this.user.picture} alt="" />`
+                                : this.getInitials(this.user)}
+                            </div>
+                            <div class="user-menu-info">
+                              ${this.user.name
+                                ? html`<div class="user-menu-name">
+                                    ${this.user.name}
+                                  </div>`
+                                : ""}
+                              ${this.user.email
+                                ? html`<div class="user-menu-email">
+                                    ${this.user.email}
+                                  </div>`
+                                : ""}
+                            </div>
+                          </div>
 
-                  <div class="user-menu-body">
-                    <!-- Theme toggle -->
-                    <button class="menu-item" @click=${this.handleToggleTheme}>
-                      ${this.theme === 'dark' ? html`
-                        <svg viewBox="0 0 24 24" fill="currentColor">
-                          <path d="M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zM2 13h2c.55 0 1-.45 1-1s-.45-1-1-1H2c-.55 0-1 .45-1 1s.45 1 1 1zm18 0h2c.55 0 1-.45 1-1s-.45-1-1-1h-2c-.55 0-1 .45-1 1s.45 1 1 1zM11 2v2c0 .55.45 1 1 1s1-.45 1-1V2c0-.55-.45-1-1-1s-1 .45-1 1zm0 18v2c0 .55.45 1 1 1s1-.45 1-1v-2c0-.55-.45-1-1-1s-1 .45-1 1zM5.99 4.58a.996.996 0 00-1.41 0 .996.996 0 000 1.41l1.06 1.06c.39.39 1.03.39 1.41 0s.39-1.03 0-1.41L5.99 4.58zm12.37 12.37a.996.996 0 00-1.41 0 .996.996 0 000 1.41l1.06 1.06c.39.39 1.03.39 1.41 0a.996.996 0 000-1.41l-1.06-1.06zm1.06-10.96a.996.996 0 000-1.41.996.996 0 00-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06zM7.05 18.36a.996.996 0 000-1.41.996.996 0 00-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06z"/>
-                        </svg>
-                        <span class="theme-label">Light mode</span>
-                      ` : html`
-                        <svg viewBox="0 0 24 24" fill="currentColor">
-                          <path d="M12 3a9 9 0 109 9c0-.46-.04-.92-.1-1.36a5.389 5.389 0 01-4.4 2.26 5.403 5.403 0 01-3.14-9.8c-.44-.06-.9-.1-1.36-.1z"/>
-                        </svg>
-                        <span class="theme-label">Dark mode</span>
-                      `}
-                    </button>
+                          <div class="user-menu-body">
+                            <!-- Theme toggle -->
+                            <button
+                              class="menu-item"
+                              @click=${this.handleToggleTheme}
+                            >
+                              ${this.theme === "dark"
+                                ? html`
+                                    <svg
+                                      viewBox="0 0 24 24"
+                                      fill="currentColor"
+                                    >
+                                      <path
+                                        d="M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zM2 13h2c.55 0 1-.45 1-1s-.45-1-1-1H2c-.55 0-1 .45-1 1s.45 1 1 1zm18 0h2c.55 0 1-.45 1-1s-.45-1-1-1h-2c-.55 0-1 .45-1 1s.45 1 1 1zM11 2v2c0 .55.45 1 1 1s1-.45 1-1V2c0-.55-.45-1-1-1s-1 .45-1 1zm0 18v2c0 .55.45 1 1 1s1-.45 1-1v-2c0-.55-.45-1-1-1s-1 .45-1 1zM5.99 4.58a.996.996 0 00-1.41 0 .996.996 0 000 1.41l1.06 1.06c.39.39 1.03.39 1.41 0s.39-1.03 0-1.41L5.99 4.58zm12.37 12.37a.996.996 0 00-1.41 0 .996.996 0 000 1.41l1.06 1.06c.39.39 1.03.39 1.41 0a.996.996 0 000-1.41l-1.06-1.06zm1.06-10.96a.996.996 0 000-1.41.996.996 0 00-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06zM7.05 18.36a.996.996 0 000-1.41.996.996 0 00-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06z"
+                                      />
+                                    </svg>
+                                    <span class="theme-label">Light mode</span>
+                                  `
+                                : html`
+                                    <svg
+                                      viewBox="0 0 24 24"
+                                      fill="currentColor"
+                                    >
+                                      <path
+                                        d="M12 3a9 9 0 109 9c0-.46-.04-.92-.1-1.36a5.389 5.389 0 01-4.4 2.26 5.403 5.403 0 01-3.14-9.8c-.44-.06-.9-.1-1.36-.1z"
+                                      />
+                                    </svg>
+                                    <span class="theme-label">Dark mode</span>
+                                  `}
+                            </button>
 
-                    <!-- Settings -->
-                    <button class="menu-item" @click=${() => { /* TODO: open settings */ this.closeUserMenu(); }}>
-                      <svg viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.488.488 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1112 8.4a3.6 3.6 0 010 7.2z"/>
-                      </svg>
-                      <span>Settings</span>
-                    </button>
+                            <!-- Settings -->
+                            <button
+                              class="menu-item"
+                              @click=${() => {
+                                /* TODO: open settings */ this.closeUserMenu();
+                              }}
+                            >
+                              <svg viewBox="0 0 24 24" fill="currentColor">
+                                <path
+                                  d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.488.488 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1112 8.4a3.6 3.6 0 010 7.2z"
+                                />
+                              </svg>
+                              <span>Settings</span>
+                            </button>
 
-                    <div class="menu-divider"></div>
+                            <div class="menu-divider"></div>
 
-                    <!-- Logout -->
-                    <button class="menu-item danger" @click=${this.handleLogout}>
-                      <svg viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/>
-                      </svg>
-                      <span>Sign out</span>
-                    </button>
-                  </div>
+                            <!-- Logout -->
+                            <button
+                              class="menu-item danger"
+                              @click=${this.handleLogout}
+                            >
+                              <svg viewBox="0 0 24 24" fill="currentColor">
+                                <path
+                                  d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"
+                                />
+                              </svg>
+                              <span>Sign out</span>
+                            </button>
+                          </div>
+                        </div>
+                      `
+                    : ""}
                 </div>
-              ` : ''}
-            </div>
-          ` : ''}
+              `
+            : ""}
         </div>
       </header>
 

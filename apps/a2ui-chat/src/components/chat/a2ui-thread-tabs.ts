@@ -185,6 +185,62 @@ export class A2UIThreadTabs extends LitElement {
       white-space: nowrap;
       flex-shrink: 0;
     }
+
+    /* ── Responsive: Tablet (≤768px) ──────────────────── */
+
+    @media (max-width: 768px) {
+      .tab-bar {
+        height: 32px;
+        padding: 0 var(--a2ui-space-1);
+      }
+
+      .tab {
+        max-width: 160px;
+        font-size: 11px;
+      }
+    }
+
+    /* ── Responsive: Mobile (≤480px) ─────────────────── */
+
+    @media (max-width: 480px) {
+      .tab-bar {
+        height: 30px;
+        gap: 1px;
+      }
+
+      .new-btn {
+        width: 24px;
+        height: 24px;
+        margin-right: 2px;
+      }
+
+      .new-btn svg {
+        width: 16px;
+        height: 16px;
+      }
+
+      .bar-divider {
+        height: 12px;
+      }
+
+      .tab {
+        max-width: 120px;
+        height: 22px;
+        padding: 0 3px 0 6px;
+        font-size: 10px;
+        border-radius: 4px;
+      }
+
+      /* Always show close button on mobile (no hover on touch) */
+      .tab .tab-close {
+        opacity: 0.5;
+      }
+
+      .rename-input {
+        width: 80px;
+        font-size: 10px;
+      }
+    }
   `;
 
   @property({ type: Array }) threads: ChatThread[] = [];
