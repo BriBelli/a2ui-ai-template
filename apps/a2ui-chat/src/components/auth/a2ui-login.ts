@@ -6,7 +6,7 @@
  */
 
 import { LitElement, html, css } from 'lit';
-import { customElement, state } from 'lit/decorators.js';
+import { customElement, state, query } from 'lit/decorators.js';
 import { authService } from '../../services/auth-service';
 
 type ViewMode = 'login' | 'signup' | 'forgot';
@@ -276,12 +276,75 @@ export class A2UILogin extends LitElement {
   @state() private isLoading = false;
   @state() private resetSent = false;
 
+  @query('.modal') private modalEl!: HTMLElement;
+
+  /** Element that had focus before the modal opened, restored on close. */
+  private previouslyFocused: HTMLElement | null = null;
+
+  connectedCallback() {
+    super.connectedCallback();
+    // Remember the element that had focus so we can restore it
+    this.previouslyFocused = (document.activeElement as HTMLElement) || null;
+  }
+
+  firstUpdated() {
+    // Focus the first input when the modal opens
+    requestAnimationFrame(() => {
+      const firstInput = this.shadowRoot?.querySelector('input:not([disabled])') as HTMLElement | null;
+      if (firstInput) {
+        firstInput.focus();
+      } else {
+        // Fallback: focus the modal itself
+        this.modalEl?.focus();
+      }
+    });
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    // Restore focus to the previously focused element
+    this.previouslyFocused?.focus();
+  }
+
   private handleClose() {
     this.dispatchEvent(new Event('close', { bubbles: true, composed: true }));
   }
 
   private handleOverlayClick(e: MouseEvent) {
     if (e.target === e.currentTarget) this.handleClose();
+  }
+
+  /** Trap focus within the modal and handle Escape to close. */
+  private handleKeyDown(e: KeyboardEvent) {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      this.handleClose();
+      return;
+    }
+
+    if (e.key === 'Tab') {
+      const focusable = this.shadowRoot?.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      );
+      if (!focusable || focusable.length === 0) return;
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+
+      if (e.shiftKey) {
+        // Shift+Tab: if focus is on the first element, wrap to last
+        if (this.shadowRoot?.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else {
+        // Tab: if focus is on the last element, wrap to first
+        if (this.shadowRoot?.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    }
   }
 
   private async handleSubmit(e: Event) {
@@ -320,6 +383,11 @@ export class A2UILogin extends LitElement {
     this.view = view;
     this.error = null;
     this.resetSent = false;
+    // Re-focus the first input after view switch
+    this.updateComplete.then(() => {
+      const firstInput = this.shadowRoot?.querySelector('input:not([disabled])') as HTMLElement | null;
+      firstInput?.focus();
+    });
   }
 
   // ── Render helpers ──────────────────────────────────────
@@ -355,7 +423,7 @@ export class A2UILogin extends LitElement {
 
     return html`
       <div class="header">
-        <h2>${h}</h2>
+        <h2 id="login-heading">${h}</h2>
         <p>${p}</p>
       </div>
 
@@ -438,9 +506,15 @@ export class A2UILogin extends LitElement {
 
   render() {
     return html`
-      <div @click=${this.handleOverlayClick}>
-        <div class="modal" @click=${(e: Event) => e.stopPropagation()}>
-          <button class="close-btn" @click=${this.handleClose}>&times;</button>
+      <div @click=${this.handleOverlayClick} @keydown=${this.handleKeyDown}>
+        <div
+          class="modal"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="login-heading"
+          @click=${(e: Event) => e.stopPropagation()}
+        >
+          <button class="close-btn" aria-label="Close" @click=${this.handleClose}>&times;</button>
           ${this.view === 'forgot' && this.resetSent
             ? this.renderResetSuccess()
             : this.renderForm()}

@@ -305,8 +305,8 @@ export class A2UIChatMessage extends LitElement {
     const isUser = role === 'user';
 
     return html`
-      <div class="message ${role}">
-        <div class="avatar ${role}">
+      <div class="message ${role}" role="article" aria-label="${isUser ? 'User' : 'Assistant'} message">
+        <div class="avatar ${role}" aria-hidden="true">
           ${isUser
             ? (this.message.avatarUrl
                 ? html`<img src=${this.message.avatarUrl} alt="" />`
@@ -339,8 +339,8 @@ export class A2UIChatMessage extends LitElement {
           ${!isUser && uiConfig.maxSuggestions > 0 && this.message.suggestions?.length ? html`
             <div class="followups">
               ${this.message.suggestions.slice(0, uiConfig.maxSuggestions).map(s => html`
-                <button class="followup" @click=${() => this.handleFollowup(s)}>
-                  <svg class="followup-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <button class="followup" aria-label="Follow up: ${s}" @click=${() => this.handleFollowup(s)}>
+                  <svg class="followup-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <path d="M5 12h14M12 5l7 7-7 7"/>
                   </svg>
                   ${s}

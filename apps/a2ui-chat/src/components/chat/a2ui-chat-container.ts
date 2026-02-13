@@ -1,5 +1,5 @@
 import { LitElement, html, css } from 'lit';
-import { customElement, property, query } from 'lit/decorators.js';
+import { customElement, property, query, state } from 'lit/decorators.js';
 import type { ChatMessage } from '../../services/chat-service';
 import type { ThinkingStep } from './a2ui-thinking-indicator';
 import { uiConfig } from '../../config/ui-config';
@@ -142,6 +142,19 @@ export class A2UIChatContainer extends LitElement {
     }
 
     /* Scroll-to-bottom FAB */
+      /* Visually hidden but accessible to screen readers */
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
     .scroll-fab {
       position: absolute;
       bottom: var(--a2ui-space-2);
@@ -265,6 +278,9 @@ export class A2UIChatContainer extends LitElement {
   @property({ type: Array }) suggestions: string[] = [];
   @property({ type: Array }) thinkingSteps: ThinkingStep[] = [];
 
+  /** Screen-reader announcement text for new messages */
+  @state() private srAnnouncement = '';
+
   @query('.messages-container') private messagesContainer!: HTMLElement;
 
   /** True when the user hasn't scrolled far from the bottom */
@@ -320,6 +336,30 @@ export class A2UIChatContainer extends LitElement {
           }
         }
       }
+
+      // Screen-reader announcement for new messages
+      if (changedProperties.has('messages')) {
+        const prev = changedProperties.get('messages') as ChatMessage[] | undefined;
+        if (prev && this.messages.length > prev.length) {
+          const lastMsg = this.messages[this.messages.length - 1];
+          if (lastMsg.role === 'assistant') {
+            const text = lastMsg.content || 'New response received';
+            // Truncate long responses for the announcement
+            this.srAnnouncement = text.length > 200
+              ? `Assistant responded: ${text.slice(0, 200)}...`
+              : `Assistant responded: ${text}`;
+          } else if (lastMsg.role === 'user') {
+            this.srAnnouncement = 'Message sent';
+          }
+        }
+      }
+    }
+
+    // Announce loading state changes
+    if (changedProperties.has('isLoading')) {
+      if (this.isLoading) {
+        this.srAnnouncement = 'Generating response, please wait...';
+      }
     }
   }
 
@@ -366,7 +406,7 @@ export class A2UIChatContainer extends LitElement {
       <div class="messages-area">
         <div class="messages-container">
           ${hasMessages ? html`
-            <div class="messages-wrapper">
+            <div class="messages-wrapper" role="log" aria-label="Chat messages" aria-live="polite">
               ${this.messages.map(msg => html`
                 <a2ui-chat-message
                   .message=${msg}
@@ -394,8 +434,8 @@ export class A2UIChatContainer extends LitElement {
         </div>
 
         <!-- Scroll-to-bottom FAB (appears when user scrolls up) -->
-        <button class="scroll-fab" @click=${this._handleScrollFabClick} title="Scroll to bottom">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+        <button class="scroll-fab" @click=${this._handleScrollFabClick} title="Scroll to bottom" aria-label="Scroll to bottom">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
             <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z"/>
           </svg>
         </button>
@@ -408,6 +448,11 @@ export class A2UIChatContainer extends LitElement {
             @send-message=${this.handleSendMessage}
           ></a2ui-chat-input>
         </div>
+      </div>
+
+      <!-- Screen reader announcements for chat activity -->
+      <div class="sr-only" role="status" aria-live="polite" aria-atomic="true">
+        ${this.srAnnouncement}
       </div>
     `;
   }

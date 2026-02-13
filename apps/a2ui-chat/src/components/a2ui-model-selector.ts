@@ -222,7 +222,7 @@ export class A2UIModelSelector extends LitElement {
       <div class="selector-container">
         <div class="selector-group">
           ${this.selectedProvider ? this.getProviderIcon(this.selectedProvider) : ''}
-          <select @change=${this.handleProviderChange}>
+          <select aria-label="AI provider" @change=${this.handleProviderChange}>
             <option value="" disabled ?selected=${!this.selectedProvider}>Select Provider</option>
             ${this.providers.map(p => html`
               <option value=${p.id} ?selected=${p.id === this.selectedProvider}>${p.name}</option>
@@ -232,7 +232,7 @@ export class A2UIModelSelector extends LitElement {
 
         ${this.models.length > 0 ? html`
           <div class="selector-group">
-            <select @change=${this.handleModelChange}>
+            <select aria-label="AI model" @change=${this.handleModelChange}>
               ${this.models.map(m => html`
                 <option value=${m.id} ?selected=${m.id === this.selectedModel}>${m.name}</option>
               `)}

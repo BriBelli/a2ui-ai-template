@@ -318,14 +318,15 @@ export class A2UIThreadTabs extends LitElement {
     }
 
     return html`
-      <div class="tab-bar">
+      <div class="tab-bar" role="tablist" aria-label="Chat threads">
         <!-- New chat button -->
         <button
           class="new-btn"
           @click=${this.emitNewChat}
           title="New chat"
+          aria-label="New chat"
         >
-          <svg viewBox="0 0 24 24" fill="currentColor">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
             <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
           </svg>
         </button>
@@ -338,6 +339,8 @@ export class A2UIThreadTabs extends LitElement {
           return html`
             <button
               class="tab ${isActive ? 'active' : ''}"
+              role="tab"
+              aria-selected=${isActive}
               @click=${() => this.emitSwitchThread(thread.id)}
               @dblclick=${(e: Event) => this.startRename(thread.id, thread.title, e)}
               title=${thread.title}
@@ -345,6 +348,7 @@ export class A2UIThreadTabs extends LitElement {
               ${isRenaming ? html`
                 <input
                   class="rename-input"
+                  aria-label="Rename thread"
                   .value=${this.renameValue}
                   @input=${(e: InputEvent) => { this.renameValue = (e.target as HTMLInputElement).value; }}
                   @keydown=${(e: KeyboardEvent) => this.handleRenameKeydown(thread.id, e)}
@@ -357,11 +361,12 @@ export class A2UIThreadTabs extends LitElement {
 
               <span
                 class="tab-close"
-                role="button"‰
+                role="button"
                 tabindex="-1"
                 @click=${(e: Event) => this.emitDeleteThread(thread.id, e)}
+                aria-label="Close thread"
                 title="Close thread"
-              ><svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></span>
+              ><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></span>
             </button>
           `;
         })}
