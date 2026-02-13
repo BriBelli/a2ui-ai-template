@@ -144,7 +144,7 @@ export class A2UIChatContainer extends LitElement {
     /* Scroll-to-bottom FAB */
     .scroll-fab {
       position: absolute;
-      bottom: 0;
+      bottom: var(--a2ui-space-2);
       left: 50%;
       transform: translateX(-50%) translateY(8px) scale(0.9);
       opacity: 0;

@@ -10,6 +10,7 @@ Security:
 - Request body size limits (1 MB)
 """
 
+import logging
 import os
 from typing import List, Optional
 
@@ -22,8 +23,9 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 import uvicorn
 
-from openai_service import get_openai_completion
 from llm_providers import llm_service
+
+logger = logging.getLogger(__name__)
 
 
 # ── Configuration ──────────────────────────────────────────────
@@ -32,7 +34,7 @@ ALLOWED_ORIGINS = [
     o.strip() for o in
     os.getenv(
         "A2UI_CORS_ORIGINS",
-        "http://localhost:5174,http://localhost:5173,http://localhost:3000",
+        "http://localhost:4200,http://localhost:5174,http://localhost:5173,http://localhost:3000",
     ).split(",")
 ]
 
@@ -129,10 +131,6 @@ class ChatRequest(BaseModel):
         return v
 
 
-class OpenAIRequest(BaseModel):
-    prompt: str = Field(..., min_length=1, max_length=10_000)
-
-
 # ── Routes ─────────────────────────────────────────────────────
 
 @app.get("/api")
@@ -198,7 +196,7 @@ async def chat(request: Request, body: ChatRequest):
                 status_code=400,
             )
         except Exception as e:
-            print(f"LLM error: {e}")
+            logger.exception("LLM error")
             return JSONResponse(
                 content={
                     "text": "Something went wrong generating a response. Please try again.",
@@ -211,22 +209,6 @@ async def chat(request: Request, body: ChatRequest):
     return JSONResponse(
         content={"error": "No LLM provider selected. Choose a provider and model from the dropdown."},
         status_code=400,
-    )
-
-
-# Legacy OpenAI completion endpoint
-@app.post("/api/openai")
-@limiter.limit("10/minute")
-async def openai_completion(request: Request, body: OpenAIRequest):
-    result = get_openai_completion(body.prompt)
-    if "error" in result:
-        return JSONResponse(
-            content={"error": "An error occurred processing your request"},
-            status_code=result["status_code"],
-        )
-    return JSONResponse(
-        content={"response": result["response"]},
-        status_code=result["status_code"],
     )
 
 

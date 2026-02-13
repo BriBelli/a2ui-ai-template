@@ -29,13 +29,21 @@ class ToastService {
 
   // ── Public API ─────────────────────────────────────────
 
-  info(message: string) { this.add('info', message); }
-  success(message: string) { this.add('success', message); }
-  warning(message: string) { this.add('warning', message); }
-  error(message: string) { this.add('error', message); }
+  info(message: string) {
+    this.add('info', message);
+  }
+  success(message: string) {
+    this.add('success', message);
+  }
+  warning(message: string) {
+    this.add('warning', message);
+  }
+  error(message: string) {
+    this.add('error', message);
+  }
 
   dismiss(id: string) {
-    this.items = this.items.filter(t => t.id !== id);
+    this.items = this.items.filter((t) => t.id !== id);
     clearTimeout(this.timers.get(id));
     this.timers.delete(id);
     this.notify();
@@ -43,9 +51,15 @@ class ToastService {
 
   // ── Subscribe / unsubscribe (used by the component) ────
 
-  subscribe(fn: Listener) { this.listeners.add(fn); }
-  unsubscribe(fn: Listener) { this.listeners.delete(fn); }
-  getAll(): ToastItem[] { return this.items; }
+  subscribe(fn: Listener) {
+    this.listeners.add(fn);
+  }
+  unsubscribe(fn: Listener) {
+    this.listeners.delete(fn);
+  }
+  getAll(): ToastItem[] {
+    return this.items;
+  }
 
   // ── Internal ───────────────────────────────────────────
 
@@ -60,7 +74,7 @@ class ToastService {
   }
 
   private notify() {
-    this.listeners.forEach(fn => fn(this.items));
+    this.listeners.forEach((fn) => fn(this.items));
   }
 }
 
