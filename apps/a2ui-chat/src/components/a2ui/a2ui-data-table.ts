@@ -64,6 +64,26 @@ export class A2UIDataTable extends LitElement {
       font-weight: var(--a2ui-font-medium);
       color: var(--a2ui-accent);
     }
+
+    /* ── Responsive: Mobile (≤480px) ─────────────────── */
+
+    @media (max-width: 480px) {
+      :host {
+        border-radius: var(--a2ui-radius-md);
+        padding: var(--a2ui-space-1) var(--a2ui-space-2);
+        /* Fade hint for horizontal scroll */
+        -webkit-overflow-scrolling: touch;
+      }
+
+      .table {
+        font-size: var(--a2ui-text-xs);
+      }
+
+      .table th,
+      .table td {
+        padding: var(--a2ui-space-2);
+      }
+    }
   `;
 
   @property({ type: Array }) columns: TableColumn[] = [];

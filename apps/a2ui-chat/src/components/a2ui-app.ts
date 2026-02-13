@@ -361,6 +361,118 @@ export class A2UIApp extends LitElement {
       transform: translateY(-1px);
       box-shadow: 0 4px 16px rgba(138, 180, 248, 0.3);
     }
+
+    /* ── Responsive: Tablet (≤768px) ──────────────────── */
+
+    @media (max-width: 768px) {
+      .header {
+        height: 56px;
+        padding: 0 var(--a2ui-space-4);
+      }
+
+      .logo {
+        font-size: var(--a2ui-text-lg);
+      }
+
+      .logo-icon {
+        width: 28px;
+        height: 28px;
+      }
+
+      .divider {
+        height: 20px;
+      }
+
+      .welcome-page {
+        padding: var(--a2ui-space-6);
+      }
+
+      .welcome-page h1 {
+        font-size: var(--a2ui-text-2xl);
+      }
+
+      .welcome-page p {
+        font-size: var(--a2ui-text-md);
+      }
+    }
+
+    /* ── Responsive: Mobile (≤480px) ─────────────────── */
+
+    @media (max-width: 480px) {
+      .header {
+        height: auto;
+        flex-wrap: wrap;
+        padding: var(--a2ui-space-2) var(--a2ui-space-3);
+        gap: var(--a2ui-space-2);
+      }
+
+      .header-left {
+        flex: 1;
+        min-width: 0;
+        gap: var(--a2ui-space-2);
+      }
+
+      .header-right {
+        flex-shrink: 0;
+      }
+
+      .logo {
+        font-size: var(--a2ui-text-md);
+        gap: var(--a2ui-space-1);
+      }
+
+      .logo span {
+        display: none;
+      }
+
+      .logo-icon {
+        width: 28px;
+        height: 28px;
+      }
+
+      .divider {
+        display: none;
+      }
+
+      .header-btn {
+        padding: var(--a2ui-space-1) var(--a2ui-space-2);
+        font-size: var(--a2ui-text-xs);
+      }
+
+      .avatar-btn {
+        width: 28px;
+        height: 28px;
+        font-size: 11px;
+      }
+
+      .user-menu {
+        width: calc(100vw - var(--a2ui-space-6));
+        right: calc(-1 * var(--a2ui-space-3));
+      }
+
+      .welcome-page {
+        padding: var(--a2ui-space-4);
+        gap: var(--a2ui-space-4);
+      }
+
+      .welcome-logo {
+        width: 44px;
+        height: 44px;
+      }
+
+      .welcome-page h1 {
+        font-size: var(--a2ui-text-xl);
+      }
+
+      .welcome-page p {
+        font-size: var(--a2ui-text-sm);
+      }
+
+      .get-started-btn {
+        padding: var(--a2ui-space-3) var(--a2ui-space-6);
+        font-size: var(--a2ui-text-md);
+      }
+    }
   `;
 
   // ── Chat state ──────────────────────────────────────────

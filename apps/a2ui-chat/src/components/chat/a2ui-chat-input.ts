@@ -87,6 +87,44 @@ export class A2UIChatInput extends LitElement {
       width: 20px;
       height: 20px;
     }
+
+    /* ── Responsive: Tablet (≤768px) ──────────────────── */
+
+    @media (max-width: 768px) {
+      .input-container {
+        padding: var(--a2ui-space-2) var(--a2ui-space-3);
+      }
+
+      textarea {
+        font-size: 16px; /* Prevent iOS auto-zoom on focus */
+      }
+    }
+
+    /* ── Responsive: Mobile (≤480px) ─────────────────── */
+
+    @media (max-width: 480px) {
+      .input-container {
+        padding: var(--a2ui-space-2);
+        border-radius: var(--a2ui-radius-xl);
+      }
+
+      textarea {
+        font-size: 16px; /* Prevent iOS auto-zoom on focus */
+        max-height: 120px;
+      }
+
+      .send-button {
+        width: 34px;
+        height: 34px;
+        right: 4px;
+        top: 4px;
+      }
+
+      .send-icon {
+        width: 18px;
+        height: 18px;
+      }
+    }
   `;
 
   @property({ type: Boolean }) disabled = false;

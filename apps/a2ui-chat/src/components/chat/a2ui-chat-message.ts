@@ -202,6 +202,77 @@ export class A2UIChatMessage extends LitElement {
       height: 16px;
       color: var(--a2ui-text-tertiary);
     }
+
+    /* ── Responsive: Tablet (≤768px) ──────────────────── */
+
+    @media (max-width: 768px) {
+      :host {
+        margin-bottom: var(--a2ui-space-4);
+      }
+
+      .message {
+        gap: var(--a2ui-space-2);
+      }
+
+      .avatar {
+        width: 28px;
+        height: 28px;
+        font-size: var(--a2ui-text-xs);
+      }
+    }
+
+    /* ── Responsive: Mobile (≤480px) ─────────────────── */
+
+    @media (max-width: 480px) {
+      :host {
+        margin-bottom: var(--a2ui-space-3);
+      }
+
+      .message {
+        gap: var(--a2ui-space-2);
+      }
+
+      .avatar {
+        width: 24px;
+        height: 24px;
+        font-size: 10px;
+      }
+
+      .user .bubble {
+        padding: var(--a2ui-space-2) var(--a2ui-space-3);
+        border-radius: var(--a2ui-radius-lg);
+        border-bottom-right-radius: var(--a2ui-radius-sm);
+      }
+
+      .text-content {
+        font-size: var(--a2ui-text-sm);
+        line-height: var(--a2ui-leading-normal);
+      }
+
+      .meta {
+        font-size: 10px;
+      }
+
+      .model-badge {
+        font-size: 9px;
+        padding: 1px 4px;
+      }
+
+      .followup {
+        font-size: var(--a2ui-text-xs);
+        gap: var(--a2ui-space-1);
+      }
+
+      .followup-icon {
+        width: 14px;
+        height: 14px;
+      }
+
+      .followups {
+        gap: var(--a2ui-space-1);
+        margin-top: var(--a2ui-space-2);
+      }
+    }
   `;
 
   @property({ type: Object }) message!: ChatMessage;

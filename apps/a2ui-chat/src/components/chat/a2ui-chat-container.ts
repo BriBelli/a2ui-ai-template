@@ -183,6 +183,81 @@ export class A2UIChatContainer extends LitElement {
       flex-direction: column;
       overflow: hidden;
     }
+
+    /* ── Responsive: Tablet (≤768px) ──────────────────── */
+
+    @media (max-width: 768px) {
+      .messages-container {
+        padding: var(--a2ui-space-4) 0;
+      }
+
+      .messages-wrapper {
+        padding: 0 var(--a2ui-space-3);
+      }
+
+      .welcome {
+        padding: var(--a2ui-space-6);
+      }
+
+      .welcome-title {
+        font-size: var(--a2ui-text-2xl);
+      }
+
+      .welcome-subtitle {
+        font-size: var(--a2ui-text-md);
+        max-width: 400px;
+      }
+
+      .input-container {
+        padding: var(--a2ui-space-3);
+      }
+    }
+
+    /* ── Responsive: Mobile (≤480px) ─────────────────── */
+
+    @media (max-width: 480px) {
+      .messages-container {
+        padding: var(--a2ui-space-3) 0;
+      }
+
+      .messages-wrapper {
+        padding: 0 var(--a2ui-space-2);
+      }
+
+      .welcome {
+        padding: var(--a2ui-space-4) var(--a2ui-space-3);
+        justify-content: flex-start;
+        padding-top: 20vh;
+      }
+
+      .welcome-title {
+        font-size: var(--a2ui-text-xl);
+      }
+
+      .welcome-subtitle {
+        font-size: var(--a2ui-text-sm);
+        max-width: 300px;
+      }
+
+      .suggestions {
+        margin-top: var(--a2ui-space-4);
+        gap: var(--a2ui-space-1);
+      }
+
+      .suggestion {
+        padding: var(--a2ui-space-1) var(--a2ui-space-3);
+        font-size: var(--a2ui-text-xs);
+      }
+
+      .input-container {
+        padding: var(--a2ui-space-2);
+      }
+
+      .scroll-fab {
+        width: 32px;
+        height: 32px;
+      }
+    }
   `;
 
   @property({ type: Array }) messages: ChatMessage[] = [];

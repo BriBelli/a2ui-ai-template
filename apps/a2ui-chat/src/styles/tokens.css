@@ -188,6 +188,25 @@
   --a2ui-sidebar-width: 280px;
   --a2ui-header-height: 64px;
   --a2ui-input-height: 56px;
+
+  /* Responsive breakpoints (reference only — used in component @media) */
+  /* sm: 480px, md: 640px, lg: 768px */
+}
+
+/* ========== Mobile Layout Overrides ========== */
+
+@media (max-width: 768px) {
+  :root {
+    --a2ui-header-height: 56px;
+  }
+}
+
+@media (max-width: 480px) {
+  :root {
+    --a2ui-header-height: auto;
+    --a2ui-text-3xl: 22px;
+    --a2ui-text-2xl: 18px;
+  }
 }
 
 /* Global Reset */
