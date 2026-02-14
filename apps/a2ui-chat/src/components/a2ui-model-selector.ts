@@ -147,20 +147,19 @@ export class A2UIModelSelector extends LitElement {
 
   @state() private models: LLMModel[] = [];
 
-  updated(changedProperties: Map<string, unknown>) {
+  /** Use willUpdate to compute derived state before render (avoids scheduling
+   *  a second update from within `updated`). */
+  willUpdate(changedProperties: Map<string, unknown>) {
     if (changedProperties.has('providers') || changedProperties.has('selectedProvider')) {
-      this.updateModels();
-    }
-  }
+      const provider = this.providers.find(p => p.id === this.selectedProvider);
+      this.models = provider?.models || [];
 
-  private updateModels() {
-    const provider = this.providers.find(p => p.id === this.selectedProvider);
-    this.models = provider?.models || [];
-    
-    // Auto-select first model if none selected
-    if (this.models.length > 0 && !this.selectedModel) {
-      this.selectedModel = this.models[0].id;
-      this.dispatchChange();
+      // Auto-select first model if none selected
+      if (this.models.length > 0 && !this.selectedModel) {
+        this.selectedModel = this.models[0].id;
+        // Dispatch after the current render completes
+        this.updateComplete.then(() => this.dispatchChange());
+      }
     }
   }
 
