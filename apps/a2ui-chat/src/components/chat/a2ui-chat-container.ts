@@ -34,7 +34,7 @@ export class A2UIChatContainer extends LitElement {
       justify-content: center;
       height: 100%;
       text-align: center;
-      padding: var(--a2ui-space-8);
+      padding: 0;
     }
 
     /* Welcome animations (when enabled) */
@@ -76,7 +76,7 @@ export class A2UIChatContainer extends LitElement {
       display: flex;
       flex-wrap: wrap;
       gap: var(--a2ui-space-2);
-      margin-top: var(--a2ui-space-6);
+      margin-top: var(--a2ui-space-3);
       justify-content: center;
     }
 
