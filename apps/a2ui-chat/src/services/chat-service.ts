@@ -59,6 +59,41 @@ export class ChatService {
   private baseUrl = '/api';
 
   /**
+   * Recover a structured A2UI response when the backend returns the raw
+   * LLM JSON inside the `text` field (i.e. parse_llm_json fell through).
+   *
+   * Detects the pattern: { text: '{"text":"...","a2ui":{...}}' } and
+   * re-parses the embedded JSON so the UI gets proper components.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  static recoverA2UIResponse(data: Record<string, any>): Record<string, any> {
+    // Already has structured a2ui — nothing to recover
+    if (data.a2ui) return data;
+
+    const text = data.text;
+    if (typeof text !== 'string') return data;
+
+    // Quick heuristic: if text looks like it contains a JSON object with
+    // "a2ui" or "text" keys, try to parse it.
+    const jsonStart = text.indexOf('{');
+    if (jsonStart === -1) return data;
+
+    try {
+      const candidate = text.slice(jsonStart);
+      const parsed = JSON.parse(candidate);
+      if (parsed && typeof parsed === 'object' && (parsed.a2ui || parsed.text)) {
+        console.warn('[A2UI] Recovered double-encoded response from text field');
+        // Merge parsed fields into the response, preserving metadata (_search, etc.)
+        return { ...data, ...parsed };
+      }
+    } catch {
+      // Not valid JSON — leave the response as-is
+    }
+
+    return data;
+  }
+
+  /**
    * Build request headers, including optional API key auth.
    * Set VITE_A2UI_API_KEY in your .env to enable.
    */
@@ -257,18 +292,23 @@ export class ChatService {
         };
       }
 
+      // Safety net: if the backend returned the raw LLM JSON in the `text`
+      // field (e.g. parse_llm_json fell through), try to recover the
+      // structured response so the UI renders rich components.
+      const result = ChatService.recoverA2UIResponse(data);
+
       // Pass the rewritten search query back so the thinking indicator can display it
-      const rewrittenQuery = data._search?.query;
+      const rewrittenQuery = result._search?.query;
       onProgress?.('search-done', rewrittenQuery);
       onProgress?.('generating');
 
-      if (data.a2ui) {
+      if (result.a2ui) {
         console.log(
           '[A2UI] API response a2ui:',
-          JSON.stringify(data.a2ui, null, 2)
+          JSON.stringify(result.a2ui, null, 2)
         );
       }
-      return data;
+      return result;
     } catch (error) {
       console.error('Chat API error:', error);
       toast.error(

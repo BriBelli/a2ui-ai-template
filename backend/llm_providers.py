@@ -233,25 +233,84 @@ def parse_llm_json(content: str) -> Dict[str, Any]:
     """
     content = content.strip()
 
-    # Strip markdown code fences
+    # Strip markdown code fences (handle various fence styles)
     if content.startswith("```"):
-        content = re.sub(r"^```\w*\n?", "", content)
-        content = re.sub(r"\n?```$", "", content)
+        content = re.sub(r"^```\w*\s*", "", content)
+        content = re.sub(r"\s*```\s*$", "", content)
         content = content.strip()
 
-    # Extract the outermost JSON object
-    match = re.search(r"\{[\s\S]*\}", content)
-    if match:
-        content = match.group()
+    # Strip BOM and zero-width characters that LLMs occasionally inject
+    content = content.lstrip("\ufeff\u200b\u200c\u200d\u2060")
 
+    # Try direct parse first (fastest path for clean JSON)
     try:
         result = json.loads(content)
         if isinstance(result, dict):
             return _enforce_visual_hierarchy(result)
-        return {"text": content}
-    except json.JSONDecodeError as exc:
-        logger.warning("JSON parse error: %s — preview: %.200s", exc, content)
-        return {"text": content}
+    except json.JSONDecodeError:
+        pass
+
+    # Extract the outermost JSON object via brace matching (more robust
+    # than the greedy regex for content with trailing prose).
+    json_str = _extract_json_object(content)
+    if json_str:
+        try:
+            result = json.loads(json_str)
+            if isinstance(result, dict):
+                return _enforce_visual_hierarchy(result)
+        except json.JSONDecodeError as exc:
+            logger.warning("JSON parse error after extraction: %s — preview: %.200s", exc, json_str[:200])
+
+    # Fallback: regex extraction (catches nested-but-valid JSON)
+    match = re.search(r"\{[\s\S]*\}", content)
+    if match:
+        try:
+            result = json.loads(match.group())
+            if isinstance(result, dict):
+                return _enforce_visual_hierarchy(result)
+        except json.JSONDecodeError:
+            pass
+
+    logger.warning("Could not parse LLM JSON — preview: %.300s", content[:300])
+    return {"text": content}
+
+
+def _extract_json_object(text: str) -> Optional[str]:
+    """Extract the outermost JSON object by counting braces.
+
+    More reliable than a greedy regex when the LLM appends prose after
+    the closing brace.
+    """
+    start = text.find("{")
+    if start == -1:
+        return None
+
+    depth = 0
+    in_string = False
+    escape = False
+
+    for i in range(start, len(text)):
+        ch = text[i]
+        if escape:
+            escape = False
+            continue
+        if ch == "\\":
+            if in_string:
+                escape = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start : i + 1]
+
+    return None
 
 
 # ── Prompts ────────────────────────────────────────────────────

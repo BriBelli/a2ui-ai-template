@@ -23,6 +23,8 @@ export class A2UIStat extends LitElement {
       display: flex;
       flex-direction: column;
       flex: 1;
+      min-width: 0;        /* allow shrinking in flex/grid parents */
+      overflow: hidden;
     }
 
     .stat {
@@ -33,6 +35,8 @@ export class A2UIStat extends LitElement {
       display: flex;
       flex-direction: column;
       gap: 4px;
+      min-width: 0;        /* allow shrinking inside flex/grid parents */
+      overflow: hidden;    /* clip any overflowing content */
     }
 
     /* ── Header: label + trend badge ───── */
@@ -48,6 +52,9 @@ export class A2UIStat extends LitElement {
       font-weight: var(--a2ui-font-medium);
       color: var(--a2ui-text-secondary);
       margin: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .stat-trend {
@@ -82,11 +89,14 @@ export class A2UIStat extends LitElement {
 
     /* ── Value ──────────────────────────── */
     .stat-value {
-      font-size: var(--a2ui-text-3xl);
+      font-size: var(--a2ui-text-2xl, 1.5rem);
       font-weight: var(--a2ui-font-bold);
       color: var(--a2ui-text-primary);
       line-height: 1.2;
       margin: var(--a2ui-space-1) 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     /* ── Description ───────────────────── */
@@ -94,13 +104,17 @@ export class A2UIStat extends LitElement {
       font-size: var(--a2ui-text-xs);
       color: var(--a2ui-text-tertiary);
       margin: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
   `;
 
   @property({ type: String }) label = '';
   @property({ type: String }) value = '';
   @property({ type: String }) trend = '';
-  @property({ type: String }) trendDirection: 'up' | 'down' | 'neutral' = 'neutral';
+  @property({ type: String }) trendDirection: 'up' | 'down' | 'neutral' =
+    'neutral';
   @property({ type: String }) description = '';
 
   private renderTrendIcon() {
@@ -117,25 +131,38 @@ export class A2UIStat extends LitElement {
     // Auto-detect trend direction from the trend string
     let dir = this.trendDirection;
     if (this.trend && dir === 'neutral') {
-      if (this.trend.startsWith('+') || this.trend.toLowerCase().includes('up')) dir = 'up';
-      else if (this.trend.startsWith('-') || this.trend.toLowerCase().includes('down')) dir = 'down';
+      if (this.trend.startsWith('+') || this.trend.toLowerCase().includes('up'))
+        dir = 'up';
+      else if (
+        this.trend.startsWith('-') ||
+        this.trend.toLowerCase().includes('down')
+      )
+        dir = 'down';
     }
 
     return html`
       <div class="stat">
         <div class="stat-header">
           <p class="stat-label">${this.label}</p>
-          ${this.trend ? html`
+          ${
+            this.trend
+              ? html`
             <span class="stat-trend ${dir}">
               ${this.renderTrendIcon()}
               ${this.trend}
             </span>
-          ` : nothing}
+          `
+              : nothing
+          }
         </div>
         <div class="stat-value">${this.value}</div>
-        ${this.description ? html`
+        ${
+          this.description
+            ? html`
           <p class="stat-description">${this.description}</p>
-        ` : nothing}
+        `
+            : nothing
+        }
       </div>
     `;
   }
