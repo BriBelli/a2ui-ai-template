@@ -6,6 +6,7 @@ import {
   type ChatMessage,
   type LLMProvider,
 } from "../services/chat-service";
+import type { SelectGroup } from "./a2ui-model-selector";
 import { authService, type AuthUser } from "../services/auth-service";
 import {
   chatHistoryService,
@@ -600,11 +601,30 @@ export class A2UIApp extends LitElement {
     }
   }
 
-  private handleModelChange(
-    e: CustomEvent<{ provider: string; model: string }>,
-  ) {
-    this.selectedProvider = e.detail.provider;
-    this.selectedModel = e.detail.model;
+  /** Build grouped options for the model selector from providers. */
+  private get modelGroups(): SelectGroup[] {
+    return this.providers.map(p => ({
+      label: p.name,
+      items: p.models.map(m => ({
+        value: `${p.id}::${m.id}`,
+        label: m.name,
+      })),
+    }));
+  }
+
+  /** Composite value for the model selector (provider::model). */
+  private get modelSelectorValue(): string {
+    return this.selectedProvider && this.selectedModel
+      ? `${this.selectedProvider}::${this.selectedModel}`
+      : '';
+  }
+
+  private handleModelChange(e: CustomEvent<{ value: string }>) {
+    const val = e.detail.value;
+    const sep = val.indexOf('::');
+    if (sep === -1) return;
+    this.selectedProvider = val.slice(0, sep);
+    this.selectedModel = val.slice(sep + 2);
   }
 
   // ── Persistence helpers ──────────────────────────────────
@@ -923,10 +943,10 @@ export class A2UIApp extends LitElement {
           </div>
           <div class="divider"></div>
           <a2ui-model-selector
-            .providers=${this.providers}
-            .selectedProvider=${this.selectedProvider}
-            .selectedModel=${this.selectedModel}
-            @model-change=${this.handleModelChange}
+            .groups=${this.modelGroups}
+            .value=${this.modelSelectorValue}
+            .showStatus=${true}
+            @change=${this.handleModelChange}
           ></a2ui-model-selector>
         </div>
 

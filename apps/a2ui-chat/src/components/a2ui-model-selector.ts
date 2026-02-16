@@ -1,6 +1,17 @@
 import { LitElement, html, css } from 'lit';
-import { customElement, property, state } from 'lit/decorators.js';
-import type { LLMProvider, LLMModel } from '../services/chat-service';
+import { customElement, property } from 'lit/decorators.js';
+
+/** A simple option: just a value/label pair. */
+export interface SelectItem {
+  value: string;
+  label: string;
+}
+
+/** A group of options under a category header. */
+export interface SelectGroup {
+  label: string;
+  items: SelectItem[];
+}
 
 @customElement('a2ui-model-selector')
 export class A2UIModelSelector extends LitElement {
@@ -13,17 +24,6 @@ export class A2UIModelSelector extends LitElement {
       display: flex;
       align-items: center;
       gap: var(--a2ui-space-2);
-    }
-
-    .selector-group {
-      display: flex;
-      align-items: center;
-      gap: var(--a2ui-space-2);
-    }
-
-    label {
-      font-size: var(--a2ui-text-sm);
-      color: var(--a2ui-text-secondary);
     }
 
     select {
@@ -40,7 +40,7 @@ export class A2UIModelSelector extends LitElement {
       background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='%239aa0a6'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
       background-repeat: no-repeat;
       background-position: right 8px center;
-      min-width: 140px;
+      min-width: 180px;
     }
 
     select:hover {
@@ -54,31 +54,10 @@ export class A2UIModelSelector extends LitElement {
       box-shadow: 0 0 0 2px var(--a2ui-accent-subtle);
     }
 
-    .provider-icon {
-      width: 20px;
-      height: 20px;
-      border-radius: var(--a2ui-radius-sm);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 10px;
-      font-weight: bold;
-      display: none;
-    }
-
-    .provider-icon.openai {
-      background: #10a37f;
-      color: white;
-    }
-
-    .provider-icon.anthropic {
-      background: #d97706;
-      color: white;
-    }
-
-    .provider-icon.gemini {
-      background: linear-gradient(135deg, #4285f4, #ea4335, #fbbc05, #34a853);
-      color: white;
+    select optgroup {
+      font-style: normal;
+      font-weight: 600;
+      color: var(--a2ui-text-secondary);
     }
 
     .status {
@@ -110,7 +89,7 @@ export class A2UIModelSelector extends LitElement {
 
     @media (max-width: 768px) {
       select {
-        min-width: 110px;
+        min-width: 140px;
         font-size: var(--a2ui-text-xs);
         padding: var(--a2ui-space-1) var(--a2ui-space-6) var(--a2ui-space-1) var(--a2ui-space-2);
       }
@@ -129,7 +108,7 @@ export class A2UIModelSelector extends LitElement {
 
       select {
         min-width: 0;
-        max-width: 100px;
+        max-width: 130px;
         padding: 2px var(--a2ui-space-5) 2px var(--a2ui-space-2);
         font-size: 11px;
         background-position: right 4px center;
@@ -141,78 +120,70 @@ export class A2UIModelSelector extends LitElement {
     }
   `;
 
-  @property({ type: Array }) providers: LLMProvider[] = [];
-  @property({ type: String }) selectedProvider = '';
-  @property({ type: String }) selectedModel = '';
+  // ── Flexible input ──────────────────────────────────────
+  //
+  // Flat list (the common case):
+  //   .items=${['GPT-4.1', 'Claude 4']}          ← string[]
+  //   .items=${[{value:'gpt4', label:'GPT-4.1'}]} ← SelectItem[]
+  //
+  // Grouped (multi-provider / categorised):
+  //   .groups=${[{label:'OpenAI', items:[…]}, …]}  ← SelectGroup[]
+  //
+  // When both are set, groups wins.
 
-  @state() private models: LLMModel[] = [];
+  /** Flat list — accepts string[] or SelectItem[]. */
+  @property({ type: Array }) items: (string | SelectItem)[] = [];
 
-  updated(changedProperties: Map<string, unknown>) {
-    if (changedProperties.has('providers') || changedProperties.has('selectedProvider')) {
-      this.updateModels();
-    }
+  /** Grouped list — renders <optgroup> categories. */
+  @property({ type: Array }) groups: SelectGroup[] = [];
+
+  /** Currently selected value. */
+  @property({ type: String }) value = '';
+
+  /** Whether to show the connection status indicator. */
+  @property({ type: Boolean }) showStatus = false;
+
+  /** Placeholder shown when no value is selected. */
+  @property({ type: String }) placeholder = '';
+
+  // ── Helpers ─────────────────────────────────────────────
+
+  /** Normalise a mixed items array into SelectItem[]. */
+  private normalizeItems(raw: (string | SelectItem)[]): SelectItem[] {
+    return raw.map(item =>
+      typeof item === 'string' ? { value: item, label: item } : item
+    );
   }
 
-  private updateModels() {
-    const provider = this.providers.find(p => p.id === this.selectedProvider);
-    this.models = provider?.models || [];
-    
-    // Auto-select first model if none selected
-    if (this.models.length > 0 && !this.selectedModel) {
-      this.selectedModel = this.models[0].id;
-      this.dispatchChange();
-    }
-  }
+  private handleChange(e: Event) {
+    const newValue = (e.target as HTMLSelectElement).value;
+    this.value = newValue;
 
-  private handleProviderChange(e: Event) {
-    const select = e.target as HTMLSelectElement;
-    this.selectedProvider = select.value;
-    
-    // Reset model selection when provider changes
-    const provider = this.providers.find(p => p.id === this.selectedProvider);
-    this.models = provider?.models || [];
-    this.selectedModel = this.models[0]?.id || '';
-    
-    this.dispatchChange();
-  }
-
-  private handleModelChange(e: Event) {
-    const select = e.target as HTMLSelectElement;
-    this.selectedModel = select.value;
-    this.dispatchChange();
-  }
-
-  private dispatchChange() {
-    this.dispatchEvent(new CustomEvent('model-change', {
-      detail: {
-        provider: this.selectedProvider,
-        model: this.selectedModel,
-      },
+    this.dispatchEvent(new CustomEvent('change', {
+      detail: { value: newValue },
       bubbles: true,
       composed: true,
     }));
   }
 
-  private getProviderIcon(providerId: string) {
-    switch (providerId) {
-      case 'openai':
-        return html`<span class="provider-icon openai">G</span>`;
-      case 'anthropic':
-        return html`<span class="provider-icon anthropic">C</span>`;
-      case 'gemini':
-        return html`<span class="provider-icon gemini">G</span>`;
-      default:
-        return html`<span class="provider-icon">AI</span>`;
-    }
+  // ── Render ──────────────────────────────────────────────
+
+  private renderOption(item: SelectItem) {
+    return html`
+      <option value=${item.value} ?selected=${item.value === this.value}>${item.label}</option>
+    `;
   }
 
   render() {
-    if (this.providers.length === 0) {
+    const hasGroups = this.groups.length > 0;
+    const hasItems = this.items.length > 0;
+
+    if (!hasGroups && !hasItems) {
       return html`
         <div class="no-providers">
           <span class="status">
             <span class="status-dot offline"></span>
-            No AI providers configured
+            No options available
           </span>
         </div>
       `;
@@ -220,30 +191,28 @@ export class A2UIModelSelector extends LitElement {
 
     return html`
       <div class="selector-container">
-        <div class="selector-group">
-          ${this.selectedProvider ? this.getProviderIcon(this.selectedProvider) : ''}
-          <select aria-label="AI provider" @change=${this.handleProviderChange}>
-            <option value="" disabled ?selected=${!this.selectedProvider}>Select Provider</option>
-            ${this.providers.map(p => html`
-              <option value=${p.id} ?selected=${p.id === this.selectedProvider}>${p.name}</option>
-            `)}
-          </select>
-        </div>
+        <select aria-label="Select option" @change=${this.handleChange}>
+          ${this.placeholder ? html`
+            <option value="" disabled ?selected=${!this.value}>${this.placeholder}</option>
+          ` : ''}
+          ${hasGroups
+            ? (this.groups.length === 1
+                ? this.groups[0].items.map(item => this.renderOption(item))
+                : this.groups.map(group => html`
+                    <optgroup label=${group.label}>
+                      ${group.items.map(item => this.renderOption(item))}
+                    </optgroup>
+                  `))
+            : this.normalizeItems(this.items).map(item => this.renderOption(item))
+          }
+        </select>
 
-        ${this.models.length > 0 ? html`
-          <div class="selector-group">
-            <select aria-label="AI model" @change=${this.handleModelChange}>
-              ${this.models.map(m => html`
-                <option value=${m.id} ?selected=${m.id === this.selectedModel}>${m.name}</option>
-              `)}
-            </select>
-          </div>
+        ${this.showStatus ? html`
+          <span class="status">
+            <span class="status-dot"></span>
+            Connected
+          </span>
         ` : ''}
-
-        <span class="status">
-          <span class="status-dot"></span>
-          Connected
-        </span>
       </div>
     `;
   }

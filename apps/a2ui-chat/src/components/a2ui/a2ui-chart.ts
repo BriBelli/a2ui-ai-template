@@ -1,5 +1,5 @@
 import { LitElement, html, css } from 'lit';
-import { customElement, property, query, state } from 'lit/decorators.js';
+import { customElement, property, query } from 'lit/decorators.js';
 import {
   Chart,
   registerables,
@@ -167,7 +167,10 @@ export class A2UIChart extends LitElement {
   @property({ type: Object }) options: ChartOptions = {};
 
   @query('canvas') private canvas!: HTMLCanvasElement;
-  @state() private chart?: Chart;
+
+  /** Not reactive — the Chart.js instance is imperative and never referenced
+   *  in the template, so @state() would only cause a spurious re-render. */
+  private chart?: Chart;
 
   // Default palette -- muted yet vibrant, works great on dark backgrounds
   private palette = [
@@ -190,10 +193,6 @@ export class A2UIChart extends LitElement {
     if (changedProperties.has('data') || changedProperties.has('chartType') || changedProperties.has('options')) {
       this.renderChart();
     }
-  }
-
-  firstUpdated() {
-    this.renderChart();
   }
 
   private getColor(index: number): string {
