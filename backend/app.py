@@ -23,6 +23,7 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 import uvicorn
 
+from content_styles import get_available_styles
 from llm_providers import llm_service
 
 logger = logging.getLogger(__name__)
@@ -122,6 +123,11 @@ class ChatRequest(BaseModel):
     history: List[HistoryMessage] = Field(default_factory=list)
     enableWebSearch: bool = False
     userLocation: Optional[UserLocation] = None
+    contentStyle: str = Field(
+        default="auto",
+        max_length=30,
+        description="Content style: 'auto' (default), 'analytical', 'content', 'comparison', 'howto', or 'quick'",
+    )
 
     @field_validator("history")
     @classmethod
@@ -151,6 +157,13 @@ def get_providers(request: Request):
     return JSONResponse(content={"providers": providers})
 
 
+@app.get("/api/styles")
+@limiter.limit("60/minute")
+def get_styles(request: Request):
+    """Return available content styles for the frontend."""
+    return JSONResponse(content={"styles": get_available_styles()})
+
+
 # A2UI Chat endpoint — returns structured A2UI responses
 @app.post("/api/chat")
 @limiter.limit("20/minute")
@@ -164,6 +177,7 @@ async def chat(request: Request, body: ChatRequest):
     - model: Optional model ID for the provider
     - history: Optional list of previous messages [{role, content}] (max 50)
     - enableWebSearch: Optional boolean to enable web search tool
+    - contentStyle: Content style ('auto', 'analytical', 'content', etc.)
 
     Returns:
     - text: Optional plain text response
@@ -187,6 +201,7 @@ async def chat(request: Request, body: ChatRequest):
                 history=history_dicts,
                 enable_web_search=body.enableWebSearch,
                 user_location=location_dict,
+                content_style=body.contentStyle,
             )
             return JSONResponse(content=response)
         except ValueError as e:

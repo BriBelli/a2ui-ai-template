@@ -39,6 +39,8 @@ export interface UIConfig {
   persistChat: boolean;
 }
 
+export type ContentStyle = 'auto' | 'analytical' | 'content' | 'comparison' | 'howto' | 'quick';
+
 export interface AIConfig {
   /**
    * Send conversation history with each message
@@ -56,6 +58,17 @@ export interface AIConfig {
    * Requires TAVILY_API_KEY on backend
    */
   webSearch: boolean;
+
+  /**
+   * Content style for response presentation.
+   * - 'auto': Classify intent automatically (default)
+   * - 'analytical': Data dashboards with KPIs, charts, tables
+   * - 'content': Narrative/editorial with sections, lists, accordions
+   * - 'comparison': Side-by-side analysis with charts and detail tables
+   * - 'howto': Step-by-step instructions and procedural guides
+   * - 'quick': Concise direct answers with minimal components
+   */
+  contentStyle: ContentStyle;
 }
 
 /**
@@ -76,6 +89,7 @@ export const aiConfig: AIConfig = {
   conversationHistory: true,
   maxHistoryMessages: 20,
   webSearch: true,
+  contentStyle: 'auto',
 };
 
 /**
