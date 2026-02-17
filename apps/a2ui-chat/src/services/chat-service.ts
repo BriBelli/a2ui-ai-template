@@ -240,6 +240,7 @@ export class ChatService {
         provider,
         model,
         enableWebSearch: aiConfig.webSearch,
+        contentStyle: aiConfig.contentStyle,
         ...(location && { userLocation: location }),
       };
 

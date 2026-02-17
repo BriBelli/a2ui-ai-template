@@ -16,12 +16,17 @@ import logging
 import os
 import re
 from abc import ABC, abstractmethod
-from datetime import date
 from typing import Any, Dict, List, Optional
 
 import httpx
 import openai
 import anthropic
+
+from content_styles import (
+    classify_style,
+    get_component_priority,
+    get_system_prompt,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +38,7 @@ def _build_messages(
     message: str,
     history: Optional[List[Dict[str, str]]] = None,
     max_body_bytes: int = 7200,
+    system_prompt: Optional[str] = None,
 ) -> List[Dict[str, str]]:
     """Build an OpenAI-style messages array with smart history truncation.
 
@@ -42,15 +48,18 @@ def _build_messages(
 
     History is trimmed **oldest-first** so the most recent turns are
     always preserved.
-    """
-    today = date.today().strftime("%B %d, %Y")  # e.g. "February 11, 2026"
-    prompt = f"Today is {today}.\n\n{SYSTEM_PROMPT}"
 
-    prompt_bytes = len(prompt.encode("utf-8"))
+    ``system_prompt`` should be the fully-composed prompt (with date)
+    from :func:`content_styles.get_system_prompt`.
+    """
+    if system_prompt is None:
+        system_prompt = get_system_prompt("content")
+
+    prompt_bytes = len(system_prompt.encode("utf-8"))
     msg_bytes = len(message.encode("utf-8"))
     trimmed = _trim_history(history, prompt_bytes, msg_bytes, max_body_bytes)
 
-    messages: List[Dict[str, str]] = [{"role": "system", "content": prompt}]
+    messages: List[Dict[str, str]] = [{"role": "system", "content": system_prompt}]
     messages.extend(trimmed)
     messages.append({"role": "user", "content": message})
     return messages
@@ -181,23 +190,18 @@ def _error_response(title: str, description: str, variant: str = "error") -> Dic
     }
 
 
-# Component type → visual hierarchy priority (lower = appears first)
-# Matches CRITICAL RULE #2: alert → stat grid → chart → data-table
-_COMPONENT_PRIORITY = {
-    "alert": 0,
-    "grid": 1,
-    "stat": 2,
-    "chart": 3,
-    "data-table": 4,
-    "list": 5,
-    "accordion": 6,
-    "tabs": 7,
-    "card": 8,
-}
+def _enforce_visual_hierarchy(
+    result: Dict[str, Any],
+    priority: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    """Reorder A2UI components according to a style's component priority.
 
+    ``priority`` is an ordered list of component type names (position = rank).
+    Types not in the list are placed at the end.
+    """
+    if priority is None:
+        return result
 
-def _enforce_visual_hierarchy(result: Dict[str, Any]) -> Dict[str, Any]:
-    """Reorder A2UI components to enforce chart-before-table visual hierarchy."""
     a2ui = result.get("a2ui")
     if not a2ui or not isinstance(a2ui, dict):
         return result
@@ -211,9 +215,16 @@ def _enforce_visual_hierarchy(result: Dict[str, Any]) -> Dict[str, Any]:
     if len(dict_components) < 2:
         return result
 
+    def _rank(component: Dict[str, Any]) -> int:
+        ctype = component.get("type", "")
+        try:
+            return priority.index(ctype)
+        except ValueError:
+            return len(priority)
+
     # Stable sort by priority — preserves relative order within same type
     original_order = [c.get("type") for c in dict_components]
-    dict_components.sort(key=lambda c: _COMPONENT_PRIORITY.get(c.get("type", ""), 99))
+    dict_components.sort(key=_rank)
     new_order = [c.get("type") for c in dict_components]
 
     if original_order != new_order:
@@ -246,7 +257,7 @@ def parse_llm_json(content: str) -> Dict[str, Any]:
     try:
         result = json.loads(content)
         if isinstance(result, dict):
-            return _enforce_visual_hierarchy(result)
+            return result
     except json.JSONDecodeError:
         pass
 
@@ -257,7 +268,7 @@ def parse_llm_json(content: str) -> Dict[str, Any]:
         try:
             result = json.loads(json_str)
             if isinstance(result, dict):
-                return _enforce_visual_hierarchy(result)
+                return result
         except json.JSONDecodeError as exc:
             logger.warning("JSON parse error after extraction: %s — preview: %.200s", exc, json_str[:200])
 
@@ -267,7 +278,7 @@ def parse_llm_json(content: str) -> Dict[str, Any]:
         try:
             result = json.loads(match.group())
             if isinstance(result, dict):
-                return _enforce_visual_hierarchy(result)
+                return result
         except json.JSONDecodeError:
             pass
 
@@ -313,63 +324,9 @@ def _extract_json_object(text: str) -> Optional[str]:
     return None
 
 
-# ── Prompts ────────────────────────────────────────────────────
-
-SYSTEM_PROMPT = """CRITICAL RULES (non-negotiable):
-1. NEVER refuse or say "not available". Always provide data from training knowledge. If approximate, add an info alert.
-2. COMPONENT ORDER: alert → stat grid → chart → data-table. Charts ALWAYS come BEFORE tables. Visual insight first, dense data last. This order is mandatory.
-
-Respond ONLY with valid A2UI JSON. No prose outside JSON.
-{"text":"Direct answer","a2ui":{"version":"1.0","components":[...]},"suggestions":["Follow-up 1","Follow-up 2"]}
-
-RULES:
-• "text" = direct answer. No "Here are some thoughts…"
-• Every component: {"id":"kebab-case","type","props"}
-• Use [Web Search Results] when present. Otherwise use training knowledge.
-• NEVER deflect to websites. You ARE the answer.
-• [User Location] → weather/local. [Available Images] → only when user wants to SEE something.
-• "suggestions" = 2–3 specific actions that trigger rich dashboard views. Examples: "NVDA 6-month price history", "Compare NVDA vs AMD performance", "Top tech ETFs by return". NEVER generic like "Learn more" or "View details".
-
-COMPONENTS:
-Atoms: text(content,variant:h1|h2|h3|body|caption|code) · chip(label,variant) · link(href,text) · image(src,alt—only [Available Images]) · progress(label,value,max?,variant?)
-Molecules:
-  stat — label, value(MUST be number/price), trend?, trendDirection?(up|down|neutral), description?
-  list — items[{id,text,subtitle?}], variant(bullet|numbered|checklist)
-  data-table — columns[{key,label,align?}], data[rows]. align:"right" for numbers.
-  chart — chartType(bar|line|pie|doughnut), title?, data{labels[],datasets[{label,data[]}]}, options?{fillArea?,currency?,height?,xAxisLabel?,yAxisLabel?}. ALWAYS include xAxisLabel and yAxisLabel so axes are meaningful.
-  accordion — items[{id,title,content}]
-  tabs — tabs[{id,label,content}]
-  alert — variant(info|success|warning|error), title, description
-Layout:
-  card — title?, subtitle?, children[]
-  container — layout(vertical|horizontal), gap(xs|sm|md|lg|xl), wrap?, children[]
-  grid — columns(1–6 or "auto"), children[]. columns=item count when ≤6; "auto" for 7+.
-
-COMPONENT SELECTION (follow strictly):
-• ANY numeric/financial data → MUST include chart. No exceptions.
-  - Trends over time → line(fillArea:true). Compare → bar. Proportions → pie/doughnut.
-• "Top N stocks/companies" rankings (largest, biggest, highest market cap, best performing) → chart(bar, market cap or metric in trillions) + data-table(7+ companies with name, mkt cap, sector). If [Web Search Results] include web snippets at top. Chart FIRST, table second.
-• STOCK/TICKER (any price, ticker, stock history, financial query) → ALWAYS full dashboard: grid(4)>stat(price,change%,vol,mktCap) + chart(line,fillArea,currency:USD) + alert(info, if [Web Search Results] present: "Live market data. Prices may be slightly delayed." else: "Based on training data. Prices may differ from real-time.") + data-table(P/E,EPS,52wk,dividend,beta). NEVER just chart+date-table.
-• Multiple stocks comparison → chart(bar,compare all on one axis) + data-table(detail per stock).
-• Compare N items → chart(bar,1-10 ratings/feature) + data-table(8+ rows). No mixed units on axis.
-• Monthly/yearly (non-stock) → chart + data-table(rows per period). Never separate cards.
-• KPIs (≤6) → grid(columns:N) > stat. Pair with chart for financial data.
-• How-to → list(numbered). FAQ → accordion.
-• 7+ items → data-table or list. Never 7+ separate cards.
-• No real numbers → data-table or list, NOT stat.
-
-CHART GUIDE (ALWAYS include xAxisLabel and yAxisLabel):
-Line: {"chartType":"line","data":{"labels":["Jan","Feb","Mar","Apr","May","Jun"],"datasets":[{"label":"Price","data":[800,820,850,830,870,890]}]},"options":{"fillArea":true,"currency":"USD","xAxisLabel":"Month","yAxisLabel":"Price (USD)"}}
-Bar: {"chartType":"bar","data":{"labels":["Q1","Q2","Q3","Q4"],"datasets":[{"label":"Revenue","data":[100,115,130,150]}]},"options":{"currency":"USD","xAxisLabel":"Quarter","yAxisLabel":"Revenue (B USD)"}}
-
-EXAMPLE — Stock Dashboard (stat grid + chart + alert + table):
-{"text":"NVDA at $890, up 3.5%.","a2ui":{"version":"1.0","components":[{"id":"kpi","type":"grid","props":{"columns":4},"children":[{"id":"p","type":"stat","props":{"label":"Price","value":"$890","trend":"+3.5%"}},{"id":"v","type":"stat","props":{"label":"Volume","value":"45.2M"}},{"id":"m","type":"stat","props":{"label":"Mkt Cap","value":"$2.19T"}},{"id":"pe","type":"stat","props":{"label":"P/E","value":"65.4"}}]},{"id":"ch","type":"chart","props":{"chartType":"line","title":"6-Month Price","data":{"labels":["Sep","Oct","Nov","Dec","Jan","Feb"],"datasets":[{"label":"NVDA","data":[780,810,850,870,880,890]}]},"options":{"fillArea":true,"currency":"USD","xAxisLabel":"Month","yAxisLabel":"Price (USD)"}}},{"id":"n","type":"alert","props":{"variant":"info","title":"Note","description":"Based on training data. Prices may differ from real-time."}},{"id":"t","type":"data-table","props":{"columns":[{"key":"m","label":"Metric"},{"key":"v","label":"Value","align":"right"}],"data":[{"m":"52wk Range","v":"$560–$950"},{"m":"EPS","v":"$13.59"},{"m":"Dividend","v":"0.02%"},{"m":"Beta","v":"1.68"}]}}]},"suggestions":["Compare NVDA vs AMD","NVDA revenue trend","Top AI stocks"]}
-
-EXAMPLE — Comparison (bar chart with 1-10 ratings + data-table with 8+ filled rows, NEVER empty cards):
-{"text":"iPhone vs Android compared.","a2ui":{"version":"1.0","components":[{"id":"ch","type":"chart","props":{"chartType":"bar","title":"Feature Ratings (1-10)","data":{"labels":["Camera","Battery","Display","Performance","AI Features","Value"],"datasets":[{"label":"iPhone 16 Pro","data":[9,8,9,9,8,7]},{"label":"Galaxy S25 Ultra","data":[10,8,9,9,9,7]}]},"options":{"xAxisLabel":"Feature","yAxisLabel":"Rating (1-10)"}}},{"id":"t","type":"data-table","props":{"columns":[{"key":"f","label":"Feature"},{"key":"a","label":"iPhone"},{"key":"b","label":"Android"}],"data":[{"f":"OS","a":"iOS 18","b":"Android 15"},{"f":"Ecosystem","a":"Apple integrated","b":"Open, customizable"},{"f":"AI","a":"Apple Intelligence","b":"Google Gemini"},{"f":"Camera","a":"48MP ProRes","b":"200MP expert RAW"},{"f":"Price","a":"$799–$1599","b":"$199–$1799"},{"f":"Updates","a":"6+ years","b":"7 years (Samsung)"},{"f":"Security","a":"Face ID, Enclave","b":"Fingerprint, Knox"},{"f":"Charging","a":"MagSafe USB-C","b":"USB-C fast charge"}]}}]},"suggestions":["iPhone 16 Pro vs S25 Ultra specs","Best budget Androids 2025","iOS vs Android market share"]}
-
-EXAMPLE — Top N Rankings (bar chart + table, NO stat cards):
-{"text":"Top tech stocks.","a2ui":{"version":"1.0","components":[{"id":"ch","type":"chart","props":{"chartType":"bar","title":"Market Cap (Trillions)","data":{"labels":["NVDA","AAPL","GOOGL","MSFT","AMZN","TSMC","META"],"datasets":[{"label":"Market Cap","data":[4.6,4.0,3.8,3.0,2.2,1.6,1.7]}]},"options":{"xAxisLabel":"Ticker","yAxisLabel":"Market Cap (Trillions USD)"}}},{"id":"t","type":"data-table","props":{"columns":[{"key":"c","label":"Company"},{"key":"m","label":"Mkt Cap","align":"right"}],"data":[{"c":"Nvidia","m":"$4.6T"},{"c":"Apple","m":"$4.0T"},{"c":"Alphabet","m":"$3.8T"},{"c":"Microsoft","m":"$3.0T"},{"c":"Amazon","m":"$2.2T"},{"c":"TSMC","m":"$1.6T"},{"c":"Meta","m":"$1.7T"}]}}]},"suggestions":["Compare NVDA vs AAPL","Top AI stocks"]}"""
+# ── Content Styles ─────────────────────────────────────────────
+# System prompts are now modular — see backend/content_styles/.
+# The service layer classifies intent and selects the right style.
 
 
 # ── Abstract Base ──────────────────────────────────────────────
@@ -391,6 +348,7 @@ class LLMProvider(ABC):
         message: str,
         model: str,
         history: Optional[List[Dict[str, str]]] = None,
+        system_prompt: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Generate a response for the given message with optional history."""
 
@@ -428,9 +386,10 @@ class OpenAIProvider(LLMProvider):
         message: str,
         model: str,
         history: Optional[List[Dict[str, str]]] = None,
+        system_prompt: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Make a single OpenAI call and return parsed JSON or error dict."""
-        messages = _build_messages(message, history)
+        messages = _build_messages(message, history, system_prompt=system_prompt)
 
         # GPT-5+ uses max_completion_tokens and only supports temperature=1
         is_gpt5 = model.startswith("gpt-5")
@@ -470,13 +429,14 @@ class OpenAIProvider(LLMProvider):
         message: str,
         model: str = "gpt-4.1",
         history: Optional[List[Dict[str, str]]] = None,
+        system_prompt: Optional[str] = None,
     ) -> Dict[str, Any]:
-        result = await self._call_llm(message, model, history)
+        result = await self._call_llm(message, model, history, system_prompt)
 
         # Refusal guard — retry with stronger nudge
         return await _retry_on_refusal(
             result, message,
-            lambda msg, hist: self._call_llm(msg, model, hist),
+            lambda msg, hist: self._call_llm(msg, model, hist, system_prompt),
         )
 
 
@@ -486,9 +446,9 @@ class AnthropicProvider(LLMProvider):
     name = "Anthropic"
     models = [
         {"id": "claude-opus-4-6", "name": "Claude Opus 4.6"},
+        {"id": "claude-sonnet-4-5-20250929", "name": "Claude Sonnet 4.5"},
         {"id": "claude-sonnet-4-20250514", "name": "Claude Sonnet 4"},
-        {"id": "claude-3-5-sonnet-20241022", "name": "Claude 3.5 Sonnet"},
-        {"id": "claude-3-5-haiku-20241022", "name": "Claude 3.5 Haiku (Fast)"},
+        {"id": "claude-haiku-4-5-20251001", "name": "Claude Haiku 4.5 (Fast)"},
     ]
 
     def __init__(self) -> None:
@@ -513,10 +473,14 @@ class AnthropicProvider(LLMProvider):
         message: str,
         model: str,
         history: Optional[List[Dict[str, str]]] = None,
+        system_prompt: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Make a single Anthropic call and return parsed JSON or error dict."""
+        if system_prompt is None:
+            system_prompt = get_system_prompt("content")
+
         # Anthropic uses a separate system param — trim history independently
-        prompt_bytes = len(SYSTEM_PROMPT.encode("utf-8"))
+        prompt_bytes = len(system_prompt.encode("utf-8"))
         msg_bytes = len(message.encode("utf-8"))
         trimmed = _trim_history(history, prompt_bytes, msg_bytes)
 
@@ -529,7 +493,7 @@ class AnthropicProvider(LLMProvider):
             response = await self.client.messages.create(
                 model=model,
                 max_tokens=4000,
-                system=SYSTEM_PROMPT,
+                system=system_prompt,
                 messages=messages,
             )
         except anthropic.APIError as exc:
@@ -551,13 +515,14 @@ class AnthropicProvider(LLMProvider):
         message: str,
         model: str = "claude-opus-4-6",
         history: Optional[List[Dict[str, str]]] = None,
+        system_prompt: Optional[str] = None,
     ) -> Dict[str, Any]:
-        result = await self._call_llm(message, model, history)
+        result = await self._call_llm(message, model, history, system_prompt)
 
         # Refusal guard — retry with stronger nudge
         return await _retry_on_refusal(
             result, message,
-            lambda msg, hist: self._call_llm(msg, model, hist),
+            lambda msg, hist: self._call_llm(msg, model, hist, system_prompt),
         )
 
 
@@ -722,14 +687,17 @@ class LiteLLMProvider(LLMProvider):
         message: str,
         model: str = "gpt-4o-mini",
         history: Optional[List[Dict[str, str]]] = None,
+        system_prompt: Optional[str] = None,
     ) -> Dict[str, Any]:
-        messages = _build_messages(message, history)
+        messages = _build_messages(message, history, system_prompt=system_prompt)
         result = await self._call_llm(messages, model)
 
         # Refusal guard — retry with stronger nudge (no history to save space)
         return await _retry_on_refusal(
             result, message,
-            lambda msg, hist: self._call_llm(_build_messages(msg, hist), model),
+            lambda msg, hist: self._call_llm(
+                _build_messages(msg, hist, system_prompt=system_prompt), model,
+            ),
         )
 
 
@@ -755,19 +723,23 @@ class GeminiProvider(LLMProvider):
         message: str,
         model: str,
         history: Optional[List[Dict[str, str]]] = None,
+        system_prompt: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Make a single Gemini call and return parsed JSON or error dict."""
         import google.generativeai as genai  # optional dep — lazy import
+
+        if system_prompt is None:
+            system_prompt = get_system_prompt("content")
 
         genai.configure(api_key=self._api_key)
 
         gen_model = genai.GenerativeModel(
             model_name=model,
-            system_instruction=SYSTEM_PROMPT,
+            system_instruction=system_prompt,
         )
 
         # Trim history to stay within WAF budget, then convert to Gemini format
-        prompt_bytes = len(SYSTEM_PROMPT.encode("utf-8"))
+        prompt_bytes = len(system_prompt.encode("utf-8"))
         msg_bytes = len(message.encode("utf-8"))
         trimmed = _trim_history(history, prompt_bytes, msg_bytes)
 
@@ -803,13 +775,14 @@ class GeminiProvider(LLMProvider):
         message: str,
         model: str = "gemini-3-flash-preview",
         history: Optional[List[Dict[str, str]]] = None,
+        system_prompt: Optional[str] = None,
     ) -> Dict[str, Any]:
-        result = await self._call_llm(message, model, history)
+        result = await self._call_llm(message, model, history, system_prompt)
 
         # Refusal guard — retry with stronger nudge
         return await _retry_on_refusal(
             result, message,
-            lambda msg, hist: self._call_llm(msg, model, hist),
+            lambda msg, hist: self._call_llm(msg, model, hist, system_prompt),
         )
 
 
@@ -850,13 +823,30 @@ class LLMService:
         history: Optional[List[Dict[str, str]]] = None,
         enable_web_search: bool = False,
         user_location: Optional[Dict[str, Any]] = None,
+        content_style: str = "auto",
     ) -> Dict[str, Any]:
-        """Generate a response using the specified provider and model."""
+        """Generate a response using the specified provider and model.
+
+        ``content_style`` controls the system prompt and component
+        hierarchy.  Use ``"auto"`` (default) to classify automatically,
+        or pass a specific style ID (``"analytical"``, ``"content"``,
+        ``"comparison"``, ``"howto"``, ``"quick"``).
+        """
         from tools import web_search, should_search, rewrite_search_query, llm_rewrite_query
 
         provider = self.get_provider(provider_id)
         if not provider:
             raise ValueError(f"Provider '{provider_id}' is not available")
+
+        # ── Content style classification ─────────────────────
+        if content_style == "auto":
+            style_id = classify_style(message)
+            logger.info("Auto-classified content style: '%s' for: %.60s", style_id, message)
+        else:
+            style_id = content_style
+
+        system_prompt = get_system_prompt(style_id)
+        component_priority = get_component_priority(style_id)
 
         # Build location context prefix
         location_context = ""
@@ -933,13 +923,19 @@ class LLMService:
             augmented_message = f"{location_context}{augmented_message}"
 
         # ── LLM generation ───────────────────────────────────
-        response = await provider.generate(augmented_message, model, history)
+        response = await provider.generate(
+            augmented_message, model, history, system_prompt=system_prompt,
+        )
+
+        # Enforce style-specific visual hierarchy
+        response = _enforce_visual_hierarchy(response, component_priority)
 
         # Attach metadata for frontend thinking steps / debugging
         if search_metadata:
             response["_search"] = search_metadata
         if user_location:
             response["_location"] = True
+        response["_style"] = style_id
 
         return response
 
