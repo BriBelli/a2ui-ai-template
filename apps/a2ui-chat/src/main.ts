@@ -4,6 +4,7 @@ import './styles/tokens.css';
 // Import all components
 import './components/a2ui-app';
 import './components/a2ui-model-selector';
+import './components/a2ui-settings-panel';
 import './components/chat/a2ui-chat-container';
 import './components/chat/a2ui-chat-input';
 import './components/chat/a2ui-chat-message';

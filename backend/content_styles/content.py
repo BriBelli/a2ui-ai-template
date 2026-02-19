@@ -30,7 +30,7 @@ STYLE = {
     "prompt": """\
 CONTENT STYLE: Narrative structure with headings, sections, and flowing text. Lead with key information, then organize into logical sections.
 
-COMPONENT ORDER: alert (if important) → card sections with text headings → supporting data (tables, lists) → expandable details (accordion, tabs). Use visuals only when they genuinely enhance understanding.
+COMPONENT ORDER: alert (if important) → card sections with text headings → supporting data (tables, lists) → expandable details (accordion, tabs).
 
 COMPONENT SELECTION:
 • Use card with text(h2) headings to create clear sections (Overview, Key Facts, etc.).

@@ -2,7 +2,7 @@
  * A2UI Chat Configuration
  * 
  * Centralized configuration for UI behaviors, styles, and AI features.
- * Import and modify these settings to customize the chat experience.
+ * Settings are persisted to localStorage so they survive page reloads.
  */
 
 export type LoadingStyle = 'chat' | 'subtle';
@@ -40,11 +40,11 @@ export interface UIConfig {
 }
 
 export type ContentStyle = 'auto' | 'analytical' | 'content' | 'comparison' | 'howto' | 'quick';
+export type PerformanceMode = 'auto' | 'comprehensive' | 'optimized';
 
 export interface AIConfig {
   /**
    * Send conversation history with each message
-   * Enables context-aware responses and follow-up questions
    */
   conversationHistory: boolean;
 
@@ -55,7 +55,6 @@ export interface AIConfig {
 
   /**
    * Enable web search tool for real-time information
-   * Requires TAVILY_API_KEY on backend
    */
   webSearch: boolean;
 
@@ -69,7 +68,17 @@ export interface AIConfig {
    * - 'quick': Concise direct answers with minimal components
    */
   contentStyle: ContentStyle;
+
+  /**
+   * Performance mode controlling token usage, context size, and cost.
+   * - 'auto': Adapts based on payload size (default)
+   * - 'comprehensive': Full context, max tokens, all features
+   * - 'optimized': Minimal context, fastest, cheapest
+   */
+  performanceMode: PerformanceMode;
 }
+
+const SETTINGS_KEY = 'a2ui_settings';
 
 /**
  * Default UI configuration
@@ -90,18 +99,50 @@ export const aiConfig: AIConfig = {
   maxHistoryMessages: 20,
   webSearch: true,
   contentStyle: 'auto',
+  performanceMode: 'auto',
 };
 
 /**
- * Update UI configuration at runtime
+ * Load persisted settings from localStorage (call once at startup).
  */
-export function setUIConfig(config: Partial<UIConfig>): void {
-  Object.assign(uiConfig, config);
+export function loadSettings(): void {
+  try {
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    if (!raw) return;
+    const saved = JSON.parse(raw);
+    if (saved.ai) Object.assign(aiConfig, saved.ai);
+    if (saved.ui) Object.assign(uiConfig, saved.ui);
+  } catch {
+    // corrupted storage — use defaults
+  }
 }
 
 /**
- * Update AI configuration at runtime
+ * Persist current settings to localStorage.
+ */
+export function saveSettings(): void {
+  try {
+    localStorage.setItem(
+      SETTINGS_KEY,
+      JSON.stringify({ ai: aiConfig, ui: uiConfig }),
+    );
+  } catch {
+    // quota exceeded or private browsing — silently ignore
+  }
+}
+
+/**
+ * Update AI configuration at runtime and persist.
  */
 export function setAIConfig(config: Partial<AIConfig>): void {
   Object.assign(aiConfig, config);
+  saveSettings();
+}
+
+/**
+ * Update UI configuration at runtime and persist.
+ */
+export function setUIConfig(config: Partial<UIConfig>): void {
+  Object.assign(uiConfig, config);
+  saveSettings();
 }

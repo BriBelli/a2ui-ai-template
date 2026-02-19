@@ -10,7 +10,7 @@ Preserved from the original monolithic SYSTEM_PROMPT.
 
 STYLE = {
     "id": "analytical",
-    "name": "Analytical Dashboard",
+    "name": "Analytical",
     "description": "Data-rich dashboards with KPIs, charts, and tables",
     "component_priority": [
         "alert",
