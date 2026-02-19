@@ -16,6 +16,10 @@ export interface ChatMessage {
   avatarInitials?: string;
   /** Follow-up suggestions shown below assistant responses */
   suggestions?: string[];
+  /** Generation duration in seconds */
+  duration?: number;
+  /** Search result images rendered as a visual strip */
+  images?: string[];
 }
 
 /** Simplified message format for API history */
@@ -38,6 +42,7 @@ export interface ChatResponse {
     query?: string;
   };
   _location?: boolean;
+  _images?: string[];
 }
 
 export interface LLMModel {
@@ -159,7 +164,8 @@ export class ChatService {
       'headlines',
       'score',
       'game',
-      'what is the',
+      'what is',
+      'what are',
       'how much',
       'who won',
       'who is',
@@ -241,6 +247,7 @@ export class ChatService {
         model,
         enableWebSearch: aiConfig.webSearch,
         contentStyle: aiConfig.contentStyle,
+        performanceMode: aiConfig.performanceMode,
         ...(location && { userLocation: location }),
       };
 

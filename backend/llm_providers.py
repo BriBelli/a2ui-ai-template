@@ -23,7 +23,9 @@ import openai
 import anthropic
 
 from content_styles import (
-    classify_style,
+    DEFAULT_STYLE,
+    STYLE_DESCRIPTIONS,
+    VALID_STYLE_IDS,
     get_component_priority,
     get_system_prompt,
 )
@@ -37,17 +39,16 @@ logger = logging.getLogger(__name__)
 def _build_messages(
     message: str,
     history: Optional[List[Dict[str, str]]] = None,
-    max_body_bytes: int = 7200,
+    max_body_bytes: Optional[int] = None,
     system_prompt: Optional[str] = None,
 ) -> List[Dict[str, str]]:
-    """Build an OpenAI-style messages array with smart history truncation.
+    """Build an OpenAI-style messages array with optional history truncation.
 
-    The enterprise WAF rejects request bodies > 8 KB.  We budget
-    ``max_body_bytes`` for total message *content* (system + history +
-    user) leaving ~800 bytes for the JSON envelope / model params.
+    When ``max_body_bytes`` is set, history is trimmed oldest-first to
+    keep total content under that byte budget.  This is useful behind
+    enterprise WAFs that reject large request bodies.
 
-    History is trimmed **oldest-first** so the most recent turns are
-    always preserved.
+    ``None`` (default) = unlimited, no trimming.
 
     ``system_prompt`` should be the fully-composed prompt (with date)
     from :func:`content_styles.get_system_prompt`.
@@ -69,16 +70,19 @@ def _trim_history(
     history: Optional[List[Dict[str, str]]],
     system_prompt_bytes: int = 0,
     message_bytes: int = 0,
-    max_body_bytes: int = 7200,
+    max_body_bytes: Optional[int] = None,
 ) -> List[Dict[str, str]]:
-    """Trim history oldest-first to stay within the WAF byte budget.
+    """Trim history oldest-first to stay within a byte budget.
 
-    This is a provider-agnostic helper.  ``_build_messages`` (OpenAI format)
-    uses it internally; Anthropic and Gemini call it directly because they
-    send the system prompt separately.
+    ``None`` (default) = unlimited, all history returned as-is.
+    Set a positive value to enable WAF-aware truncation
+    (e.g. ``7200`` for an 8 KB WAF with ~800 B envelope).
     """
     if not history:
         return []
+
+    if max_body_bytes is None:
+        return [{"role": m["role"], "content": m["content"]} for m in history]
 
     budget = max(0, max_body_bytes - system_prompt_bytes - message_bytes)
     trimmed: List[Dict[str, str]] = []
@@ -92,9 +96,10 @@ def _trim_history(
 
     if len(trimmed) < len(history):
         logger.info(
-            "History trimmed: %d→%d turns to stay under WAF limit",
+            "History trimmed: %d→%d turns (WAF limit %d B)",
             len(history),
             len(trimmed),
+            max_body_bytes,
         )
     return trimmed
 
@@ -707,8 +712,6 @@ class GeminiProvider(LLMProvider):
     name = "Google"
     models = [
         {"id": "gemini-3-pro-preview", "name": "Gemini 3 Pro"},
-        {"id": "gemini-3-flash-preview", "name": "Gemini 3 Flash"},
-        {"id": "gemini-2.5-pro-preview-05-06", "name": "Gemini 2.5 Pro"},
         {"id": "gemini-2.5-flash-preview-05-20", "name": "Gemini 2.5 Flash"},
     ]
 
@@ -786,6 +789,75 @@ class GeminiProvider(LLMProvider):
         )
 
 
+# ── Visual Query Detection ─────────────────────────────────────
+
+_VISUAL_QUERY_RE = re.compile(
+    r"\b(?:look\s*like|looks?\s*like|appearance|what\s+does?\s+.{1,40}\s+look"
+    r"|show\s+me|pictures?\s+of|photos?\s+of|images?\s+of"
+    r"|what\s+(?:is|are|do|does)\s)"
+    , re.IGNORECASE,
+)
+
+_NO_IMAGES_RE = re.compile(
+    r"\b(?:stocks?|prices?|markets?|trading|portfolio|GDP|inflation|interest\s*rate"
+    r"|weather|forecast|temperature|code|program\w*|functions?|errors?|bugs?|debug"
+    r"|how\s+to|step.?by.?step|configure|install|recipe|tutorial|dashboard"
+    r"|KPI|metrics?|analy)"
+    , re.IGNORECASE,
+)
+
+
+def _wants_images(message: str) -> bool:
+    """Decide whether search images add value for this query.
+
+    Images are shown for visual/knowledge queries (what does X look like,
+    tell me about Y) but suppressed for financial, weather, coding, and
+    how-to queries where they add noise.
+    """
+    if _NO_IMAGES_RE.search(message):
+        return False
+    return bool(_VISUAL_QUERY_RE.search(message))
+
+
+# ── LLM Classifier ─────────────────────────────────────────────
+
+_CLASSIFIER_SYSTEM = (
+    "You are a content-style classifier for a UI system. "
+    "You analyze the user's intent, conversation context, and available data "
+    "to decide the best presentation style. Reply with exactly one word."
+)
+
+_CLASSIFIER_PROMPT_TEMPLATE = (
+    "Based on the user's intent and the data context, classify into ONE style.\n\n"
+    "Available styles:\n{descriptions}\n\n"
+    "{context_section}"
+    "User query: {query}\n\n"
+    "Reply with ONLY the style ID, nothing else."
+)
+
+_CLASSIFIER_MODELS: List[tuple] = [
+    ("openai", "gpt-4.1-mini"),
+    ("litellm", "gpt-4o-mini"),
+    ("anthropic", "claude-haiku-4-5-20251001"),
+    ("gemini", "gemini-2.5-flash-preview-05-20"),
+]
+
+# ── Performance Mode Constants ─────────────────────────────────
+
+# Optional WAF byte limit — set A2UI_MAX_BODY_BYTES to enable.
+# None = unlimited (default). Example: 7200 for an 8 KB WAF.
+_raw_waf = os.getenv("A2UI_MAX_BODY_BYTES")
+WAF_MAX_BODY_BYTES: Optional[int] = int(_raw_waf) if _raw_waf else None
+
+PERFORMANCE_MODES = {
+    "comprehensive": {"use_llm_classifier": True},
+    "optimized": {"use_llm_classifier": False},
+    "auto": {"use_llm_classifier": True},
+}
+
+_AUTO_DEGRADE_THRESHOLD = 0.75
+
+
 # ── Service Layer ──────────────────────────────────────────────
 
 
@@ -815,6 +887,126 @@ class LLMService:
             return provider
         return None
 
+    async def _classify_intent(
+        self,
+        message: str,
+        history: Optional[List[Dict[str, str]]] = None,
+        search_data: Optional[Dict[str, Any]] = None,
+    ) -> Optional[str]:
+        """Classify user intent using a lightweight LLM call with full context.
+
+        The classifier sees:
+        - The user's current query
+        - Recent conversation history (summarised)
+        - A summary of the search response data shape (field types,
+          result count, whether images/numbers/tables are present)
+
+        Returns a valid style ID or ``None`` on failure.
+        """
+        # Build context section from history + search data
+        context_parts: List[str] = []
+
+        if history:
+            recent = history[-4:]  # last 2 exchanges max
+            history_summary = " | ".join(
+                f"{m['role']}: {m['content'][:80]}" for m in recent
+            )
+            context_parts.append(f"Conversation history: {history_summary}")
+
+        if search_data and search_data.get("success"):
+            results = search_data.get("results", [])
+            result_count = len(results)
+            has_answer = bool(search_data.get("answer"))
+            image_count = len(search_data.get("images", []))
+
+            data_summary = (
+                f"Search returned {result_count} results"
+                f"{', with a direct answer' if has_answer else ''}"
+                f"{f', {image_count} images' if image_count else ''}"
+            )
+
+            # Summarise the data shape — types of content in the results
+            if results:
+                snippets = [r.get("content", "")[:100] for r in results[:3]]
+                data_summary += f". Sample snippets: {' // '.join(snippets)}"
+
+            context_parts.append(f"Data context: {data_summary}")
+
+        context_section = ""
+        if context_parts:
+            context_section = "\n".join(context_parts) + "\n\n"
+
+        prompt = _CLASSIFIER_PROMPT_TEMPLATE.format(
+            descriptions=STYLE_DESCRIPTIONS,
+            context_section=context_section,
+            query=message[:500],
+        )
+
+        logger.info("── Classifier prompt ──\n%s", prompt)
+
+        for provider_id, model_id in _CLASSIFIER_MODELS:
+            provider = self.providers.get(provider_id)
+            if not provider or not provider.is_available():
+                continue
+
+            try:
+                if provider_id in ("openai", "litellm"):
+                    resp = await provider.client.chat.completions.create(
+                        model=model_id,
+                        messages=[
+                            {"role": "system", "content": _CLASSIFIER_SYSTEM},
+                            {"role": "user", "content": prompt},
+                        ],
+                        max_tokens=10,
+                        temperature=0,
+                    )
+                    text = (resp.choices[0].message.content or "").strip().lower()
+
+                elif provider_id == "anthropic":
+                    resp = await provider.client.messages.create(
+                        model=model_id,
+                        max_tokens=10,
+                        system=_CLASSIFIER_SYSTEM,
+                        messages=[{"role": "user", "content": prompt}],
+                    )
+                    text = resp.content[0].text.strip().lower()
+
+                elif provider_id == "gemini":
+                    import google.generativeai as genai
+                    genai.configure(api_key=provider._api_key)
+                    gen_model = genai.GenerativeModel(
+                        model_name=model_id,
+                        system_instruction=_CLASSIFIER_SYSTEM,
+                    )
+                    resp = gen_model.generate_content(prompt)
+                    text = resp.text.strip().lower()
+                else:
+                    continue
+
+                # Strip surrounding quotes or punctuation the LLM may add
+                text = text.strip('"\'.,!; ')
+
+                if text in VALID_STYLE_IDS:
+                    logger.info(
+                        "LLM classified → '%s' via %s/%s for: %.50s",
+                        text, provider_id, model_id, message,
+                    )
+                    return text
+
+                logger.debug(
+                    "LLM classifier returned unexpected '%s' via %s/%s",
+                    text, provider_id, model_id,
+                )
+
+            except Exception as exc:
+                logger.warning(
+                    "LLM classifier failed (%s/%s): %s",
+                    provider_id, model_id, exc,
+                )
+                continue
+
+        return None
+
     async def generate(
         self,
         message: str,
@@ -824,13 +1016,15 @@ class LLMService:
         enable_web_search: bool = False,
         user_location: Optional[Dict[str, Any]] = None,
         content_style: str = "auto",
+        performance_mode: str = "auto",
     ) -> Dict[str, Any]:
         """Generate a response using the specified provider and model.
 
-        ``content_style`` controls the system prompt and component
-        hierarchy.  Use ``"auto"`` (default) to classify automatically,
-        or pass a specific style ID (``"analytical"``, ``"content"``,
-        ``"comparison"``, ``"howto"``, ``"quick"``).
+        Pipeline order:
+        1. Web search (get real data first)
+        2. AI classification (uses query + history + search data shape)
+        3. LLM generation (with style-specific system prompt)
+        4. Post-processing (hierarchy, metadata, images)
         """
         from tools import web_search, should_search, rewrite_search_query, llm_rewrite_query
 
@@ -838,17 +1032,18 @@ class LLMService:
         if not provider:
             raise ValueError(f"Provider '{provider_id}' is not available")
 
-        # ── Content style classification ─────────────────────
-        if content_style == "auto":
-            style_id = classify_style(message)
-            logger.info("Auto-classified content style: '%s' for: %.60s", style_id, message)
-        else:
-            style_id = content_style
+        logger.info(
+            "══ GENERATE START ══  provider=%s  model=%s  style=%s  perf=%s",
+            provider_id, model, content_style, performance_mode,
+        )
+        logger.info("User message: %s", message[:200])
+        if history:
+            logger.info("History: %d messages", len(history))
 
-        system_prompt = get_system_prompt(style_id)
-        component_priority = get_component_priority(style_id)
+        perf = PERFORMANCE_MODES.get(performance_mode, PERFORMANCE_MODES["auto"])
+        max_body_bytes: Optional[int] = WAF_MAX_BODY_BYTES
 
-        # Build location context prefix
+        # ── Step 1: Location context ─────────────────────────
         location_context = ""
         location_label = ""
         if user_location:
@@ -859,47 +1054,52 @@ class LLMService:
                 location_context = f"[User Location: {location_label} ({lat}, {lng})]\n"
             elif lat and lng:
                 location_context = f"[User Location: {lat}, {lng}]\n"
+            logger.info("Location: %s", location_label or f"{lat},{lng}")
 
-        # ── Web search augmentation ──────────────────────────
+        # ── Step 2: Web search (data first) ───────────────────
         augmented_message = message
-        search_metadata = None
+        search_metadata: Optional[Dict[str, Any]] = None
+        search_results_raw: Optional[Dict[str, Any]] = None
+        search_images: List[str] = []
 
         if should_search(message):
-            # Rewrite conversational prompt → optimised search query.
-            # LLM-based first; fall back to rule-based.
             search_query = await llm_rewrite_query(
-                message,
-                location=location_label,
-                history=history,
+                message, location=location_label, history=history,
             )
             if not search_query:
                 search_query = rewrite_search_query(message, location=location_label)
 
             if web_search.is_available():
-                logger.info('Search: "%s"  ← "%s"', search_query[:100], message[:60])
+                logger.info("── SEARCH ──  query: \"%s\"  (original: \"%s\")", search_query[:100], message[:60])
 
                 try:
-                    search_results = await web_search.search(search_query)
-                    context = web_search.format_for_context(search_results)
+                    search_results_raw = await web_search.search(search_query)
+                    context = web_search.format_for_context(search_results_raw)
 
                     if context:
                         augmented_message = f"{context}\n\nUser question: {message}"
-                        image_count = len(search_results.get("images", []))
+                        search_images = search_results_raw.get("images", [])[:6]
                         logger.info(
-                            "Web search complete — %d results, %d images",
-                            len(search_results.get("results", [])),
-                            image_count,
+                            "── SEARCH RESULTS ──  %d results, %d images, answer=%s",
+                            len(search_results_raw.get("results", [])),
+                            len(search_images),
+                            bool(search_results_raw.get("answer")),
                         )
+                        for i, r in enumerate(search_results_raw.get("results", [])[:3]):
+                            logger.info(
+                                "  result[%d]: %s — %.100s",
+                                i, r.get("title", "")[:50], r.get("content", "")[:100],
+                            )
                         search_metadata = {
                             "searched": True,
                             "success": True,
-                            "results_count": len(search_results.get("results", [])),
-                            "images_count": image_count,
+                            "results_count": len(search_results_raw.get("results", [])),
+                            "images_count": len(search_images),
                             "query": search_query,
                         }
                     else:
-                        error_type = search_results.get("error", "unknown")
-                        logger.warning("Web search failed (%s), continuing without results", error_type)
+                        error_type = search_results_raw.get("error", "unknown")
+                        logger.warning("── SEARCH FAILED ── (%s)", error_type)
                         search_metadata = {
                             "searched": True,
                             "success": False,
@@ -907,7 +1107,7 @@ class LLMService:
                             "query": search_query,
                         }
                 except Exception as exc:
-                    logger.warning("Web search error (continuing): %s", exc)
+                    logger.warning("── SEARCH ERROR ── %s", exc)
                     search_metadata = {
                         "searched": True,
                         "success": False,
@@ -915,28 +1115,96 @@ class LLMService:
                         "query": search_query,
                     }
             else:
-                logger.info("Web search not configured — using AI knowledge only")
+                logger.info("── SEARCH ──  not configured, using AI knowledge only")
                 search_metadata = {"searched": False, "reason": "not_configured"}
+        else:
+            logger.info("── SEARCH ──  skipped (no search triggers in message)")
+
+        # ── Step 3: AI content style classification ───────────
+        #
+        # The AI classifier receives the full context: user query,
+        # conversation history, and the search data shape/content.
+        # This lets it reason about WHAT the data looks like, not
+        # just keyword-match the query.
+        #
+        # Regex classification is DISABLED — kept as dead code for
+        # future fallback scenarios (PII/PHI, LLM unavailable, etc.)
+
+        if content_style == "auto":
+            style_id = await self._classify_intent(
+                message,
+                history=history,
+                search_data=search_results_raw,
+            )
+            if style_id:
+                logger.info("── CLASSIFY ──  AI chose style: '%s'", style_id)
+            else:
+                style_id = DEFAULT_STYLE
+                logger.warning(
+                    "── CLASSIFY ──  AI classification failed, using default: '%s'",
+                    style_id,
+                )
+        else:
+            style_id = content_style
+            logger.info("── CLASSIFY ──  explicit style from user: '%s'", style_id)
+
+        system_prompt = get_system_prompt(style_id)
+        component_priority = get_component_priority(style_id)
+        logger.info(
+            "── STYLE ──  %s  |  prompt=%dB  |  priority=%s",
+            style_id,
+            len(system_prompt.encode("utf-8")),
+            [p for p in component_priority][:5],
+        )
+
+        # ── Auto-degrade: expand WAF budget if prompt is tight ─
+        if max_body_bytes is not None and performance_mode == "auto":
+            prompt_bytes = len(system_prompt.encode("utf-8"))
+            if prompt_bytes > max_body_bytes * _AUTO_DEGRADE_THRESHOLD:
+                max_body_bytes = max(max_body_bytes, prompt_bytes + 1500)
+                logger.info(
+                    "Auto-degraded: prompt %dB exceeds %d%% of WAF budget → %d",
+                    prompt_bytes, int(_AUTO_DEGRADE_THRESHOLD * 100), max_body_bytes,
+                )
 
         # Prepend location context
         if location_context:
             augmented_message = f"{location_context}{augmented_message}"
 
-        # ── LLM generation ───────────────────────────────────
+        # ── Step 4: LLM generation ────────────────────────────
+        logger.info("── GENERATE ──  sending to %s/%s  (%d chars)", provider_id, model, len(augmented_message))
         response = await provider.generate(
             augmented_message, model, history, system_prompt=system_prompt,
         )
+        logger.info(
+            "── RESPONSE ──  text=%d chars  a2ui=%s  components=%d",
+            len(response.get("text", "")),
+            bool(response.get("a2ui")),
+            len(response.get("a2ui", {}).get("components", [])) if response.get("a2ui") else 0,
+        )
 
-        # Enforce style-specific visual hierarchy
+        # ── Step 5: Post-processing ──────────────────────────
         response = _enforce_visual_hierarchy(response, component_priority)
 
-        # Attach metadata for frontend thinking steps / debugging
         if search_metadata:
             response["_search"] = search_metadata
         if user_location:
             response["_location"] = True
-        response["_style"] = style_id
 
+        # Images: AI-driven visual relevance check
+        if search_images and _wants_images(message):
+            response["_images"] = search_images
+            logger.info("── IMAGES ──  attached %d images (query is visual)", len(search_images))
+        elif search_images:
+            logger.info("── IMAGES ──  suppressed %d images (query not visual)", len(search_images))
+
+        response["_style"] = style_id
+        response["_performance"] = performance_mode
+
+        logger.info(
+            "══ GENERATE DONE ══  style=%s  keys=%s",
+            style_id, list(response.keys()),
+        )
         return response
 
 

@@ -137,43 +137,32 @@ class WebSearchTool:
     
     def format_for_context(self, search_results: Dict[str, Any]) -> Optional[str]:
         """
-        Format search results as context for the LLM.
-        
-        Returns a string that can be prepended to the user's message,
-        or None if search failed (so the query continues without search context).
+        Format search results as text context for the LLM.
+
+        Images are NOT included — they are passed as response metadata
+        and rendered by the frontend as a visual strip.
         """
         if not search_results.get("success"):
-            # Return None to indicate search failed - don't add any context
-            # LLM will answer based on its training data instead
             return None
-        
+
         results = search_results.get("results", [])
         if not results:
-            # No results but search succeeded - inform LLM
             return "[Web search found no relevant results]"
-        
+
         context_parts = ["[Web Search Results — REAL, CURRENT data. Use these facts in your answer.]"]
-        
+
         if search_results.get("answer"):
             context_parts.append(f"Direct answer: {search_results['answer']}")
-        
+
         for i, result in enumerate(results[:5], 1):
             context_parts.append(
                 f"\n{i}. {result['title']}\n"
                 f"   URL: {result['url']}\n"
                 f"   {result['content'][:400]}"
             )
-        
-        # Include image URLs if available
-        images = search_results.get("images", [])
-        if images:
-            context_parts.append("\n[Available Images]")
-            for i, url in enumerate(images, 1):
-                context_parts.append(f"  {i}. {url}")
-            context_parts.append("[End of Available Images]")
-        
+
         context_parts.append("\n[End of Search Results]\n")
-        
+
         return "\n".join(context_parts)
 
 
@@ -385,7 +374,7 @@ def should_search(message: str) -> bool:
         "news", "headlines", "breaking",
         "score", "game", "match", "standings",
         # Direct questions
-        "what is the", "how much", "who won", "who is",
+        "what is", "what are", "how much", "who won", "who is",
         "where is", "when is", "is it",
         "compare", "vs", "versus",
         "result", "update", "status",
@@ -399,4 +388,3 @@ def should_search(message: str) -> bool:
     
     message_lower = message.lower()
     return any(indicator in message_lower for indicator in search_indicators)
-    

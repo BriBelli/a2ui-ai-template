@@ -171,9 +171,10 @@ _CLASSIFICATION_RULES = [
 
     # ── Content / knowledge signals ──
     (re.compile(
-        r"\b(?:what\s+(?:is|are|was|were)|who\s+(?:is|are|was|were)|explain"
-        r"|history\s+of|define|meaning\s+of|overview\s+of|tell\s+me\s+about"
-        r"|describe|why\s+(?:is|are|do|does|did))\b", re.IGNORECASE,
+        r"\b(?:what\s+(?:is|are|was|were|does?|do)|who\s+(?:is|are|was|were)"
+        r"|explain|history\s+of|define|meaning\s+of|overview\s+of"
+        r"|tell\s+me\s+about|describe|look\s+like|looks?\s+like"
+        r"|why\s+(?:is|are|do|does|did))\b", re.IGNORECASE,
     ), "content"),
 
     # ── Generic rankings (non-financial) → content ──
@@ -182,7 +183,7 @@ _CLASSIFICATION_RULES = [
 
 
 def classify_style(message: str) -> str:
-    """Classify a user message into a content style.
+    """Classify a user message into a content style via regex.
 
     Uses rule-based pattern matching (instant, zero-cost).
     Returns a style ID from ``CONTENT_STYLES``.
@@ -199,3 +200,14 @@ def classify_style(message: str) -> str:
         return "quick"
 
     return DEFAULT_STYLE
+
+
+# ── Style descriptions for LLM classifier ─────────────────────
+
+STYLE_DESCRIPTIONS: str = "\n".join(
+    f"- {s['id']}: {s['description']}"
+    for s in CONTENT_STYLES.values()
+)
+"""One-line descriptions of every style, formatted for an LLM classification prompt."""
+
+VALID_STYLE_IDS: frozenset = frozenset(CONTENT_STYLES.keys())

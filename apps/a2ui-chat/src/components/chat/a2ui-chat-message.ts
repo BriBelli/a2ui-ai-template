@@ -168,6 +168,59 @@ export class A2UIChatMessage extends LitElement {
       background: var(--a2ui-bg-elevated);
     }
 
+    .duration {
+      font-size: 10px;
+      color: var(--a2ui-text-tertiary);
+    }
+
+    /* ── Image strip ──────────────────────────────────── */
+
+    .image-strip {
+      display: flex;
+      gap: var(--a2ui-space-2);
+      margin-top: var(--a2ui-space-3);
+      overflow-x: auto;
+      padding-bottom: var(--a2ui-space-1);
+      scrollbar-width: thin;
+    }
+
+    .image-strip::-webkit-scrollbar {
+      height: 4px;
+    }
+
+    .image-strip::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .image-strip::-webkit-scrollbar-thumb {
+      background: var(--a2ui-border-default);
+      border-radius: 2px;
+    }
+
+    .image-strip a {
+      flex-shrink: 0;
+      display: block;
+      width: 160px;
+      height: 110px;
+      border-radius: var(--a2ui-radius-md);
+      overflow: hidden;
+      background: var(--a2ui-bg-tertiary);
+      transition: opacity var(--a2ui-transition-fast),
+                  transform var(--a2ui-transition-fast);
+    }
+
+    .image-strip a:hover {
+      opacity: 0.85;
+      transform: scale(1.02);
+    }
+
+    .image-strip img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
     /* ── Follow-up suggestions ─────────────────────────── */
 
     .followups {
@@ -272,6 +325,11 @@ export class A2UIChatMessage extends LitElement {
         gap: var(--a2ui-space-1);
         margin-top: var(--a2ui-space-2);
       }
+
+      .image-strip a {
+        width: 120px;
+        height: 85px;
+      }
     }
   `;
 
@@ -330,9 +388,21 @@ export class A2UIChatMessage extends LitElement {
               ` : ''}
             </div>
           `}
+          ${!isUser && this.message.images?.length ? html`
+            <div class="image-strip">
+              ${this.message.images.map(url => html`
+                <a href=${url} target="_blank" rel="noopener noreferrer">
+                  <img src=${url} alt="" loading="lazy" @error=${(e: Event) => { (e.target as HTMLElement).parentElement!.style.display = 'none'; }} />
+                </a>
+              `)}
+            </div>
+          ` : ''}
           <div class="meta">
             ${!isUser && model ? html`
               <span class="model-badge">✨ ${model}</span>
+            ` : ''}
+            ${!isUser && this.message.duration ? html`
+              <span class="duration">${this.message.duration}s</span>
             ` : ''}
             <span>${this.formatTime(timestamp)}</span>
           </div>

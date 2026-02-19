@@ -128,6 +128,11 @@ class ChatRequest(BaseModel):
         max_length=30,
         description="Content style: 'auto' (default), 'analytical', 'content', 'comparison', 'howto', or 'quick'",
     )
+    performanceMode: str = Field(
+        default="auto",
+        max_length=30,
+        description="Performance mode: 'auto' (default), 'comprehensive', or 'optimized'",
+    )
 
     @field_validator("history")
     @classmethod
@@ -202,6 +207,7 @@ async def chat(request: Request, body: ChatRequest):
                 enable_web_search=body.enableWebSearch,
                 user_location=location_dict,
                 content_style=body.contentStyle,
+                performance_mode=body.performanceMode,
             )
             return JSONResponse(content=response)
         except ValueError as e:
@@ -228,6 +234,10 @@ async def chat(request: Request, body: ChatRequest):
 
 
 if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(levelname)s %(name)s: %(message)s",
+    )
     uvicorn.run(
         "app:app",
         host="127.0.0.1",

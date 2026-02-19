@@ -97,24 +97,22 @@ export class A2UIImage extends LitElement {
   }
 
   render() {
-    const showPlaceholder = !this.src || !this.isValidSrc(this.src) || this.loadState === 'error';
+    const noValidSrc = !this.src || !this.isValidSrc(this.src);
+
+    // Don't render anything when there's no valid image to show
+    if (noValidSrc || this.loadState === 'error') {
+      return html``;
+    }
 
     return html`
       <div class="image-container">
-        ${showPlaceholder ? html`
-          <div class="placeholder">
-            ${this.fallbackIcon}
-            ${this.alt ? html`<span class="placeholder-alt">${this.alt}</span>` : ''}
-          </div>
-        ` : html`
-          <img
-            class=${this.loadState}
-            src=${this.src}
-            alt=${this.alt}
-            @load=${this.handleLoad}
-            @error=${this.handleError}
-          />
-        `}
+        <img
+          class=${this.loadState}
+          src=${this.src}
+          alt=${this.alt}
+          @load=${this.handleLoad}
+          @error=${this.handleError}
+        />
       </div>
       ${this.caption ? html`
         <div class="caption">${this.caption}</div>

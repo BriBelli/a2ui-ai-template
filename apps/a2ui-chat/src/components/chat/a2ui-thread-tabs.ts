@@ -47,6 +47,7 @@ export class A2UIThreadTabs extends LitElement {
       height: 28px;
       background: transparent;
       border: none;
+      border-radius: 6px;
       margin-right: 4px;
       color: var(--a2ui-text-tertiary);
       cursor: pointer;

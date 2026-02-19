@@ -13,7 +13,7 @@ import {
   ChatHistoryService,
   type ChatThread,
 } from "../services/chat-history-service";
-import { uiConfig } from "../config/ui-config";
+import { uiConfig, loadSettings } from "../config/ui-config";
 import {
   initTheme,
   toggleTheme,
@@ -132,18 +132,15 @@ export class A2UIApp extends LitElement {
       font-size: 12px;
       font-weight: var(--a2ui-font-medium);
       overflow: hidden;
-      border: 2px solid transparent;
+      border: none;
       cursor: pointer;
       padding: 0;
-      transition:
-        border-color 0.15s ease,
-        box-shadow 0.15s ease;
+      transition: opacity 0.15s ease;
     }
 
     .avatar-btn:hover,
     .avatar-btn.active {
-      border-color: var(--a2ui-accent);
-      box-shadow: 0 0 0 2px var(--a2ui-accent-subtle);
+      opacity: 0.85;
     }
 
     .avatar-btn img {
@@ -503,8 +500,9 @@ export class A2UIApp extends LitElement {
   // ── Theme ───────────────────────────────────────────────
   @state() private theme: Theme = "dark";
 
-  // ── User menu ──────────────────────────────────────────
+  // ── User menu & settings ────────────────────────────────
   @state() private showUserMenu = false;
+  @state() private showSettings = false;
 
   // ── Thinking steps (drives the loading indicator) ──────
   @state() private thinkingSteps: ThinkingStep[] = [];
@@ -518,6 +516,7 @@ export class A2UIApp extends LitElement {
 
   async connectedCallback() {
     super.connectedCallback();
+    loadSettings();
     initTheme();
     this.theme = getTheme();
     window.addEventListener("popstate", this.boundPopstate);
@@ -703,6 +702,7 @@ export class A2UIApp extends LitElement {
     this.persistThread();
     this.refreshThreadList();
     this.isLoading = true;
+    const startTime = performance.now();
 
     // Build dynamic steps array that reflects real operations
     const steps: ThinkingStep[] = [];
@@ -775,6 +775,8 @@ export class A2UIApp extends LitElement {
       );
       const model = provider?.models.find((m) => m.id === this.selectedModel);
 
+      const elapsed = (performance.now() - startTime) / 1000;
+
       this.messages = [
         ...this.messages,
         {
@@ -785,6 +787,8 @@ export class A2UIApp extends LitElement {
           timestamp: Date.now(),
           model: model?.name || this.selectedModel,
           suggestions: response.suggestions,
+          duration: Math.round(elapsed * 10) / 10,
+          images: response._images,
         },
       ];
 
@@ -1031,7 +1035,8 @@ export class A2UIApp extends LitElement {
                               class="menu-item"
                               role="menuitem"
                               @click=${() => {
-                                /* TODO: open settings */ this.closeUserMenu();
+                                this.showSettings = true;
+                                this.closeUserMenu();
                               }}
                             >
                               <svg viewBox="0 0 24 24" fill="currentColor">
@@ -1087,6 +1092,11 @@ export class A2UIApp extends LitElement {
       </main>
 
       <a2ui-toast></a2ui-toast>
+
+      <a2ui-settings-panel
+        .open=${this.showSettings}
+        @close=${() => { this.showSettings = false; }}
+      ></a2ui-settings-panel>
     `;
   }
 }
