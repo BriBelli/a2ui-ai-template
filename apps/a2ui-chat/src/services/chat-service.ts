@@ -20,6 +20,8 @@ export interface ChatMessage {
   duration?: number;
   /** Search result images rendered as a visual strip */
   images?: string[];
+  /** Content style used for this response (e.g. "content", "analytical") */
+  style?: string;
 }
 
 /** Simplified message format for API history */
@@ -43,6 +45,7 @@ export interface ChatResponse {
   };
   _location?: boolean;
   _images?: string[];
+  _style?: string;
 }
 
 export interface LLMModel {

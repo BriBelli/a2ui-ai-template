@@ -168,8 +168,8 @@ export class A2UIChatMessage extends LitElement {
       background: var(--a2ui-bg-elevated);
     }
 
-    .duration {
-      font-size: 10px;
+    .duration, .style-badge {
+      text-transform: capitalize;
       color: var(--a2ui-text-tertiary);
     }
 
@@ -405,6 +405,9 @@ export class A2UIChatMessage extends LitElement {
               <span class="duration">${this.message.duration}s</span>
             ` : ''}
             <span>${this.formatTime(timestamp)}</span>
+            ${!isUser && this.message.style ? html`
+              <span class="style-badge">${this.message.style}</span>
+            ` : ''}
           </div>
           ${!isUser && uiConfig.maxSuggestions > 0 && this.message.suggestions?.length ? html`
             <div class="followups">

@@ -789,6 +789,7 @@ export class A2UIApp extends LitElement {
           suggestions: response.suggestions,
           duration: Math.round(elapsed * 10) / 10,
           images: response._images,
+          style: response._style,
         },
       ];
 
