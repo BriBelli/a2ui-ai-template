@@ -121,15 +121,19 @@ class UserLocation(BaseModel):
 
 class DataContextItem(BaseModel):
     """Pre-fetched data injected into the pipeline (passive mode)."""
-    source: str = Field(..., max_length=100)
+    source: str = Field(..., max_length=100, pattern=r"^[a-zA-Z0-9_\-\.]+$")
     label: Optional[str] = Field(None, max_length=200)
     data: Any = None
 
 
+VALID_CONTENT_STYLES = {"auto", "analytical", "content", "comparison", "howto", "quick"}
+VALID_PERFORMANCE_MODES = {"auto", "comprehensive", "optimized"}
+
+
 class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=10_000)
-    provider: Optional[str] = Field(None, max_length=50)
-    model: Optional[str] = Field(None, max_length=100)
+    provider: Optional[str] = Field(None, max_length=50, pattern=r"^[a-zA-Z0-9_\-]+$")
+    model: Optional[str] = Field(None, max_length=100, pattern=r"^[a-zA-Z0-9_\.\-]+$")
     history: List[HistoryMessage] = Field(default_factory=list)
     enableWebSearch: bool = True
     enableGeolocation: bool = True
@@ -142,12 +146,10 @@ class ChatRequest(BaseModel):
     contentStyle: str = Field(
         default="auto",
         max_length=30,
-        description="Content style: 'auto' (default), 'analytical', 'content', 'comparison', 'howto', or 'quick'",
     )
     performanceMode: str = Field(
         default="auto",
         max_length=30,
-        description="Performance mode: 'auto' (default), 'comprehensive', or 'optimized'",
     )
 
     @field_validator("history")
@@ -155,6 +157,27 @@ class ChatRequest(BaseModel):
     def limit_history(cls, v):
         if len(v) > 50:
             raise ValueError("History exceeds maximum of 50 messages")
+        return v
+
+    @field_validator("dataContext")
+    @classmethod
+    def limit_data_context(cls, v):
+        if v and len(v) > 10:
+            raise ValueError("dataContext exceeds maximum of 10 sources")
+        return v
+
+    @field_validator("contentStyle")
+    @classmethod
+    def validate_content_style(cls, v):
+        if v not in VALID_CONTENT_STYLES:
+            raise ValueError(f"Invalid contentStyle: {v}")
+        return v
+
+    @field_validator("performanceMode")
+    @classmethod
+    def validate_performance_mode(cls, v):
+        if v not in VALID_PERFORMANCE_MODES:
+            raise ValueError(f"Invalid performanceMode: {v}")
         return v
 
 

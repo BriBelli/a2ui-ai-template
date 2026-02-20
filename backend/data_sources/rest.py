@@ -175,12 +175,38 @@ class RESTDataSource(DataSource):
             return False
         return self.enabled
 
+    def _is_allowed_endpoint(self, endpoint: str, method: str) -> bool:
+        """Check if the endpoint is in the configured whitelist."""
+        if not self._endpoints:
+            return True
+        normalized = endpoint.rstrip("/")
+        for ep in self._endpoints:
+            if ep.path.rstrip("/") == normalized and ep.method == method.upper():
+                return True
+            if ep.path.rstrip("/") == normalized and method.upper() == "GET":
+                return True
+        return False
+
     async def query(
         self,
         endpoint: str,
         params: Optional[Dict[str, Any]] = None,
         method: str = "GET",
     ) -> Dict[str, Any]:
+        if not endpoint.startswith("/"):
+            endpoint = f"/{endpoint}"
+
+        if ".." in endpoint or "://" in endpoint:
+            logger.warning("Blocked path traversal/injection: %s", endpoint)
+            return {"success": False, "error": "invalid_endpoint"}
+
+        if not self._is_allowed_endpoint(endpoint, method):
+            logger.warning(
+                "Blocked non-whitelisted endpoint: %s %s (source: %s)",
+                method, endpoint, self.id,
+            )
+            return {"success": False, "error": "endpoint_not_allowed"}
+
         url = f"{self.base_url}{endpoint}"
         headers = {**self._auth_headers(), "Accept": "application/json"}
 

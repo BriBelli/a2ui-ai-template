@@ -71,6 +71,25 @@ export interface ProvidersResponse {
   providers: LLMProvider[];
 }
 
+function isValidStepEvent(payload: unknown): payload is StreamEvent {
+  if (!payload || typeof payload !== 'object') return false;
+  const p = payload as Record<string, unknown>;
+  return (
+    typeof p.id === 'string' &&
+    (p.status === 'start' || p.status === 'done') &&
+    typeof p.label === 'string'
+  );
+}
+
+function isValidChatResponse(data: unknown): data is Record<string, unknown> {
+  if (!data || typeof data !== 'object') return false;
+  const d = data as Record<string, unknown>;
+  if (d.text !== undefined && typeof d.text !== 'string') return false;
+  if (d.a2ui !== undefined && typeof d.a2ui !== 'object') return false;
+  return true;
+}
+
+
 export class ChatService {
   private baseUrl = '/api';
 
@@ -377,12 +396,20 @@ export class ChatService {
         try {
           const payload = JSON.parse(dataStr);
           if (eventType === 'complete') {
-            finalResponse = ChatService.recoverA2UIResponse(payload);
+            if (!isValidChatResponse(payload)) {
+              console.warn('[SSE] Invalid complete payload structure, skipping');
+              continue;
+            }
+            finalResponse = ChatService.recoverA2UIResponse(payload as Record<string, any>);
             if (finalResponse?.a2ui) {
               console.log('[A2UI] SSE response a2ui:', JSON.stringify(finalResponse.a2ui, null, 2));
             }
           } else if (eventType === 'step') {
-            onProgress?.('stream-event', undefined, payload as StreamEvent);
+            if (!isValidStepEvent(payload)) {
+              console.warn('[SSE] Invalid step payload, skipping');
+              continue;
+            }
+            onProgress?.('stream-event', undefined, payload);
           } else if (eventType === 'error') {
             throw new Error(payload.message || 'Stream error');
           }

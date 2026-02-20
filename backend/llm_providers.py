@@ -34,6 +34,45 @@ from content_styles import (
 logger = logging.getLogger(__name__)
 
 
+# ── Security: Input Sanitization ──────────────────────────────
+
+_INJECTION_PATTERNS = [
+    re.compile(r"ignore\s+(all\s+)?(previous|above|prior)\s+(instructions?|prompts?|rules?)", re.I),
+    re.compile(r"disregard\s+(all\s+)?(previous|above|prior|system)\s+(instructions?|prompts?|rules?)", re.I),
+    re.compile(r"you\s+are\s+now\s+(a|an|my)\s+", re.I),
+    re.compile(r"(system|assistant)\s*:\s*", re.I),
+    re.compile(r"<<<\s*(SYSTEM|END_SYSTEM|SYSTEM_INSTRUCTIONS|END_SYSTEM_INSTRUCTIONS)\s*>>>", re.I),
+    re.compile(r"\[INST\]|\[/INST\]|<\|im_start\|>|<\|im_end\|>", re.I),
+    re.compile(r"repeat\s+(the\s+)?(system\s+)?(prompt|instructions?|rules?)\s+(back|above|verbatim|exactly)", re.I),
+    re.compile(r"(print|output|show|reveal|display)\s+(your|the|system)\s+(prompt|instructions?|rules?|context)", re.I),
+    re.compile(r"act\s+as\s+(if\s+)?(you\s+are|a|an)\s+", re.I),
+    re.compile(r"pretend\s+(you\s+are|to\s+be|you're)\s+", re.I),
+    re.compile(r"jailbreak|DAN\s+mode|developer\s+mode|do\s+anything\s+now", re.I),
+]
+
+
+def _detect_injection(text: str) -> List[str]:
+    """Return list of matched injection pattern names (empty = clean)."""
+    hits: List[str] = []
+    for pattern in _INJECTION_PATTERNS:
+        if pattern.search(text):
+            hits.append(pattern.pattern[:60])
+    return hits
+
+
+def _sanitize_for_prompt(text: str) -> str:
+    """Strip characters that could break prompt delimiters."""
+    text = re.sub(r"<<<\s*\w+\s*>>>", "", text)
+    return text
+
+
+def _sanitize_label(text: str, max_len: int = 200) -> str:
+    """Sanitize a label/tag before embedding in a prompt context block."""
+    text = re.sub(r"<<<\s*\w+\s*>>>", "", text)
+    text = re.sub(r"[\n\r\x00]", " ", text)
+    return text[:max_len].strip()
+
+
 # ── Utilities ──────────────────────────────────────────────────
 
 
@@ -63,7 +102,7 @@ def _build_messages(
 
     messages: List[Dict[str, str]] = [{"role": "system", "content": system_prompt}]
     messages.extend(trimmed)
-    messages.append({"role": "user", "content": message})
+    messages.append({"role": "user", "content": f"<<<USER_MESSAGE>>>\n{message}\n<<<END_USER_MESSAGE>>>"})
     return messages
 
 
@@ -1229,6 +1268,19 @@ class LLMService:
 
         effective_history = history if history_active else None
 
+        # ── Security: sanitize input ──────────────────────────
+        injection_hits = _detect_injection(message)
+        if injection_hits:
+            logger.warning(
+                "⚠ INJECTION DETECTED ⚠  patterns=%s  message=%.200s",
+                injection_hits, message,
+            )
+        message = _sanitize_for_prompt(message)
+
+        if effective_history:
+            for msg in effective_history:
+                msg["content"] = _sanitize_for_prompt(msg["content"])
+
         logger.info(
             "══ GENERATE START ══  provider=%s  model=%s  style=%s  perf=%s",
             provider_id, model, content_style, performance_mode,
@@ -1377,7 +1429,7 @@ class LLMService:
         location_context = ""
         location_label = ""
         if do_location and user_location:
-            location_label = user_location.get("label", "")
+            location_label = _sanitize_label(user_location.get("label", ""), max_len=100)
             lat = user_location.get("lat")
             lng = user_location.get("lng")
             if location_label:
@@ -1483,7 +1535,7 @@ class LLMService:
         if data_context:
             passive_blocks: List[str] = []
             for dc in data_context:
-                label = dc.get("label") or dc.get("source") or "External Data"
+                label = _sanitize_label(dc.get("label") or dc.get("source") or "External Data")
                 import json as _json
                 serialized = _json.dumps(dc.get("data", {}), default=str, ensure_ascii=False)
                 if len(serialized) > 12_000:

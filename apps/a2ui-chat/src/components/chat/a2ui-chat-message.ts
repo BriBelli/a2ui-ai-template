@@ -363,6 +363,15 @@ export class A2UIChatMessage extends LitElement {
     });
   }
 
+  private _isSafeImageUrl(url: string): boolean {
+    try {
+      const parsed = new URL(url);
+      return parsed.protocol === 'https:' || parsed.protocol === 'http:';
+    } catch {
+      return false;
+    }
+  }
+
   render() {
     const { role, content, a2ui, timestamp, model } = this.message;
     const isUser = role === 'user';
@@ -395,7 +404,7 @@ export class A2UIChatMessage extends LitElement {
           `}
           ${!isUser && this.message.images?.length ? html`
             <div class="image-strip">
-              ${this.message.images.map(url => html`
+              ${this.message.images.filter(url => this._isSafeImageUrl(url)).map(url => html`
                 <a href=${url} target="_blank" rel="noopener noreferrer">
                   <img src=${url} alt="" loading="lazy" @error=${(e: Event) => { (e.target as HTMLElement).parentElement!.style.display = 'none'; }} />
                 </a>
