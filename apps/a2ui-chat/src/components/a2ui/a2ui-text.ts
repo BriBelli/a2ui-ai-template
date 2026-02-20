@@ -1,5 +1,6 @@
-import { LitElement, html, css } from 'lit';
+import { LitElement, html, css, unsafeCSS } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
+import { md, markdownStyles } from '../../services/markdown';
 
 @customElement('a2ui-text')
 export class A2UIText extends LitElement {
@@ -59,6 +60,8 @@ export class A2UIText extends LitElement {
       padding: var(--a2ui-space-1) var(--a2ui-space-2);
       border-radius: var(--a2ui-radius-sm);
     }
+
+    ${unsafeCSS(markdownStyles)}
   `;
 
   @property({ type: String }) content = '';
@@ -73,13 +76,13 @@ export class A2UIText extends LitElement {
       case 'h3':
         return html`<h3 class="text h3">${this.content}</h3>`;
       case 'caption':
-        return html`<span class="text caption">${this.content}</span>`;
+        return html`<span class="text caption">${md(this.content)}</span>`;
       case 'label':
         return html`<span class="text label">${this.content}</span>`;
       case 'code':
         return html`<code class="text code">${this.content}</code>`;
       default:
-        return html`<p class="text body">${this.content}</p>`;
+        return html`<div class="text body">${md(this.content)}</div>`;
     }
   }
 }

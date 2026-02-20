@@ -1,8 +1,9 @@
-import { LitElement, html, css } from 'lit';
+import { LitElement, html, css, unsafeCSS } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 import type { ChatMessage } from '../../services/chat-service';
 import { A2UIRenderer } from '../../services/a2ui-renderer';
 import { uiConfig } from '../../config/ui-config';
+import { md, markdownStyles } from '../../services/markdown';
 
 @customElement('a2ui-chat-message')
 export class A2UIChatMessage extends LitElement {
@@ -111,6 +112,7 @@ export class A2UIChatMessage extends LitElement {
     }
 
     .assistant .text-content {
+      white-space: normal;
       padding: var(--a2ui-space-1) 0;
     }
 
@@ -331,6 +333,9 @@ export class A2UIChatMessage extends LitElement {
         height: 85px;
       }
     }
+
+    /* ── Markdown (assistant text) ─────────────── */
+    ${unsafeCSS(markdownStyles)}
   `;
 
   @property({ type: Object }) message!: ChatMessage;
@@ -379,7 +384,7 @@ export class A2UIChatMessage extends LitElement {
           ` : html`
             <div class="bubble">
               ${content ? html`
-                <div class="text-content">${content}</div>
+                <div class="text-content">${md(content)}</div>
               ` : ''}
               ${a2ui ? html`
                 <div class="a2ui-content">

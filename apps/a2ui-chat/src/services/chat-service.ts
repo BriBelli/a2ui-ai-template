@@ -280,10 +280,13 @@ export class ChatService {
       // A2UI API response data
       const data = await response.json();
       if (!response.ok) {
-        // Surface the backend's actual error message
-        const errMsg =
-          data?.text || data?.error || `Server error (${response.status})`;
-        toast.error(errMsg);
+        const raw = data?.text || data?.error || '';
+        const isRateLimit = response.status === 429;
+        const errMsg = isRateLimit
+          ? 'Too many requests. Please wait a moment and try again.'
+          : raw || 'Something went wrong. Please try again.';
+
+        //toast.error(errMsg);
         return {
           text: errMsg,
           a2ui: {
@@ -293,8 +296,8 @@ export class ChatService {
                 id: 'err',
                 type: 'alert',
                 props: {
-                  variant: 'error',
-                  title: 'Error',
+                  variant: isRateLimit ? 'warning' : 'error',
+                  title: isRateLimit ? 'Rate Limited' : 'Error',
                   description: errMsg,
                 },
               },
@@ -322,11 +325,16 @@ export class ChatService {
       return result;
     } catch (error) {
       console.error('Chat API error:', error);
-      toast.error(
-        'Unable to reach the AI service. Check that the backend is running.'
-      );
+
+      const isTimeout =
+        error instanceof DOMException && error.name === 'AbortError';
+      const userMsg = isTimeout
+        ? 'The request took too long. Please try again or use a faster model.'
+        : 'Something went wrong. Please try again in a moment.';
+
+      toast.error(userMsg);
       return {
-        text: 'Unable to reach the AI service. Please check that the backend is running.',
+        text: userMsg,
         a2ui: {
           version: '1.0',
           components: [
@@ -335,11 +343,8 @@ export class ChatService {
               type: 'alert',
               props: {
                 variant: 'error',
-                title: 'Connection Error',
-                description:
-                  'The backend at ' +
-                  this.baseUrl +
-                  ' is not responding. Start it with: cd backend && python3 app.py',
+                title: isTimeout ? 'Request Timeout' : 'Something Went Wrong',
+                description: userMsg,
               },
             },
           ],

@@ -1,5 +1,6 @@
-import { LitElement, html, css, nothing } from 'lit';
+import { LitElement, html, css, nothing, unsafeCSS } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
+import { md, markdownStyles } from '../../services/markdown';
 
 export interface AccordionItem {
   id: string;
@@ -89,6 +90,8 @@ export class A2UIAccordion extends LitElement {
       color: var(--a2ui-text-secondary);
       line-height: 1.6;
     }
+
+    ${unsafeCSS(markdownStyles)}
   `;
 
   @property({ type: Array }) items: AccordionItem[] = [];
@@ -120,7 +123,7 @@ export class A2UIAccordion extends LitElement {
               </svg>
             </button>
             <div class="accordion-panel">
-              <div class="accordion-content">${item.content}</div>
+              <div class="accordion-content">${md(item.content)}</div>
             </div>
           </div>
         `)}

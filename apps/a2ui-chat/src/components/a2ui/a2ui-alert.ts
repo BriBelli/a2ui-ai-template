@@ -1,5 +1,6 @@
-import { LitElement, html, css, nothing } from 'lit';
+import { LitElement, html, css, nothing, unsafeCSS } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
+import { md, markdownStyles } from '../../services/markdown';
 
 /**
  * A2UI Alert — Status banner (Molecular component).
@@ -88,6 +89,8 @@ export class A2UIAlert extends LitElement {
       margin: 0;
       line-height: 1.5;
     }
+
+    ${unsafeCSS(markdownStyles)}
   `;
 
   @property({ type: String }) variant: 'default' | 'info' | 'success' | 'warning' | 'error' = 'default';
@@ -111,7 +114,7 @@ export class A2UIAlert extends LitElement {
         ${this.renderIcon()}
         <div class="alert-body">
           ${this.alertTitle ? html`<p class="alert-title">${this.alertTitle}</p>` : nothing}
-          ${this.description ? html`<p class="alert-description">${this.description}</p>` : nothing}
+          ${this.description ? html`<div class="alert-description">${md(this.description)}</div>` : nothing}
         </div>
       </div>
     `;
