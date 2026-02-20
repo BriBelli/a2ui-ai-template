@@ -890,14 +890,19 @@ _ANALYZER_SYSTEM = (
     "2. Whether real-time web search is needed (current events, prices, weather, live data)\n"
     "3. Whether the user's geographic location is relevant\n"
     "4. If search is needed, an optimized search query\n"
+    "5. Whether any available data sources should be queried, and if so which endpoints/questions to use\n"
     "Respond with ONLY a valid JSON object. No markdown, no explanation."
 )
 
 _ANALYZER_PROMPT_TEMPLATE = (
     "Content styles:\n{descriptions}\n\n"
+    "{data_sources_section}"
     "{context_section}"
     "User query: {query}\n\n"
-    'Reply with JSON: {{"style":"<style_id>","search":<true|false>,"location":<true|false>,"search_query":"<optimized query or empty>"}}'
+    'Reply with JSON: {{"style":"<style_id>","search":<true|false>,"location":<true|false>,'
+    '"search_query":"<optimized query or empty>",'
+    '"data_sources":[{{"source":"<source_id>","endpoint":"<path or question>","params":{{}}}}]}}\n'
+    "If no data sources are relevant, return an empty array for data_sources."
 )
 
 _ANALYZER_MODELS: List[tuple] = [
@@ -926,6 +931,7 @@ TOOL_WEB_SEARCH_ENV: Optional[bool] = _env_bool("A2UI_TOOL_WEB_SEARCH")
 TOOL_GEOLOCATION_ENV: Optional[bool] = _env_bool("A2UI_TOOL_GEOLOCATION")
 TOOL_HISTORY_ENV: Optional[bool] = _env_bool("A2UI_TOOL_HISTORY")
 TOOL_AI_CLASSIFIER_ENV: Optional[bool] = _env_bool("A2UI_TOOL_AI_CLASSIFIER")
+TOOL_DATA_SOURCES_ENV: Optional[bool] = _env_bool("A2UI_TOOL_DATA_SOURCES")
 
 
 def resolve_tool(env_override: Optional[bool], user_setting: bool, default: bool = True) -> bool:
@@ -993,7 +999,9 @@ class LLMService:
         - locked: True if the env variable forces a specific state
         """
         from tools import web_search as _ws
+        from data_sources import get_all_sources as _get_ds
 
+        ds_available = any(s.is_available() for s in _get_ds())
         tools = [
             {
                 "id": "web_search",
@@ -1028,6 +1036,15 @@ class LLMService:
                 "env_override": TOOL_AI_CLASSIFIER_ENV,
                 "locked": TOOL_AI_CLASSIFIER_ENV is not None,
             },
+            {
+                "id": "data_sources",
+                "name": "Data Sources",
+                "description": "Query configured external APIs and databases",
+                "default": True,
+                "env_override": TOOL_DATA_SOURCES_ENV,
+                "locked": TOOL_DATA_SOURCES_ENV is not None,
+                "available": ds_available,
+            },
         ]
         return tools
 
@@ -1048,6 +1065,8 @@ class LLMService:
             {"style": "content", "search": True, "location": False, "search_query": "..."}
         or ``None`` on failure (caller falls back to regex).
         """
+        from data_sources import get_analyzer_context
+
         context_parts: List[str] = []
 
         if history:
@@ -1061,8 +1080,12 @@ class LLMService:
         if context_parts:
             context_section = "\n".join(context_parts) + "\n\n"
 
+        ds_context = get_analyzer_context()
+        data_sources_section = f"{ds_context}\n\n" if ds_context else ""
+
         prompt = _ANALYZER_PROMPT_TEMPLATE.format(
             descriptions=STYLE_DESCRIPTIONS,
+            data_sources_section=data_sources_section,
             context_section=context_section,
             query=message[:500],
         )
@@ -1082,7 +1105,7 @@ class LLMService:
                             {"role": "system", "content": _ANALYZER_SYSTEM},
                             {"role": "user", "content": prompt},
                         ],
-                        max_tokens=150,
+                        max_tokens=300,
                         temperature=0,
                     )
                     text = (resp.choices[0].message.content or "").strip()
@@ -1090,7 +1113,7 @@ class LLMService:
                 elif provider_id == "anthropic":
                     resp = await provider.client.messages.create(
                         model=model_id,
-                        max_tokens=150,
+                        max_tokens=300,
                         system=_ANALYZER_SYSTEM,
                         messages=[{"role": "user", "content": prompt}],
                     )
@@ -1123,18 +1146,24 @@ class LLMService:
                     )
                     continue
 
+                ds_queries = result.get("data_sources") or []
+                if not isinstance(ds_queries, list):
+                    ds_queries = []
+
                 analysis = {
                     "style": style,
                     "search": bool(result.get("search", False)),
                     "location": bool(result.get("location", False)),
                     "search_query": str(result.get("search_query", "")),
+                    "data_sources": ds_queries,
                 }
 
                 logger.info(
-                    "── ANALYZE OK ──  %s via %s/%s  |  style=%s  search=%s  location=%s  query='%s'",
+                    "── ANALYZE OK ──  %s via %s/%s  |  style=%s  search=%s  location=%s  query='%s'  data_sources=%d",
                     message[:50], provider_id, model_id,
                     analysis["style"], analysis["search"],
                     analysis["location"], analysis["search_query"][:60],
+                    len(ds_queries),
                 )
                 return analysis
 
@@ -1164,6 +1193,8 @@ class LLMService:
         performance_mode: str = "auto",
         enable_web_search: bool = True,
         enable_geolocation: bool = True,
+        enable_data_sources: bool = True,
+        data_context: Optional[List[Dict[str, Any]]] = None,
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """Async generator that yields SSE events during response generation.
 
@@ -1194,6 +1225,7 @@ class LLMService:
         geolocation_allowed = resolve_tool(TOOL_GEOLOCATION_ENV, enable_geolocation)
         history_active = resolve_tool(TOOL_HISTORY_ENV, history is not None and len(history) > 0)
         classifier_active = resolve_tool(TOOL_AI_CLASSIFIER_ENV, True)
+        data_sources_allowed = resolve_tool(TOOL_DATA_SOURCES_ENV, enable_data_sources)
 
         effective_history = history if history_active else None
 
@@ -1203,8 +1235,8 @@ class LLMService:
         )
         logger.info("User message: %s", message[:200])
         logger.info(
-            "Tool gates: web_search=%s  geolocation=%s  history=%s  ai_analyzer=%s",
-            web_search_allowed, geolocation_allowed, history_active, classifier_active,
+            "Tool gates: web_search=%s  geolocation=%s  history=%s  ai_analyzer=%s  data_sources=%s",
+            web_search_allowed, geolocation_allowed, history_active, classifier_active, data_sources_allowed,
         )
         if effective_history:
             logger.info("History: %d messages", len(effective_history))
@@ -1215,7 +1247,7 @@ class LLMService:
         yield {"event": "step", "data": {
             "id": "tools", "status": "done",
             "label": "Tools configured",
-            "detail": f"search={web_search_allowed} geo={geolocation_allowed} history={history_active} ai={classifier_active}",
+            "detail": f"search={web_search_allowed} geo={geolocation_allowed} history={history_active} ai={classifier_active} data={data_sources_allowed}",
         }}
 
         # ── Step 1: AI Intent Analysis (FIRST) ────────────────
@@ -1234,6 +1266,7 @@ class LLMService:
         ai_wants_search = False
         ai_wants_location = False
         ai_search_query = ""
+        ai_data_queries: List[Dict[str, Any]] = []
         style_id = DEFAULT_STYLE
 
         yield {"event": "step", "data": {"id": "analyzer", "status": "start", "label": "Analyzing intent"}}
@@ -1249,9 +1282,10 @@ class LLMService:
                     ai_wants_search = analysis["search"]
                     ai_wants_location = analysis["location"]
                     ai_search_query = analysis["search_query"]
+                    ai_data_queries = analysis.get("data_sources") or []
                     logger.info(
-                        "── ANALYZE ──  tools: search=%s  location=%s  query='%s'",
-                        ai_wants_search, ai_wants_location, ai_search_query[:60],
+                        "── ANALYZE ──  tools: search=%s  location=%s  query='%s'  data_sources=%d",
+                        ai_wants_search, ai_wants_location, ai_search_query[:60], len(ai_data_queries),
                     )
                 else:
                     logger.warning("── ANALYZE ──  AI failed, falling back to regex for tool decisions")
@@ -1270,9 +1304,10 @@ class LLMService:
                 ai_wants_search = analysis["search"]
                 ai_wants_location = analysis["location"]
                 ai_search_query = analysis["search_query"]
+                ai_data_queries = analysis.get("data_sources") or []
                 logger.info(
-                    "── ANALYZE OK ──  style=%s  search=%s  location=%s  query='%s'",
-                    style_id, ai_wants_search, ai_wants_location, ai_search_query[:60],
+                    "── ANALYZE OK ──  style=%s  search=%s  location=%s  query='%s'  data_sources=%d",
+                    style_id, ai_wants_search, ai_wants_location, ai_search_query[:60], len(ai_data_queries),
                 )
             else:
                 style_id = DEFAULT_STYLE
@@ -1434,6 +1469,80 @@ class LLMService:
         else:
             logger.info("── SEARCH ──  not needed (AI decided)")
 
+        # ── Step 3.5: Data source queries ─────────────────────
+        from data_sources import (
+            query_sources,
+            format_results_for_context,
+            get_rules_context,
+        )
+
+        ds_context = ""
+        ds_metadata: Optional[Dict[str, Any]] = None
+
+        # Passive injection: data_context provided in request body
+        if data_context:
+            passive_blocks: List[str] = []
+            for dc in data_context:
+                label = dc.get("label") or dc.get("source") or "External Data"
+                import json as _json
+                serialized = _json.dumps(dc.get("data", {}), default=str, ensure_ascii=False)
+                if len(serialized) > 12_000:
+                    serialized = serialized[:12_000] + "\n... (truncated)"
+                passive_blocks.append(f"[Data Source: {label}]\n{serialized}")
+            ds_context = "\n".join(passive_blocks)
+            ds_metadata = {"passive": True, "sources": len(data_context)}
+            logger.info(
+                "── DATA SOURCES ──  passive injection: %d sources, %d chars",
+                len(data_context), len(ds_context),
+            )
+
+        # Active queries: AI-decided data source queries
+        elif ai_data_queries and data_sources_allowed:
+            yield {"event": "step", "data": {
+                "id": "data_sources", "status": "start",
+                "label": "Querying data sources",
+                "detail": f"{len(ai_data_queries)} queries",
+            }}
+
+            results = await query_sources(ai_data_queries)
+            ds_context = format_results_for_context(results)
+            successful = [r for r in results if r.get("success")]
+            failed = [r for r in results if not r.get("success")]
+
+            ds_metadata = {
+                "active": True,
+                "queries": len(ai_data_queries),
+                "successful": len(successful),
+                "failed": len(failed),
+            }
+
+            logger.info(
+                "── DATA SOURCES OK ──  %d/%d queries succeeded, context=%d chars",
+                len(successful), len(ai_data_queries), len(ds_context),
+            )
+            for r in successful:
+                logger.info(
+                    "  source[%s]: %d records",
+                    r.get("_source_id", "?"), r.get("record_count", 0),
+                )
+
+            yield {"event": "step", "data": {
+                "id": "data_sources", "status": "done",
+                "label": f"Data received ({len(successful)} sources)",
+                "detail": f"{sum(r.get('record_count', 0) for r in successful)} records",
+            }}
+
+        elif ai_data_queries and not data_sources_allowed:
+            logger.info("── DATA SOURCES ──  AI requested but tool disabled by user/env")
+        else:
+            logger.info("── DATA SOURCES ──  not needed")
+
+        if ds_context:
+            augmented_message = f"{ds_context}\n\n{augmented_message}"
+
+        # Data source rules (injected into system prompt context)
+        ds_rules = get_rules_context()
+
         # ── Step 3b: Style prompt setup ───────────────────────
         system_prompt = get_system_prompt(style_id)
         component_priority = get_component_priority(style_id)
@@ -1452,6 +1561,9 @@ class LLMService:
                     "Auto-degraded: prompt %dB exceeds %d%% of WAF budget → %d",
                     prompt_bytes, int(_AUTO_DEGRADE_THRESHOLD * 100), max_body_bytes,
                 )
+
+        if ds_rules:
+            system_prompt = f"{system_prompt}\n\n{ds_rules}"
 
         if location_context:
             augmented_message = f"{location_context}{augmented_message}"
@@ -1498,6 +1610,9 @@ class LLMService:
         elif search_images:
             logger.info("── IMAGES ──  suppressed %d images (query not visual)", len(search_images))
 
+        if ds_metadata:
+            response["_data_sources"] = ds_metadata
+
         response["_style"] = style_id
         response["_performance"] = performance_mode
 
@@ -1518,6 +1633,8 @@ class LLMService:
         performance_mode: str = "auto",
         enable_web_search: bool = True,
         enable_geolocation: bool = True,
+        enable_data_sources: bool = True,
+        data_context: Optional[List[Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
         """Non-streaming wrapper — collects the final result from generate_stream."""
         result: Dict[str, Any] = {}
@@ -1529,6 +1646,8 @@ class LLMService:
             performance_mode=performance_mode,
             enable_web_search=enable_web_search,
             enable_geolocation=enable_geolocation,
+            enable_data_sources=enable_data_sources,
+            data_context=data_context,
         ):
             if event["event"] == "complete":
                 result = event["data"]

@@ -1,12 +1,12 @@
-import { LitElement, html, css, nothing } from 'lit';
-import { customElement, property, state } from 'lit/decorators.js';
+import { LitElement, html, css, nothing } from "lit";
+import { customElement, property, state } from "lit/decorators.js";
 import {
   aiConfig,
   setAIConfig,
   type ContentStyle,
   type LoadingDisplay,
   type PerformanceMode,
-} from '../config/ui-config';
+} from "../config/ui-config";
 
 interface StyleOption {
   id: string;
@@ -23,7 +23,7 @@ interface ToolState {
   locked: boolean;
 }
 
-@customElement('a2ui-settings-panel')
+@customElement("a2ui-settings-panel")
 export class A2UISettingsPanel extends LitElement {
   static styles = css`
     :host {
@@ -41,8 +41,12 @@ export class A2UISettingsPanel extends LitElement {
     }
 
     @keyframes fadeIn {
-      from { opacity: 0; }
-      to { opacity: 1; }
+      from {
+        opacity: 0;
+      }
+      to {
+        opacity: 1;
+      }
     }
 
     /* ── Panel ─────────────────────────────────────────── */
@@ -64,8 +68,12 @@ export class A2UISettingsPanel extends LitElement {
     }
 
     @keyframes slideIn {
-      from { transform: translateX(100%); }
-      to { transform: translateX(0); }
+      from {
+        transform: translateX(100%);
+      }
+      to {
+        transform: translateX(0);
+      }
     }
 
     /* ── Header ────────────────────────────────────────── */
@@ -97,8 +105,9 @@ export class A2UISettingsPanel extends LitElement {
       border-radius: var(--a2ui-radius-md);
       color: var(--a2ui-text-secondary);
       cursor: pointer;
-      transition: background-color var(--a2ui-transition-fast),
-                  color var(--a2ui-transition-fast);
+      transition:
+        background-color var(--a2ui-transition-fast),
+        color var(--a2ui-transition-fast);
     }
 
     .close-btn:hover {
@@ -187,8 +196,9 @@ export class A2UISettingsPanel extends LitElement {
       color: var(--a2ui-text-primary);
       cursor: pointer;
       min-width: 130px;
-      transition: border-color var(--a2ui-transition-fast),
-                  box-shadow var(--a2ui-transition-fast);
+      transition:
+        border-color var(--a2ui-transition-fast),
+        box-shadow var(--a2ui-transition-fast);
       background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='%239aa0a6'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
       background-repeat: no-repeat;
       background-position: right 8px center;
@@ -227,11 +237,13 @@ export class A2UISettingsPanel extends LitElement {
       border: 1px solid var(--a2ui-border-default);
       border-radius: 11px;
       cursor: pointer;
-      transition: background-color 0.2s ease, border-color 0.2s ease;
+      transition:
+        background-color 0.2s ease,
+        border-color 0.2s ease;
     }
 
     .toggle-track::after {
-      content: '';
+      content: "";
       position: absolute;
       top: 2px;
       left: 2px;
@@ -239,7 +251,9 @@ export class A2UISettingsPanel extends LitElement {
       height: 16px;
       background: var(--a2ui-text-secondary);
       border-radius: 50%;
-      transition: transform 0.2s ease, background-color 0.2s ease;
+      transition:
+        transform 0.2s ease,
+        background-color 0.2s ease;
     }
 
     .toggle input:checked + .toggle-track {
@@ -270,8 +284,9 @@ export class A2UISettingsPanel extends LitElement {
       font-family: var(--a2ui-font-family);
       font-size: var(--a2ui-text-sm);
       color: var(--a2ui-text-primary);
-      transition: border-color var(--a2ui-transition-fast),
-                  box-shadow var(--a2ui-transition-fast);
+      transition:
+        border-color var(--a2ui-transition-fast),
+        box-shadow var(--a2ui-transition-fast);
     }
 
     .field-number::-webkit-inner-spin-button,
@@ -337,6 +352,7 @@ export class A2UISettingsPanel extends LitElement {
   @state() private loadingDisplay: LoadingDisplay = aiConfig.loadingDisplay;
   @state() private webSearch = aiConfig.webSearch;
   @state() private geolocation = aiConfig.geolocation;
+  @state() private dataSources = aiConfig.dataSources;
   @state() private conversationHistory = aiConfig.conversationHistory;
   @state() private maxHistoryMessages = aiConfig.maxHistoryMessages;
   @state() private styles: StyleOption[] = [];
@@ -354,7 +370,9 @@ export class A2UISettingsPanel extends LitElement {
       this.fetchStyles();
     }
     if (A2UISettingsPanel._cachedTools) {
-      this.toolStates = new Map(A2UISettingsPanel._cachedTools.map(t => [t.id, t]));
+      this.toolStates = new Map(
+        A2UISettingsPanel._cachedTools.map((t) => [t.id, t]),
+      );
     } else {
       this.fetchTools();
     }
@@ -366,6 +384,7 @@ export class A2UISettingsPanel extends LitElement {
     this.loadingDisplay = aiConfig.loadingDisplay;
     this.webSearch = aiConfig.webSearch;
     this.geolocation = aiConfig.geolocation;
+    this.dataSources = aiConfig.dataSources;
     this.conversationHistory = aiConfig.conversationHistory;
     this.maxHistoryMessages = aiConfig.maxHistoryMessages;
   }
@@ -376,7 +395,7 @@ export class A2UISettingsPanel extends LitElement {
 
   private async fetchStyles() {
     try {
-      const resp = await fetch('/api/styles');
+      const resp = await fetch("/api/styles");
       if (resp.ok) {
         const data = await resp.json();
         this.styles = data.styles ?? [];
@@ -384,23 +403,35 @@ export class A2UISettingsPanel extends LitElement {
       }
     } catch {
       this.styles = [
-        { id: 'analytical', name: 'Analytical', description: 'Data dashboards' },
-        { id: 'content', name: 'Content', description: 'Narrative & editorial' },
-        { id: 'comparison', name: 'Comparison', description: 'Side-by-side analysis' },
-        { id: 'howto', name: 'How-To', description: 'Step-by-step guides' },
-        { id: 'quick', name: 'Quick Answer', description: 'Concise responses' },
+        {
+          id: "analytical",
+          name: "Analytical",
+          description: "Data dashboards",
+        },
+        {
+          id: "content",
+          name: "Content",
+          description: "Narrative & editorial",
+        },
+        {
+          id: "comparison",
+          name: "Comparison",
+          description: "Side-by-side analysis",
+        },
+        { id: "howto", name: "How-To", description: "Step-by-step guides" },
+        { id: "quick", name: "Quick Answer", description: "Concise responses" },
       ];
     }
   }
 
   private async fetchTools() {
     try {
-      const resp = await fetch('/api/tools');
+      const resp = await fetch("/api/tools");
       if (resp.ok) {
         const data = await resp.json();
         const tools: ToolState[] = data.tools ?? [];
         A2UISettingsPanel._cachedTools = tools;
-        this.toolStates = new Map(tools.map(t => [t.id, t]));
+        this.toolStates = new Map(tools.map((t) => [t.id, t]));
       }
     } catch {
       // tools endpoint unavailable — no locking
@@ -408,13 +439,15 @@ export class A2UISettingsPanel extends LitElement {
   }
 
   updated(changed: Map<string, unknown>) {
-    if (changed.has('open') && this.open) {
+    if (changed.has("open") && this.open) {
       this.syncFromConfig();
     }
   }
 
   private close() {
-    this.dispatchEvent(new CustomEvent('close', { bubbles: true, composed: true }));
+    this.dispatchEvent(
+      new CustomEvent("close", { bubbles: true, composed: true }),
+    );
   }
 
   private handleContentStyle(e: Event) {
@@ -423,29 +456,37 @@ export class A2UISettingsPanel extends LitElement {
   }
 
   private handlePerformance(e: Event) {
-    this.performanceMode = (e.target as HTMLSelectElement).value as PerformanceMode;
+    this.performanceMode = (e.target as HTMLSelectElement)
+      .value as PerformanceMode;
     setAIConfig({ performanceMode: this.performanceMode });
   }
 
   private handleLoadingDisplay(e: Event) {
-    this.loadingDisplay = (e.target as HTMLSelectElement).value as LoadingDisplay;
+    this.loadingDisplay = (e.target as HTMLSelectElement)
+      .value as LoadingDisplay;
     setAIConfig({ loadingDisplay: this.loadingDisplay });
   }
 
   private handleWebSearch() {
-    if (this.isToolLocked('web_search')) return;
+    if (this.isToolLocked("web_search")) return;
     this.webSearch = !this.webSearch;
     setAIConfig({ webSearch: this.webSearch });
   }
 
   private handleGeolocation() {
-    if (this.isToolLocked('geolocation')) return;
+    if (this.isToolLocked("geolocation")) return;
     this.geolocation = !this.geolocation;
     setAIConfig({ geolocation: this.geolocation });
   }
 
+  private handleDataSources() {
+    if (this.isToolLocked("data_sources")) return;
+    this.dataSources = !this.dataSources;
+    setAIConfig({ dataSources: this.dataSources });
+  }
+
   private handleHistory() {
-    if (this.isToolLocked('history')) return;
+    if (this.isToolLocked("history")) return;
     this.conversationHistory = !this.conversationHistory;
     setAIConfig({ conversationHistory: this.conversationHistory });
   }
@@ -458,7 +499,6 @@ export class A2UISettingsPanel extends LitElement {
     }
   }
 
-
   render() {
     if (!this.open) return nothing;
 
@@ -467,9 +507,15 @@ export class A2UISettingsPanel extends LitElement {
       <aside class="panel" role="dialog" aria-label="Settings">
         <div class="panel-header">
           <h2 class="panel-title">Settings</h2>
-          <button class="close-btn" @click=${this.close} aria-label="Close settings">
+          <button
+            class="close-btn"
+            @click=${this.close}
+            aria-label="Close settings"
+          >
             <svg viewBox="0 0 24 24" fill="currentColor">
-              <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+              <path
+                d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"
+              />
             </svg>
           </button>
         </div>
@@ -484,16 +530,29 @@ export class A2UISettingsPanel extends LitElement {
               <div class="field-row">
                 <div class="field-info">
                   <p class="field-label">Content Style</p>
-                  <p class="field-desc">How responses are structured and presented</p>
+                  <p class="field-desc">
+                    How responses are structured and presented
+                  </p>
                 </div>
                 <select
                   class="field-select"
                   @change=${this.handleContentStyle}
                   aria-label="Content style"
                 >
-                  <option value="auto" ?selected=${this.contentStyle === 'auto'}>Auto</option>
+                  <option
+                    value="auto"
+                    ?selected=${this.contentStyle === "auto"}
+                  >
+                    Auto
+                  </option>
                   ${this.styles.map(
-                    (s) => html`<option value=${s.id} ?selected=${this.contentStyle === s.id}>${s.name}</option>`,
+                    (s) =>
+                      html`<option
+                        value=${s.id}
+                        ?selected=${this.contentStyle === s.id}
+                      >
+                        ${s.name}
+                      </option>`,
                   )}
                 </select>
               </div>
@@ -504,16 +563,33 @@ export class A2UISettingsPanel extends LitElement {
               <div class="field-row">
                 <div class="field-info">
                   <p class="field-label">Performance</p>
-                  <p class="field-desc">Controls token usage, context, and cost</p>
+                  <p class="field-desc">
+                    Controls token usage, context, and cost
+                  </p>
                 </div>
                 <select
                   class="field-select"
                   @change=${this.handlePerformance}
                   aria-label="Performance mode"
                 >
-                  <option value="auto" ?selected=${this.performanceMode === 'auto'}>Auto</option>
-                  <option value="comprehensive" ?selected=${this.performanceMode === 'comprehensive'}>Comprehensive</option>
-                  <option value="optimized" ?selected=${this.performanceMode === 'optimized'}>Optimized</option>
+                  <option
+                    value="auto"
+                    ?selected=${this.performanceMode === "auto"}
+                  >
+                    Auto
+                  </option>
+                  <option
+                    value="comprehensive"
+                    ?selected=${this.performanceMode === "comprehensive"}
+                  >
+                    Comprehensive
+                  </option>
+                  <option
+                    value="optimized"
+                    ?selected=${this.performanceMode === "optimized"}
+                  >
+                    Optimized
+                  </option>
                 </select>
               </div>
             </div>
@@ -523,26 +599,52 @@ export class A2UISettingsPanel extends LitElement {
               <div class="field-row">
                 <div class="field-info">
                   <p class="field-label">Loading Display</p>
-                  <p class="field-desc">Detail level for the thinking indicator</p>
+                  <p class="field-desc">
+                    Detail level for the thinking indicator
+                  </p>
                 </div>
                 <select
                   class="field-select"
                   @change=${this.handleLoadingDisplay}
                   aria-label="Loading display level"
                 >
-                  <option value="comprehensive" ?selected=${this.loadingDisplay === 'comprehensive'}>Comprehensive</option>
-                  <option value="moderate" ?selected=${this.loadingDisplay === 'moderate'}>Moderate</option>
-                  <option value="basic" ?selected=${this.loadingDisplay === 'basic'}>Basic</option>
+                  <option
+                    value="comprehensive"
+                    ?selected=${this.loadingDisplay === "comprehensive"}
+                  >
+                    Comprehensive
+                  </option>
+                  <option
+                    value="moderate"
+                    ?selected=${this.loadingDisplay === "moderate"}
+                  >
+                    Moderate
+                  </option>
+                  <option
+                    value="basic"
+                    ?selected=${this.loadingDisplay === "basic"}
+                  >
+                    Basic
+                  </option>
                 </select>
               </div>
             </div>
 
             <!-- Web Search -->
-            <div class="field ${this.isToolLocked('web_search') ? 'locked' : ''}">
+            <div
+              class="field ${this.isToolLocked("web_search") ? "locked" : ""}"
+            >
               <div class="field-row">
                 <div class="field-info">
-                  <p class="field-label">Web Search${this.isToolLocked('web_search') ? html`<span class="locked-badge">Locked</span>` : ''}</p>
-                  <p class="field-desc">Search the web for current information</p>
+                  <p class="field-label">
+                    Web
+                    Search${this.isToolLocked("web_search")
+                      ? html`<span class="locked-badge">Locked</span>`
+                      : ""}
+                  </p>
+                  <p class="field-desc">
+                    Search the web for current information
+                  </p>
                 </div>
                 <label class="toggle">
                   <input
@@ -556,17 +658,51 @@ export class A2UISettingsPanel extends LitElement {
             </div>
 
             <!-- Geolocation -->
-            <div class="field ${this.isToolLocked('geolocation') ? 'locked' : ''}">
+            <div
+              class="field ${this.isToolLocked("geolocation") ? "locked" : ""}"
+            >
               <div class="field-row">
                 <div class="field-info">
-                  <p class="field-label">Geolocation${this.isToolLocked('geolocation') ? html`<span class="locked-badge">Locked</span>` : ''}</p>
-                  <p class="field-desc">Use device location for weather and local queries</p>
+                  <p class="field-label">
+                    Geolocation${this.isToolLocked("geolocation")
+                      ? html`<span class="locked-badge">Locked</span>`
+                      : ""}
+                  </p>
+                  <p class="field-desc">
+                    Use device location for weather and local queries
+                  </p>
                 </div>
                 <label class="toggle">
                   <input
                     type="checkbox"
                     .checked=${this.geolocation}
                     @change=${this.handleGeolocation}
+                  />
+                  <span class="toggle-track"></span>
+                </label>
+              </div>
+            </div>
+
+            <div
+              class="field"
+              style="opacity: ${this.isToolLocked("data_sources") ? "0.5" : "1"}">
+              <div class="field-row">
+                <div class="field-info">
+                  <p class="field-label">
+                    Data
+                    Sources${this.isToolLocked("data_sources")
+                      ? html`<span class="locked-badge">Locked</span>`
+                      : ""}
+                  </p>
+                  <p class="field-desc">
+                    Query configured external APIs and databases
+                  </p>
+                </div>
+                <label class="toggle">
+                  <input
+                    type="checkbox"
+                    .checked=${this.dataSources}
+                    @change=${this.handleDataSources}
                   />
                   <span class="toggle-track"></span>
                 </label>
@@ -581,11 +717,17 @@ export class A2UISettingsPanel extends LitElement {
             <p class="section-label">Conversation</p>
 
             <!-- History -->
-            <div class="field ${this.isToolLocked('history') ? 'locked' : ''}">
+            <div class="field ${this.isToolLocked("history") ? "locked" : ""}">
               <div class="field-row">
                 <div class="field-info">
-                  <p class="field-label">History${this.isToolLocked('history') ? html`<span class="locked-badge">Locked</span>` : ''}</p>
-                  <p class="field-desc">Include previous messages for context</p>
+                  <p class="field-label">
+                    History${this.isToolLocked("history")
+                      ? html`<span class="locked-badge">Locked</span>`
+                      : ""}
+                  </p>
+                  <p class="field-desc">
+                    Include previous messages for context
+                  </p>
                 </div>
                 <label class="toggle">
                   <input
@@ -617,7 +759,6 @@ export class A2UISettingsPanel extends LitElement {
               </div>
             </div>
           </div>
-
         </div>
       </aside>
     `;

@@ -12,7 +12,7 @@ Security:
 
 import logging
 import os
-from typing import List, Optional
+from typing import Any, List, Optional
 
 import json as _json
 
@@ -26,6 +26,7 @@ from slowapi.errors import RateLimitExceeded
 import uvicorn
 
 from content_styles import get_available_styles
+from data_sources import get_available_sources
 from llm_providers import llm_service
 
 logger = logging.getLogger(__name__)
@@ -118,6 +119,13 @@ class UserLocation(BaseModel):
     label: Optional[str] = None
 
 
+class DataContextItem(BaseModel):
+    """Pre-fetched data injected into the pipeline (passive mode)."""
+    source: str = Field(..., max_length=100)
+    label: Optional[str] = Field(None, max_length=200)
+    data: Any = None
+
+
 class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=10_000)
     provider: Optional[str] = Field(None, max_length=50)
@@ -125,7 +133,12 @@ class ChatRequest(BaseModel):
     history: List[HistoryMessage] = Field(default_factory=list)
     enableWebSearch: bool = True
     enableGeolocation: bool = True
+    enableDataSources: bool = True
     userLocation: Optional[UserLocation] = None
+    dataContext: Optional[List[DataContextItem]] = Field(
+        default=None,
+        description="Pre-fetched external data injected into the pipeline (passive mode)",
+    )
     contentStyle: str = Field(
         default="auto",
         max_length=30,
@@ -184,6 +197,13 @@ def get_tools(request: Request):
     return JSONResponse(content={"tools": llm_service.get_tool_states()})
 
 
+@app.get("/api/data-sources")
+@limiter.limit("60/minute")
+def get_data_sources(request: Request):
+    """Return configured data sources and their availability."""
+    return JSONResponse(content={"sources": get_available_sources()})
+
+
 # A2UI Chat endpoint — returns structured A2UI responses
 # Supports both regular JSON and SSE streaming (Accept: text/event-stream).
 @app.post("/api/chat")
@@ -211,6 +231,9 @@ async def chat(request: Request, body: ChatRequest):
 
     history_dicts = [h.model_dump() for h in body.history]
     location_dict = body.userLocation.model_dump() if body.userLocation else None
+    data_context_dicts = (
+        [dc.model_dump() for dc in body.dataContext] if body.dataContext else None
+    )
     accept = request.headers.get("accept", "")
     wants_sse = "text/event-stream" in accept
 
@@ -227,6 +250,8 @@ async def chat(request: Request, body: ChatRequest):
                     performance_mode=body.performanceMode,
                     enable_web_search=body.enableWebSearch,
                     enable_geolocation=body.enableGeolocation,
+                    enable_data_sources=body.enableDataSources,
+                    data_context=data_context_dicts,
                 ):
                     etype = event.get("event", "message")
                     payload = _json.dumps(event.get("data", {}), default=str)
@@ -258,6 +283,8 @@ async def chat(request: Request, body: ChatRequest):
             performance_mode=body.performanceMode,
             enable_web_search=body.enableWebSearch,
             enable_geolocation=body.enableGeolocation,
+            enable_data_sources=body.enableDataSources,
+            data_context=data_context_dicts,
         )
         return JSONResponse(content=response)
     except ValueError as e:

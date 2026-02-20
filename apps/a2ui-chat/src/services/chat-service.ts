@@ -254,6 +254,7 @@ export class ChatService {
         model,
         enableWebSearch: aiConfig.webSearch,
         enableGeolocation: aiConfig.geolocation,
+        enableDataSources: aiConfig.dataSources,
         contentStyle: aiConfig.contentStyle,
         performanceMode: aiConfig.performanceMode,
         ...(location && { userLocation: location }),

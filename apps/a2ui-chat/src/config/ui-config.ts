@@ -65,6 +65,11 @@ export interface AIConfig {
   geolocation: boolean;
 
   /**
+   * Enable data sources tool for querying configured external APIs
+   */
+  dataSources: boolean;
+
+  /**
    * Content style for response presentation.
    * - 'auto': Classify intent automatically (default)
    * - 'analytical': Data dashboards with KPIs, charts, tables
@@ -113,6 +118,7 @@ export const aiConfig: AIConfig = {
   maxHistoryMessages: 20,
   webSearch: true,
   geolocation: true,
+  dataSources: true,
   contentStyle: 'auto',
   performanceMode: 'auto',
   loadingDisplay: 'moderate',
