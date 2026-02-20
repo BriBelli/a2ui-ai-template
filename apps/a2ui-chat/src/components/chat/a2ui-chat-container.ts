@@ -411,6 +411,7 @@ export class A2UIChatContainer extends LitElement {
               ${this.messages.map(msg => html`
                 <a2ui-chat-message
                   .message=${msg}
+                  .editable=${msg.role === 'user' && !this.isLoading}
                 ></a2ui-chat-message>
               `)}
               ${this.isLoading ? this.renderLoading() : ''}

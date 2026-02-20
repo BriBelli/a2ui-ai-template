@@ -672,6 +672,21 @@ export class A2UIApp extends LitElement {
 
   // ── Chat actions ───────────────────────────────────────
 
+  private handleEditMessage(e: CustomEvent<{ messageId: string; newContent: string }>) {
+    const { messageId, newContent } = e.detail;
+    if (this.isLoading) return;
+
+    const idx = this.messages.findIndex(m => m.id === messageId);
+    if (idx === -1) return;
+
+    this.messages = this.messages.slice(0, idx);
+    this.persistThread();
+
+    this.handleSendMessage(new CustomEvent('send-message', {
+      detail: { message: newContent },
+    }));
+  }
+
   private async handleSendMessage(e: CustomEvent<{ message: string }>) {
     const { message } = e.detail;
     if (!message.trim()) return;
@@ -1090,6 +1105,7 @@ export class A2UIApp extends LitElement {
           .thinkingSteps=${this.thinkingSteps}
           .loadingDisplay=${aiConfig.loadingDisplay}
           @send-message=${this.handleSendMessage}
+          @edit-message=${this.handleEditMessage}
         ></a2ui-chat-container>
       </main>
 

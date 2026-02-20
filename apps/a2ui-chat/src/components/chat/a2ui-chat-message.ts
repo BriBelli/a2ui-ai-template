@@ -1,5 +1,5 @@
-import { LitElement, html, css, unsafeCSS } from 'lit';
-import { customElement, property } from 'lit/decorators.js';
+import { LitElement, html, css, unsafeCSS, nothing } from 'lit';
+import { customElement, property, state } from 'lit/decorators.js';
 import type { ChatMessage } from '../../services/chat-service';
 import { A2UIRenderer } from '../../services/a2ui-renderer';
 import { uiConfig } from '../../config/ui-config';
@@ -175,6 +175,87 @@ export class A2UIChatMessage extends LitElement {
       color: var(--a2ui-text-tertiary);
     }
 
+    /* ── Edit mode ────────────────────────────────────── */
+
+    .user .bubble {
+      cursor: default;
+    }
+
+    .user .bubble.editable {
+      cursor: pointer;
+    }
+
+    .edit-container {
+      display: flex;
+      flex-direction: column;
+      gap: var(--a2ui-space-2);
+      width: 100%;
+      max-width: 600px;
+    }
+
+    .edit-textarea {
+      width: 100%;
+      min-height: 60px;
+      max-height: 200px;
+      padding: var(--a2ui-space-3) var(--a2ui-space-4);
+      background: var(--a2ui-bg-primary);
+      color: var(--a2ui-text-primary);
+      border: 1.5px solid var(--a2ui-accent);
+      border-radius: var(--a2ui-radius-xl);
+      border-bottom-right-radius: var(--a2ui-radius-sm);
+      font-family: var(--a2ui-font-family);
+      font-size: var(--a2ui-text-base);
+      line-height: var(--a2ui-leading-relaxed);
+      resize: vertical;
+      outline: none;
+      box-sizing: border-box;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .edit-textarea:focus {
+      box-shadow: 0 0 0 3px rgba(66, 133, 244, 0.15);
+    }
+
+    .edit-actions {
+      display: flex;
+      gap: var(--a2ui-space-2);
+      justify-content: flex-end;
+    }
+
+    .edit-btn {
+      padding: var(--a2ui-space-1) var(--a2ui-space-3);
+      border-radius: var(--a2ui-radius-md);
+      border: none;
+      font-family: var(--a2ui-font-family);
+      font-size: var(--a2ui-text-sm);
+      font-weight: var(--a2ui-font-medium);
+      cursor: pointer;
+      transition: background 0.15s ease, opacity 0.15s ease;
+    }
+
+    .edit-btn.cancel {
+      background: var(--a2ui-bg-tertiary);
+      color: var(--a2ui-text-secondary);
+    }
+
+    .edit-btn.cancel:hover {
+      background: var(--a2ui-bg-elevated);
+    }
+
+    .edit-btn.submit {
+      background: var(--a2ui-accent);
+      color: var(--a2ui-text-inverse);
+    }
+
+    .edit-btn.submit:hover {
+      opacity: 0.9;
+    }
+
+    .edit-btn.submit:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
     /* ── Image strip ──────────────────────────────────── */
 
     .image-strip {
@@ -339,6 +420,56 @@ export class A2UIChatMessage extends LitElement {
   `;
 
   @property({ type: Object }) message!: ChatMessage;
+  @property({ type: Boolean }) editable = false;
+  @state() private _editing = false;
+  @state() private _editText = '';
+
+  private _startEdit() {
+    if (!this.editable || this.message.role !== 'user') return;
+    this._editText = this.message.content;
+    this._editing = true;
+    this.requestUpdate();
+    setTimeout(() => {
+      const ta = this.shadowRoot?.querySelector<HTMLTextAreaElement>('.edit-textarea');
+      if (ta) {
+        ta.focus();
+        ta.setSelectionRange(ta.value.length, ta.value.length);
+        this._autoResize(ta);
+      }
+    }, 0);
+  }
+
+  private _cancelEdit() {
+    this._editing = false;
+  }
+
+  private _submitEdit() {
+    const trimmed = this._editText.trim();
+    if (!trimmed || trimmed === this.message.content) {
+      this._editing = false;
+      return;
+    }
+    this._editing = false;
+    this.dispatchEvent(new CustomEvent('edit-message', {
+      detail: { messageId: this.message.id, newContent: trimmed },
+      bubbles: true,
+      composed: true,
+    }));
+  }
+
+  private _handleEditKeydown(e: KeyboardEvent) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      this._submitEdit();
+    } else if (e.key === 'Escape') {
+      this._cancelEdit();
+    }
+  }
+
+  private _autoResize(el: HTMLTextAreaElement) {
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 200) + 'px';
+  }
 
   private handleFollowup(text: string) {
     this.dispatchEvent(new CustomEvent('send-message', {
@@ -387,9 +518,36 @@ export class A2UIChatMessage extends LitElement {
         </div>
         <div class="content">
           ${isUser ? html`
-            <div class="bubble">
-              <div class="text-content">${content}</div>
-            </div>
+            ${this._editing ? html`
+              <div class="edit-container">
+                <textarea
+                  class="edit-textarea"
+                  .value=${this._editText}
+                  @input=${(e: InputEvent) => {
+                    const ta = e.target as HTMLTextAreaElement;
+                    this._editText = ta.value;
+                    this._autoResize(ta);
+                  }}
+                  @keydown=${this._handleEditKeydown}
+                ></textarea>
+                <div class="edit-actions">
+                  <button class="edit-btn cancel" @click=${this._cancelEdit}>Cancel</button>
+                  <button
+                    class="edit-btn submit"
+                    ?disabled=${!this._editText.trim() || this._editText.trim() === content}
+                    @click=${this._submitEdit}
+                  >Send</button>
+                </div>
+              </div>
+            ` : html`
+              <div
+                class="bubble ${this.editable ? 'editable' : ''}"
+                @dblclick=${this.editable ? () => this._startEdit() : nothing}
+                title=${this.editable ? 'Double-click to edit' : ''}
+              >
+                <div class="text-content">${content}</div>
+              </div>
+            `}
           ` : html`
             <div class="bubble">
               ${content ? html`
