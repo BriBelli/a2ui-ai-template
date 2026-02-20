@@ -34,7 +34,6 @@ export interface ChatResponse {
   text?: string;
   a2ui?: A2UIResponse;
   suggestions?: string[];
-  /** Backend metadata about search/tools used (for thinking indicator). */
   _search?: {
     searched: boolean;
     success?: boolean;
@@ -46,6 +45,15 @@ export interface ChatResponse {
   _location?: boolean;
   _images?: string[];
   _style?: string;
+}
+
+/** SSE event from the backend pipeline stream. */
+export interface StreamEvent {
+  id: string;
+  status: 'start' | 'done';
+  label: string;
+  detail?: string;
+  result?: Record<string, unknown>;
 }
 
 export interface LLMModel {
@@ -217,139 +225,179 @@ export class ChatService {
     return localIndicators.some((i) => m.includes(i));
   }
 
-  /** Callback type for reporting progress during sendMessage. */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  /**
+   * Send a message to the backend via SSE stream for real-time pipeline events.
+   * Falls back to regular JSON if the stream fails.
+   */
   async sendMessage(
     message: string,
     provider?: string,
     model?: string,
     history?: ChatMessage[],
     onProgress?: (
-      phase:
-        | 'location'
-        | 'location-done'
-        | 'searching'
-        | 'search-done'
-        | 'generating',
-      detail?: string
-    ) => void
+      phase: 'location' | 'location-done' | 'stream-event',
+      detail?: string,
+      streamEvent?: StreamEvent,
+    ) => void,
   ): Promise<ChatResponse> {
     try {
-      // Phase 1: Location — only fetch if the query is location-relevant
       let location = null;
-      if (this.needsLocation(message)) {
+      if (aiConfig.geolocation && this.needsLocation(message)) {
         onProgress?.('location');
         location = await getUserLocation();
         onProgress?.('location-done');
       }
 
-      // Build request body
       const body: Record<string, unknown> = {
         message,
         provider,
         model,
         enableWebSearch: aiConfig.webSearch,
+        enableGeolocation: aiConfig.geolocation,
         contentStyle: aiConfig.contentStyle,
         performanceMode: aiConfig.performanceMode,
         ...(location && { userLocation: location }),
       };
 
-      // Add conversation history if enabled
       if (aiConfig.conversationHistory && history && history.length > 0) {
         const historyMessages: HistoryMessage[] = history
           .slice(-aiConfig.maxHistoryMessages)
-          .map((msg) => ({
-            role: msg.role,
-            content: msg.content,
-          }));
+          .map((msg) => ({ role: msg.role, content: msg.content }));
         body.history = historyMessages;
       }
 
-      // Phase 2: Searching (predicted; actual search happens server-side)
-      if (this.willSearch(message)) {
-        onProgress?.('searching');
-      }
+      const headers = this.getHeaders();
+      headers['Accept'] = 'text/event-stream';
 
-      // Phase 3: API call (search + LLM generation happen here)
       const response = await fetch(`${this.baseUrl}/chat`, {
         method: 'POST',
-        headers: this.getHeaders(),
+        headers,
         body: JSON.stringify(body),
       });
 
-      // A2UI API response data
-      const data = await response.json();
       if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
         const raw = data?.text || data?.error || '';
         const isRateLimit = response.status === 429;
         const errMsg = isRateLimit
           ? 'Too many requests. Please wait a moment and try again.'
           : raw || 'Something went wrong. Please try again.';
-
-        //toast.error(errMsg);
         return {
           text: errMsg,
           a2ui: {
             version: '1.0',
-            components: [
-              {
-                id: 'err',
-                type: 'alert',
-                props: {
-                  variant: isRateLimit ? 'warning' : 'error',
-                  title: isRateLimit ? 'Rate Limited' : 'Error',
-                  description: errMsg,
-                },
+            components: [{
+              id: 'err', type: 'alert',
+              props: {
+                variant: isRateLimit ? 'warning' : 'error',
+                title: isRateLimit ? 'Rate Limited' : 'Error',
+                description: errMsg,
               },
-            ],
+            }],
           },
         };
       }
 
-      // Safety net: if the backend returned the raw LLM JSON in the `text`
-      // field (e.g. parse_llm_json fell through), try to recover the
-      // structured response so the UI renders rich components.
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('text/event-stream') && response.body) {
+        return await this.consumeSSE(response, onProgress);
+      }
+
+      // Fallback: regular JSON response
+      const data = await response.json();
       const result = ChatService.recoverA2UIResponse(data);
-
-      // Pass the rewritten search query back so the thinking indicator can display it
-      const rewrittenQuery = result._search?.query;
-      onProgress?.('search-done', rewrittenQuery);
-      onProgress?.('generating');
-
       if (result.a2ui) {
-        console.log(
-          '[A2UI] API response a2ui:',
-          JSON.stringify(result.a2ui, null, 2)
-        );
+        console.log('[A2UI] API response a2ui:', JSON.stringify(result.a2ui, null, 2));
       }
       return result;
     } catch (error) {
       console.error('Chat API error:', error);
-
-      const isTimeout =
-        error instanceof DOMException && error.name === 'AbortError';
+      const isTimeout = error instanceof DOMException && error.name === 'AbortError';
       const userMsg = isTimeout
         ? 'The request took too long. Please try again or use a faster model.'
         : 'Something went wrong. Please try again in a moment.';
-
       toast.error(userMsg);
       return {
         text: userMsg,
         a2ui: {
           version: '1.0',
-          components: [
-            {
-              id: 'err',
-              type: 'alert',
-              props: {
-                variant: 'error',
-                title: isTimeout ? 'Request Timeout' : 'Something Went Wrong',
-                description: userMsg,
-              },
+          components: [{
+            id: 'err', type: 'alert',
+            props: {
+              variant: 'error',
+              title: isTimeout ? 'Request Timeout' : 'Something Went Wrong',
+              description: userMsg,
             },
-          ],
+          }],
         },
       };
     }
+  }
+
+  /**
+   * Parse an SSE stream from the backend, emitting events and returning the
+   * final response from the ``complete`` event.
+   */
+  private async consumeSSE(
+    response: Response,
+    onProgress?: (
+      phase: 'location' | 'location-done' | 'stream-event',
+      detail?: string,
+      streamEvent?: StreamEvent,
+    ) => void,
+  ): Promise<ChatResponse> {
+    const reader = response.body!.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let finalResponse: ChatResponse | null = null;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const parts = buffer.split('\n\n');
+      buffer = parts.pop() || '';
+
+      for (const part of parts) {
+        if (!part.trim()) continue;
+
+        let eventType = 'message';
+        let dataStr = '';
+        for (const line of part.split('\n')) {
+          if (line.startsWith('event: ')) {
+            eventType = line.slice(7);
+          } else if (line.startsWith('data: ')) {
+            dataStr += line.slice(6);
+          }
+        }
+        if (!dataStr) continue;
+
+        try {
+          const payload = JSON.parse(dataStr);
+          if (eventType === 'complete') {
+            finalResponse = ChatService.recoverA2UIResponse(payload);
+            if (finalResponse?.a2ui) {
+              console.log('[A2UI] SSE response a2ui:', JSON.stringify(finalResponse.a2ui, null, 2));
+            }
+          } else if (eventType === 'step') {
+            onProgress?.('stream-event', undefined, payload as StreamEvent);
+          } else if (eventType === 'error') {
+            throw new Error(payload.message || 'Stream error');
+          }
+        } catch (e) {
+          if (e instanceof SyntaxError) {
+            console.warn('[SSE] Invalid JSON:', dataStr.slice(0, 100));
+          } else {
+            throw e;
+          }
+        }
+      }
+    }
+
+    if (!finalResponse) {
+      throw new Error('Stream ended without a complete event');
+    }
+    return finalResponse;
   }
 }

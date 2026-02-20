@@ -16,7 +16,8 @@ import logging
 import os
 import re
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional
+import time
+from typing import Any, AsyncGenerator, Dict, List, Optional
 
 import httpx
 import openai
@@ -882,26 +883,57 @@ def _wants_images(message: str) -> bool:
 
 # ── LLM Classifier ─────────────────────────────────────────────
 
-_CLASSIFIER_SYSTEM = (
-    "You are a content-style classifier for a UI system. "
-    "You analyze the user's intent, conversation context, and available data "
-    "to decide the best presentation style. Reply with exactly one word."
+_ANALYZER_SYSTEM = (
+    "You are an intent analyzer for an AI UI system. "
+    "Given a user query, decide:\n"
+    "1. The best content presentation style\n"
+    "2. Whether real-time web search is needed (current events, prices, weather, live data)\n"
+    "3. Whether the user's geographic location is relevant\n"
+    "4. If search is needed, an optimized search query\n"
+    "Respond with ONLY a valid JSON object. No markdown, no explanation."
 )
 
-_CLASSIFIER_PROMPT_TEMPLATE = (
-    "Based on the user's intent and the data context, classify into ONE style.\n\n"
-    "Available styles:\n{descriptions}\n\n"
+_ANALYZER_PROMPT_TEMPLATE = (
+    "Content styles:\n{descriptions}\n\n"
     "{context_section}"
     "User query: {query}\n\n"
-    "Reply with ONLY the style ID, nothing else."
+    'Reply with JSON: {{"style":"<style_id>","search":<true|false>,"location":<true|false>,"search_query":"<optimized query or empty>"}}'
 )
 
-_CLASSIFIER_MODELS: List[tuple] = [
+_ANALYZER_MODELS: List[tuple] = [
     ("openai", "gpt-4.1-mini"),
     ("litellm", "gpt-4o-mini"),
     ("anthropic", "claude-haiku-4-5-20251001"),
     ("gemini", "gemini-2.5-flash-preview-05-20"),
 ]
+
+# ── Tool Configuration (env-level overrides) ──────────────────
+#
+# Each tool can be globally locked via an environment variable.
+# True  = enabled (default for most tools)
+# False = globally disabled — user settings are ignored
+#
+# Resolution order: Env (locked) > User setting > Default
+
+def _env_bool(key: str, default: bool = True) -> Optional[bool]:
+    """Read an env var as a tri-state: True, False, or None (unset)."""
+    val = os.getenv(key)
+    if val is None:
+        return None
+    return val.lower() in ("1", "true", "yes", "on")
+
+TOOL_WEB_SEARCH_ENV: Optional[bool] = _env_bool("A2UI_TOOL_WEB_SEARCH")
+TOOL_GEOLOCATION_ENV: Optional[bool] = _env_bool("A2UI_TOOL_GEOLOCATION")
+TOOL_HISTORY_ENV: Optional[bool] = _env_bool("A2UI_TOOL_HISTORY")
+TOOL_AI_CLASSIFIER_ENV: Optional[bool] = _env_bool("A2UI_TOOL_AI_CLASSIFIER")
+
+
+def resolve_tool(env_override: Optional[bool], user_setting: bool, default: bool = True) -> bool:
+    """Resolve a tool's effective state: env override > user setting > default."""
+    if env_override is not None:
+        return env_override
+    return user_setting
+
 
 # ── Performance Mode Constants ─────────────────────────────────
 
@@ -948,64 +980,96 @@ class LLMService:
             return provider
         return None
 
-    async def _classify_intent(
+    @staticmethod
+    def get_tool_states() -> List[Dict[str, Any]]:
+        """Return the current state of all configurable tools.
+
+        Each tool reports:
+        - id: machine identifier
+        - name: human-readable label
+        - description: what the tool does
+        - default: default enabled state
+        - env_override: value from environment (None if unset)
+        - locked: True if the env variable forces a specific state
+        """
+        from tools import web_search as _ws
+
+        tools = [
+            {
+                "id": "web_search",
+                "name": "Web Search",
+                "description": "Search the web for current information",
+                "default": True,
+                "env_override": TOOL_WEB_SEARCH_ENV,
+                "locked": TOOL_WEB_SEARCH_ENV is not None,
+                "available": _ws.is_available(),
+            },
+            {
+                "id": "geolocation",
+                "name": "Geolocation",
+                "description": "Use device location for local context",
+                "default": True,
+                "env_override": TOOL_GEOLOCATION_ENV,
+                "locked": TOOL_GEOLOCATION_ENV is not None,
+            },
+            {
+                "id": "history",
+                "name": "Conversation History",
+                "description": "Include previous messages for context",
+                "default": True,
+                "env_override": TOOL_HISTORY_ENV,
+                "locked": TOOL_HISTORY_ENV is not None,
+            },
+            {
+                "id": "ai_classifier",
+                "name": "AI Style Classifier",
+                "description": "Use AI to auto-detect the best content style",
+                "default": True,
+                "env_override": TOOL_AI_CLASSIFIER_ENV,
+                "locked": TOOL_AI_CLASSIFIER_ENV is not None,
+            },
+        ]
+        return tools
+
+    async def _analyze_intent(
         self,
         message: str,
         history: Optional[List[Dict[str, str]]] = None,
-        search_data: Optional[Dict[str, Any]] = None,
-    ) -> Optional[str]:
-        """Classify user intent using a lightweight LLM call with full context.
+    ) -> Optional[Dict[str, Any]]:
+        """Analyze user intent with a fast LLM to decide tools and style.
 
-        The classifier sees:
-        - The user's current query
-        - Recent conversation history (summarised)
-        - A summary of the search response data shape (field types,
-          result count, whether images/numbers/tables are present)
+        This is the FIRST step in the pipeline — it decides everything:
+        - Content style
+        - Whether web search is needed
+        - Whether geolocation is relevant
+        - Optimized search query (if search needed)
 
-        Returns a valid style ID or ``None`` on failure.
+        Returns a dict like:
+            {"style": "content", "search": True, "location": False, "search_query": "..."}
+        or ``None`` on failure (caller falls back to regex).
         """
-        # Build context section from history + search data
         context_parts: List[str] = []
 
         if history:
-            recent = history[-4:]  # last 2 exchanges max
+            recent = history[-4:]
             history_summary = " | ".join(
                 f"{m['role']}: {m['content'][:80]}" for m in recent
             )
-            context_parts.append(f"Conversation history: {history_summary}")
-
-        if search_data and search_data.get("success"):
-            results = search_data.get("results", [])
-            result_count = len(results)
-            has_answer = bool(search_data.get("answer"))
-            image_count = len(search_data.get("images", []))
-
-            data_summary = (
-                f"Search returned {result_count} results"
-                f"{', with a direct answer' if has_answer else ''}"
-                f"{f', {image_count} images' if image_count else ''}"
-            )
-
-            # Summarise the data shape — types of content in the results
-            if results:
-                snippets = [r.get("content", "")[:100] for r in results[:3]]
-                data_summary += f". Sample snippets: {' // '.join(snippets)}"
-
-            context_parts.append(f"Data context: {data_summary}")
+            context_parts.append(f"Conversation context: {history_summary}")
 
         context_section = ""
         if context_parts:
             context_section = "\n".join(context_parts) + "\n\n"
 
-        prompt = _CLASSIFIER_PROMPT_TEMPLATE.format(
+        prompt = _ANALYZER_PROMPT_TEMPLATE.format(
             descriptions=STYLE_DESCRIPTIONS,
             context_section=context_section,
             query=message[:500],
         )
 
-        logger.info("── Classifier prompt ──\n%s", prompt)
+        logger.info("── ANALYZE ──  prompt:\n%s", prompt)
 
-        for provider_id, model_id in _CLASSIFIER_MODELS:
+        for provider_id, model_id in _ANALYZER_MODELS:
             provider = self.providers.get(provider_id)
             if not provider or not provider.is_available():
                 continue
@@ -1015,60 +1079,81 @@ class LLMService:
                     resp = await provider.client.chat.completions.create(
                         model=model_id,
                         messages=[
-                            {"role": "system", "content": _CLASSIFIER_SYSTEM},
+                            {"role": "system", "content": _ANALYZER_SYSTEM},
                             {"role": "user", "content": prompt},
                         ],
-                        max_tokens=10,
+                        max_tokens=150,
                         temperature=0,
                     )
-                    text = (resp.choices[0].message.content or "").strip().lower()
+                    text = (resp.choices[0].message.content or "").strip()
 
                 elif provider_id == "anthropic":
                     resp = await provider.client.messages.create(
                         model=model_id,
-                        max_tokens=10,
-                        system=_CLASSIFIER_SYSTEM,
+                        max_tokens=150,
+                        system=_ANALYZER_SYSTEM,
                         messages=[{"role": "user", "content": prompt}],
                     )
-                    text = resp.content[0].text.strip().lower()
+                    text = resp.content[0].text.strip()
 
                 elif provider_id == "gemini":
                     import google.generativeai as genai
                     genai.configure(api_key=provider._api_key)
                     gen_model = genai.GenerativeModel(
                         model_name=model_id,
-                        system_instruction=_CLASSIFIER_SYSTEM,
+                        system_instruction=_ANALYZER_SYSTEM,
                     )
                     resp = gen_model.generate_content(prompt)
-                    text = resp.text.strip().lower()
+                    text = resp.text.strip()
                 else:
                     continue
 
-                # Strip surrounding quotes or punctuation the LLM may add
-                text = text.strip('"\'.,!; ')
+                # Strip markdown fences if the LLM wraps JSON in ```
+                if text.startswith("```"):
+                    text = re.sub(r"^```(?:json)?\s*", "", text)
+                    text = re.sub(r"\s*```$", "", text)
 
-                if text in VALID_STYLE_IDS:
-                    logger.info(
-                        "LLM classified → '%s' via %s/%s for: %.50s",
-                        text, provider_id, model_id, message,
+                result = json.loads(text)
+
+                style = result.get("style", "").lower().strip()
+                if style not in VALID_STYLE_IDS:
+                    logger.warning(
+                        "Analyzer returned invalid style '%s' via %s/%s",
+                        style, provider_id, model_id,
                     )
-                    return text
+                    continue
 
-                logger.debug(
-                    "LLM classifier returned unexpected '%s' via %s/%s",
-                    text, provider_id, model_id,
+                analysis = {
+                    "style": style,
+                    "search": bool(result.get("search", False)),
+                    "location": bool(result.get("location", False)),
+                    "search_query": str(result.get("search_query", "")),
+                }
+
+                logger.info(
+                    "── ANALYZE OK ──  %s via %s/%s  |  style=%s  search=%s  location=%s  query='%s'",
+                    message[:50], provider_id, model_id,
+                    analysis["style"], analysis["search"],
+                    analysis["location"], analysis["search_query"][:60],
                 )
+                return analysis
 
+            except (json.JSONDecodeError, KeyError, TypeError) as exc:
+                logger.warning(
+                    "Analyzer JSON parse failed (%s/%s): %s — raw: %.100s",
+                    provider_id, model_id, exc, locals().get("text", "?"),
+                )
+                continue
             except Exception as exc:
                 logger.warning(
-                    "LLM classifier failed (%s/%s): %s",
+                    "Analyzer failed (%s/%s): %s",
                     provider_id, model_id, exc,
                 )
                 continue
 
         return None
 
-    async def generate(
+    async def generate_stream(
         self,
         message: str,
         provider_id: str,
@@ -1077,36 +1162,186 @@ class LLMService:
         user_location: Optional[Dict[str, Any]] = None,
         content_style: str = "auto",
         performance_mode: str = "auto",
-    ) -> Dict[str, Any]:
-        """Generate a response using the specified provider and model.
+        enable_web_search: bool = True,
+        enable_geolocation: bool = True,
+    ) -> AsyncGenerator[Dict[str, Any], None]:
+        """Async generator that yields SSE events during response generation.
 
-        Pipeline order:
-        1. Web search (get real data first)
-        2. AI classification (uses query + history + search data shape)
-        3. LLM generation (with style-specific system prompt)
-        4. Post-processing (hierarchy, metadata, images)
+        Events emitted:
+        - step  (id, status:start|done, label, detail?)  — pipeline progress
+        - complete  (full response dict)                  — final result
+        - error  (message)                                — failure
+
+        Pipeline order (AI-first):
+        0. Resolve tool states (env override > user setting)
+        1. AI intent analysis (decides style + which tools to activate)
+        2. Location context (only if AI said yes AND tool enabled)
+        3. Web search (only if AI said yes AND tool enabled)
+        4. LLM generation (with style-specific system prompt)
+        5. Post-processing (hierarchy, metadata, images)
+
+        When AI analyzer is unavailable, regex fallbacks decide tools.
         """
-        from tools import web_search, should_search, rewrite_search_query, llm_rewrite_query
+        from tools import web_search, should_search, rewrite_search_query
 
         provider = self.get_provider(provider_id)
         if not provider:
-            raise ValueError(f"Provider '{provider_id}' is not available")
+            yield {"event": "error", "data": {"message": f"Provider '{provider_id}' is not available"}}
+            return
+
+        # ── Step 0: Resolve tool states (env > user) ──────────
+        web_search_allowed = resolve_tool(TOOL_WEB_SEARCH_ENV, enable_web_search)
+        geolocation_allowed = resolve_tool(TOOL_GEOLOCATION_ENV, enable_geolocation)
+        history_active = resolve_tool(TOOL_HISTORY_ENV, history is not None and len(history) > 0)
+        classifier_active = resolve_tool(TOOL_AI_CLASSIFIER_ENV, True)
+
+        effective_history = history if history_active else None
 
         logger.info(
             "══ GENERATE START ══  provider=%s  model=%s  style=%s  perf=%s",
             provider_id, model, content_style, performance_mode,
         )
         logger.info("User message: %s", message[:200])
-        if history:
-            logger.info("History: %d messages", len(history))
+        logger.info(
+            "Tool gates: web_search=%s  geolocation=%s  history=%s  ai_analyzer=%s",
+            web_search_allowed, geolocation_allowed, history_active, classifier_active,
+        )
+        if effective_history:
+            logger.info("History: %d messages", len(effective_history))
 
         perf = PERFORMANCE_MODES.get(performance_mode, PERFORMANCE_MODES["auto"])
         max_body_bytes: Optional[int] = WAF_MAX_BODY_BYTES
 
-        # ── Step 1: Location context ─────────────────────────
+        yield {"event": "step", "data": {
+            "id": "tools", "status": "done",
+            "label": "Tools configured",
+            "detail": f"search={web_search_allowed} geo={geolocation_allowed} history={history_active} ai={classifier_active}",
+        }}
+
+        # ── Step 1: AI Intent Analysis (FIRST) ────────────────
+        #
+        # The AI analyzer decides EVERYTHING in one fast call:
+        #   - Content style
+        #   - Whether web search is needed
+        #   - Whether geolocation is relevant
+        #   - Optimized search query
+        #
+        # Tool gates (env/user) are applied AFTER AI decides.
+        # If user disabled search, AI's "search=true" is overridden.
+        #
+        # Regex fallback only fires if AI is unavailable or fails.
+
+        ai_wants_search = False
+        ai_wants_location = False
+        ai_search_query = ""
+        style_id = DEFAULT_STYLE
+
+        yield {"event": "step", "data": {"id": "analyzer", "status": "start", "label": "Analyzing intent"}}
+
+        if content_style != "auto":
+            # User explicitly chose a style — skip AI for style
+            style_id = content_style
+            logger.info("── ANALYZE ──  explicit style from user: '%s'", style_id)
+            # Still run AI to decide tools (search/location)
+            if classifier_active:
+                analysis = await self._analyze_intent(message, history=effective_history)
+                if analysis:
+                    ai_wants_search = analysis["search"]
+                    ai_wants_location = analysis["location"]
+                    ai_search_query = analysis["search_query"]
+                    logger.info(
+                        "── ANALYZE ──  tools: search=%s  location=%s  query='%s'",
+                        ai_wants_search, ai_wants_location, ai_search_query[:60],
+                    )
+                else:
+                    logger.warning("── ANALYZE ──  AI failed, falling back to regex for tool decisions")
+                    ai_wants_search = should_search(message)
+                    ai_wants_location = self._regex_needs_location(message)
+            else:
+                logger.info("── ANALYZE ──  AI disabled, using regex fallback for tools")
+                ai_wants_search = should_search(message)
+                ai_wants_location = self._regex_needs_location(message)
+
+        elif classifier_active:
+            # Auto mode — AI decides everything
+            analysis = await self._analyze_intent(message, history=effective_history)
+            if analysis:
+                style_id = analysis["style"]
+                ai_wants_search = analysis["search"]
+                ai_wants_location = analysis["location"]
+                ai_search_query = analysis["search_query"]
+                logger.info(
+                    "── ANALYZE OK ──  style=%s  search=%s  location=%s  query='%s'",
+                    style_id, ai_wants_search, ai_wants_location, ai_search_query[:60],
+                )
+            else:
+                style_id = DEFAULT_STYLE
+                ai_wants_search = should_search(message)
+                ai_wants_location = self._regex_needs_location(message)
+                logger.warning(
+                    "── ANALYZE ──  AI failed → regex fallback: style=%s  search=%s  location=%s",
+                    style_id, ai_wants_search, ai_wants_location,
+                )
+        else:
+            # AI disabled entirely — full regex fallback
+            from content_styles import classify_style
+            style_id = classify_style(message)
+            ai_wants_search = should_search(message)
+            ai_wants_location = self._regex_needs_location(message)
+            logger.info(
+                "── ANALYZE ──  AI disabled → regex: style=%s  search=%s  location=%s",
+                style_id, ai_wants_search, ai_wants_location,
+            )
+
+        # Apply tool gates: AI decision AND user/env permission
+        do_search = ai_wants_search and web_search_allowed
+        do_location = ai_wants_location and geolocation_allowed
+
+        logger.info(
+            "── TOOLS ──  search: ai=%s gate=%s → %s  |  location: ai=%s gate=%s → %s",
+            ai_wants_search, web_search_allowed, do_search,
+            ai_wants_location, geolocation_allowed, do_location,
+        )
+
+        # ── Budget / performance style overrides ───────────────
+        # Only touch style when the user left it on "auto".
+        # Explicit user-chosen styles are NEVER overridden.
+        if content_style == "auto" and style_id != "quick":
+            if performance_mode == "optimized":
+                # Optimized → always quick for minimal tokens/cost
+                logger.info("Optimized mode → downgrading %s → quick", style_id)
+                style_id = "quick"
+
+            elif performance_mode == "auto" and max_body_bytes is not None:
+                # Auto + WAF budget → downgrade at 75% threshold
+                style_bytes = len(get_system_prompt(style_id).encode("utf-8"))
+                if style_bytes > max_body_bytes * 0.75:
+                    for fallback in ("content", "quick"):
+                        fb_bytes = len(get_system_prompt(fallback).encode("utf-8"))
+                        if fb_bytes <= max_body_bytes * 0.75:
+                            logger.info(
+                                "Budget-aware downgrade: %s(%dB) → %s(%dB), budget=%d @75%%",
+                                style_id, style_bytes, fallback, fb_bytes, max_body_bytes,
+                            )
+                            style_id = fallback
+                            break
+
+        yield {"event": "step", "data": {
+            "id": "analyzer", "status": "done",
+            "label": "Intent analyzed",
+            "detail": f"style={style_id} search={do_search} location={do_location}",
+            "result": {
+                "style": style_id,
+                "search": do_search,
+                "location": do_location,
+                "query": ai_search_query,
+            },
+        }}
+
+        # ── Step 2: Location context ──────────────────────────
         location_context = ""
         location_label = ""
-        if user_location:
+        if do_location and user_location:
             location_label = user_location.get("label", "")
             lat = user_location.get("lat")
             lng = user_location.get("lng")
@@ -1114,24 +1349,33 @@ class LLMService:
                 location_context = f"[User Location: {location_label} ({lat}, {lng})]\n"
             elif lat and lng:
                 location_context = f"[User Location: {lat}, {lng}]\n"
-            logger.info("Location: %s", location_label or f"{lat},{lng}")
+            logger.info("── LOCATION ──  %s", location_label or f"{lat},{lng}")
+        elif ai_wants_location and not geolocation_allowed:
+            logger.info("── LOCATION ──  AI requested but tool disabled")
+        elif ai_wants_location and not user_location:
+            logger.info("── LOCATION ──  AI requested but no location data provided")
 
-        # ── Step 2: Web search (data first) ───────────────────
+        # ── Step 3: Web search ────────────────────────────────
         augmented_message = message
         search_metadata: Optional[Dict[str, Any]] = None
         search_results_raw: Optional[Dict[str, Any]] = None
         search_images: List[str] = []
 
-        if should_search(message):
-            search_query = await llm_rewrite_query(
-                message, location=location_label, history=history,
+        if do_search:
+            search_query = ai_search_query or rewrite_search_query(
+                message, location=location_label,
             )
-            if not search_query:
-                search_query = rewrite_search_query(message, location=location_label)
+            yield {"event": "step", "data": {
+                "id": "search", "status": "start",
+                "label": "Searching the web",
+                "detail": search_query[:80],
+            }}
 
             if web_search.is_available():
-                logger.info("── SEARCH ──  query: \"%s\"  (original: \"%s\")", search_query[:100], message[:60])
-
+                logger.info(
+                    "── SEARCH ──  query: \"%s\"  (original: \"%s\")",
+                    search_query[:100], message[:60],
+                )
                 try:
                     search_results_raw = await web_search.search(search_query)
                     context = web_search.format_for_context(search_results_raw)
@@ -1140,7 +1384,7 @@ class LLMService:
                         augmented_message = f"{context}\n\nUser question: {message}"
                         search_images = search_results_raw.get("images", [])[:6]
                         logger.info(
-                            "── SEARCH RESULTS ──  %d results, %d images, answer=%s",
+                            "── SEARCH OK ──  %d results, %d images, answer=%s",
                             len(search_results_raw.get("results", [])),
                             len(search_images),
                             bool(search_results_raw.get("answer")),
@@ -1157,6 +1401,11 @@ class LLMService:
                             "images_count": len(search_images),
                             "query": search_query,
                         }
+                        yield {"event": "step", "data": {
+                            "id": "search", "status": "done",
+                            "label": "Search complete",
+                            "detail": f"{search_metadata['results_count']} results",
+                        }}
                     else:
                         error_type = search_results_raw.get("error", "unknown")
                         logger.warning("── SEARCH FAILED ── (%s)", error_type)
@@ -1166,6 +1415,7 @@ class LLMService:
                             "error": error_type,
                             "query": search_query,
                         }
+                        yield {"event": "step", "data": {"id": "search", "status": "done", "label": "Search returned no results"}}
                 except Exception as exc:
                     logger.warning("── SEARCH ERROR ── %s", exc)
                     search_metadata = {
@@ -1174,50 +1424,26 @@ class LLMService:
                         "error": "exception",
                         "query": search_query,
                     }
+                    yield {"event": "step", "data": {"id": "search", "status": "done", "label": "Search failed"}}
             else:
-                logger.info("── SEARCH ──  not configured, using AI knowledge only")
+                logger.info("── SEARCH ──  not configured (no API key)")
                 search_metadata = {"searched": False, "reason": "not_configured"}
+                yield {"event": "step", "data": {"id": "search", "status": "done", "label": "Search unavailable"}}
+        elif ai_wants_search and not web_search_allowed:
+            logger.info("── SEARCH ──  AI requested but tool disabled by user/env")
         else:
-            logger.info("── SEARCH ──  skipped (no search triggers in message)")
+            logger.info("── SEARCH ──  not needed (AI decided)")
 
-        # ── Step 3: AI content style classification ───────────
-        #
-        # The AI classifier receives the full context: user query,
-        # conversation history, and the search data shape/content.
-        # This lets it reason about WHAT the data looks like, not
-        # just keyword-match the query.
-        #
-        # Regex classification is DISABLED — kept as dead code for
-        # future fallback scenarios (PII/PHI, LLM unavailable, etc.)
-
-        if content_style == "auto":
-            style_id = await self._classify_intent(
-                message,
-                history=history,
-                search_data=search_results_raw,
-            )
-            if style_id:
-                logger.info("── CLASSIFY ──  AI chose style: '%s'", style_id)
-            else:
-                style_id = DEFAULT_STYLE
-                logger.warning(
-                    "── CLASSIFY ──  AI classification failed, using default: '%s'",
-                    style_id,
-                )
-        else:
-            style_id = content_style
-            logger.info("── CLASSIFY ──  explicit style from user: '%s'", style_id)
-
+        # ── Step 3b: Style prompt setup ───────────────────────
         system_prompt = get_system_prompt(style_id)
         component_priority = get_component_priority(style_id)
         logger.info(
             "── STYLE ──  %s  |  prompt=%dB  |  priority=%s",
             style_id,
             len(system_prompt.encode("utf-8")),
-            [p for p in component_priority][:5],
+            list(component_priority)[:5],
         )
 
-        # ── Auto-degrade: expand WAF budget if prompt is tight ─
         if max_body_bytes is not None and performance_mode == "auto":
             prompt_bytes = len(system_prompt.encode("utf-8"))
             if prompt_bytes > max_body_bytes * _AUTO_DEGRADE_THRESHOLD:
@@ -1227,31 +1453,45 @@ class LLMService:
                     prompt_bytes, int(_AUTO_DEGRADE_THRESHOLD * 100), max_body_bytes,
                 )
 
-        # Prepend location context
         if location_context:
             augmented_message = f"{location_context}{augmented_message}"
 
         # ── Step 4: LLM generation ────────────────────────────
-        logger.info("── GENERATE ──  sending to %s/%s  (%d chars)", provider_id, model, len(augmented_message))
-        response = await provider.generate(
-            augmented_message, model, history, system_prompt=system_prompt,
-        )
+        yield {"event": "step", "data": {
+            "id": "llm", "status": "start",
+            "label": "Generating response",
+            "detail": f"{provider_id}/{model}",
+        }}
         logger.info(
-            "── RESPONSE ──  text=%d chars  a2ui=%s  components=%d",
+            "── GENERATE ──  sending to %s/%s  (%d chars)",
+            provider_id, model, len(augmented_message),
+        )
+        llm_t0 = time.time()
+        response = await provider.generate(
+            augmented_message, model, effective_history, system_prompt=system_prompt,
+        )
+        llm_elapsed = time.time() - llm_t0
+        logger.info(
+            "── RESPONSE ──  text=%d chars  a2ui=%s  components=%d  elapsed=%.1fs",
             len(response.get("text", "")),
             bool(response.get("a2ui")),
             len(response.get("a2ui", {}).get("components", [])) if response.get("a2ui") else 0,
+            llm_elapsed,
         )
+        yield {"event": "step", "data": {
+            "id": "llm", "status": "done",
+            "label": "Response generated",
+            "detail": f"{llm_elapsed:.1f}s",
+        }}
 
         # ── Step 5: Post-processing ──────────────────────────
         response = _enforce_visual_hierarchy(response, component_priority)
 
         if search_metadata:
             response["_search"] = search_metadata
-        if user_location:
+        if user_location and do_location:
             response["_location"] = True
 
-        # Images: AI-driven visual relevance check
         if search_images and _wants_images(message):
             response["_images"] = search_images
             logger.info("── IMAGES ──  attached %d images (query is visual)", len(search_images))
@@ -1265,7 +1505,48 @@ class LLMService:
             "══ GENERATE DONE ══  style=%s  keys=%s",
             style_id, list(response.keys()),
         )
-        return response
+        yield {"event": "complete", "data": response}
+
+    async def generate(
+        self,
+        message: str,
+        provider_id: str,
+        model: str,
+        history: Optional[List[Dict[str, str]]] = None,
+        user_location: Optional[Dict[str, Any]] = None,
+        content_style: str = "auto",
+        performance_mode: str = "auto",
+        enable_web_search: bool = True,
+        enable_geolocation: bool = True,
+    ) -> Dict[str, Any]:
+        """Non-streaming wrapper — collects the final result from generate_stream."""
+        result: Dict[str, Any] = {}
+        async for event in self.generate_stream(
+            message, provider_id, model,
+            history=history,
+            user_location=user_location,
+            content_style=content_style,
+            performance_mode=performance_mode,
+            enable_web_search=enable_web_search,
+            enable_geolocation=enable_geolocation,
+        ):
+            if event["event"] == "complete":
+                result = event["data"]
+            elif event["event"] == "error":
+                raise ValueError(event["data"].get("message", "Unknown error"))
+        return result or {"text": "No response generated"}
+
+    @staticmethod
+    def _regex_needs_location(message: str) -> bool:
+        """Regex fallback for location relevance (used when AI is unavailable)."""
+        m = message.lower()
+        indicators = [
+            "weather", "forecast", "temperature", "near me", "nearby",
+            "local", "restaurant", "food", "store", "shop", "event",
+            "concert", "traffic", "commute", "directions", "open now",
+            "closest",
+        ]
+        return any(i in m for i in indicators)
 
 
 # ── Module-level singleton ─────────────────────────────────────

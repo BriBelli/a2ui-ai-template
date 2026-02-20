@@ -277,6 +277,7 @@ export class A2UIChatContainer extends LitElement {
   @property({ type: Boolean }) isLoading = false;
   @property({ type: Array }) suggestions: string[] = [];
   @property({ type: Array }) thinkingSteps: ThinkingStep[] = [];
+  @property({ type: String }) loadingDisplay: string = 'moderate';
 
   /** Screen-reader announcement text for new messages */
   @state() private srAnnouncement = '';
@@ -396,7 +397,7 @@ export class A2UIChatContainer extends LitElement {
   }
 
   private renderLoading() {
-    return html`<a2ui-thinking-indicator .steps=${this.thinkingSteps}></a2ui-thinking-indicator>`;
+    return html`<a2ui-thinking-indicator .steps=${this.thinkingSteps} .displayLevel=${this.loadingDisplay}></a2ui-thinking-indicator>`;
   }
 
   render() {

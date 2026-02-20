@@ -5,6 +5,7 @@ import {
   ChatService,
   type ChatMessage,
   type LLMProvider,
+  type StreamEvent,
 } from "../services/chat-service";
 import type { SelectGroup } from "./a2ui-model-selector";
 import { authService, type AuthUser } from "../services/auth-service";
@@ -13,7 +14,7 @@ import {
   ChatHistoryService,
   type ChatThread,
 } from "../services/chat-history-service";
-import { uiConfig, loadSettings } from "../config/ui-config";
+import { uiConfig, aiConfig, loadSettings } from "../config/ui-config";
 import {
   initTheme,
   toggleTheme,
@@ -704,20 +705,44 @@ export class A2UIApp extends LitElement {
     this.isLoading = true;
     const startTime = performance.now();
 
-    // Build dynamic steps array that reflects real operations
+    // Thinking steps built from SSE stream events + client-side geolocation.
     const steps: ThinkingStep[] = [];
-    const willSearch = this.chatService.willSearch(message);
-    const needsLocation = this.chatService.needsLocation(message);
     const locationCached = isLocationCached();
+    const stepIndexByTool = new Map<string, number>();
 
-    // Helper to update the reactive property
-    const push = (label: string, detail?: string) => {
-      steps.push({ label, done: false, detail });
+    const push = (label: string, detail?: string, tool?: string) => {
+      const idx = steps.length;
+      steps.push({ label, done: false, detail, tool });
+      if (tool) stepIndexByTool.set(tool, idx);
+      this.thinkingSteps = [...steps];
+      return idx;
+    };
+    const done = (index: number, label?: string, detail?: string) => {
+      steps[index] = {
+        ...steps[index],
+        done: true,
+        ...(label && { label }),
+        ...(detail && { detail }),
+      };
       this.thinkingSteps = [...steps];
     };
-    const done = (index: number) => {
-      steps[index] = { ...steps[index], done: true };
-      this.thinkingSteps = [...steps];
+
+    const handleStreamEvent = (evt: StreamEvent) => {
+      const existing = stepIndexByTool.get(evt.id);
+
+      if (evt.status === "start") {
+        if (existing !== undefined) {
+          // Update existing step (shouldn't happen, but defensive)
+          steps[existing] = { ...steps[existing], label: evt.label, detail: evt.detail };
+          this.thinkingSteps = [...steps];
+        } else {
+          push(evt.label, evt.detail, evt.id);
+        }
+      } else if (evt.status === "done") {
+        if (existing !== undefined) {
+          done(existing, evt.label, evt.detail);
+        }
+      }
     };
 
     try {
@@ -726,48 +751,23 @@ export class A2UIApp extends LitElement {
         this.selectedProvider,
         this.selectedModel,
         this.messages,
-        // Progress callback — driven by real lifecycle events
-        (phase, detail) => {
+        (phase, _detail, streamEvent?) => {
           switch (phase) {
             case "location":
-              if (needsLocation && !locationCached) {
-                push("Getting your location");
-              }
+              if (!locationCached) push("Getting your location", undefined, "client-location");
               break;
             case "location-done": {
-              const locIdx = steps.findIndex((s) =>
-                s.label.startsWith("Getting"),
-              );
-              if (locIdx >= 0) done(locIdx);
+              const locIdx = stepIndexByTool.get("client-location");
+              if (locIdx !== undefined) done(locIdx);
               break;
             }
-            case "searching":
-              push("Searching the web");
-              break;
-            case "search-done": {
-              const searchIdx = steps.findIndex((s) =>
-                s.label.startsWith("Searching"),
-              );
-              if (searchIdx >= 0) {
-                // Update the step with the rewritten query from the backend
-                if (detail) {
-                  steps[searchIdx] = {
-                    ...steps[searchIdx],
-                    detail: `"${detail}"`,
-                  };
-                }
-                done(searchIdx);
-              }
-              break;
-            }
-            case "generating":
-              push("Generating response");
+            case "stream-event":
+              if (streamEvent) handleStreamEvent(streamEvent);
               break;
           }
         },
       );
 
-      // Mark all steps done
       steps.forEach((_, i) => done(i));
 
       const provider = this.providers.find(
@@ -1088,6 +1088,7 @@ export class A2UIApp extends LitElement {
           .isLoading=${this.isLoading}
           .suggestions=${this.suggestions}
           .thinkingSteps=${this.thinkingSteps}
+          .loadingDisplay=${aiConfig.loadingDisplay}
           @send-message=${this.handleSendMessage}
         ></a2ui-chat-container>
       </main>

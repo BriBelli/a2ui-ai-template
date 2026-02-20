@@ -41,6 +41,7 @@ export interface UIConfig {
 
 export type ContentStyle = 'auto' | 'analytical' | 'content' | 'comparison' | 'howto' | 'quick';
 export type PerformanceMode = 'auto' | 'comprehensive' | 'optimized';
+export type LoadingDisplay = 'comprehensive' | 'moderate' | 'basic';
 
 export interface AIConfig {
   /**
@@ -57,6 +58,11 @@ export interface AIConfig {
    * Enable web search tool for real-time information
    */
   webSearch: boolean;
+
+  /**
+   * Enable geolocation for location-aware responses
+   */
+  geolocation: boolean;
 
   /**
    * Content style for response presentation.
@@ -76,6 +82,14 @@ export interface AIConfig {
    * - 'optimized': Minimal context, fastest, cheapest
    */
   performanceMode: PerformanceMode;
+
+  /**
+   * Loading indicator detail level.
+   * - 'comprehensive': All tools, timing, search queries, model info
+   * - 'moderate': Active tools and key outcomes (default)
+   * - 'basic': Just "Thinking..." with elapsed time
+   */
+  loadingDisplay: LoadingDisplay;
 }
 
 const SETTINGS_KEY = 'a2ui_settings';
@@ -98,8 +112,10 @@ export const aiConfig: AIConfig = {
   conversationHistory: true,
   maxHistoryMessages: 20,
   webSearch: true,
+  geolocation: true,
   contentStyle: 'auto',
   performanceMode: 'auto',
+  loadingDisplay: 'moderate',
 };
 
 const VALID_CONTENT_STYLES: ReadonlySet<ContentStyle> = new Set([
@@ -107,6 +123,9 @@ const VALID_CONTENT_STYLES: ReadonlySet<ContentStyle> = new Set([
 ]);
 const VALID_PERFORMANCE_MODES: ReadonlySet<PerformanceMode> = new Set([
   'auto', 'comprehensive', 'optimized',
+]);
+const VALID_LOADING_DISPLAYS: ReadonlySet<LoadingDisplay> = new Set([
+  'comprehensive', 'moderate', 'basic',
 ]);
 
 /**
@@ -125,6 +144,9 @@ export function loadSettings(): void {
       }
       if (!VALID_PERFORMANCE_MODES.has(aiConfig.performanceMode)) {
         aiConfig.performanceMode = 'auto';
+      }
+      if (!VALID_LOADING_DISPLAYS.has(aiConfig.loadingDisplay)) {
+        aiConfig.loadingDisplay = 'moderate';
       }
     }
     if (saved.ui) Object.assign(uiConfig, saved.ui);

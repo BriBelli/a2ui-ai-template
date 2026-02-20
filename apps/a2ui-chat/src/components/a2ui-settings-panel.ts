@@ -4,6 +4,7 @@ import {
   aiConfig,
   setAIConfig,
   type ContentStyle,
+  type LoadingDisplay,
   type PerformanceMode,
 } from '../config/ui-config';
 
@@ -11,6 +12,15 @@ interface StyleOption {
   id: string;
   name: string;
   description: string;
+}
+
+interface ToolState {
+  id: string;
+  name: string;
+  description: string;
+  default: boolean;
+  env_override: boolean | null;
+  locked: boolean;
 }
 
 @customElement('a2ui-settings-panel')
@@ -276,6 +286,25 @@ export class A2UISettingsPanel extends LitElement {
       box-shadow: 0 0 0 2px var(--a2ui-accent-subtle);
     }
 
+    /* ── Locked tool indicator ─────────────────────────── */
+
+    .field.locked {
+      opacity: 0.5;
+      pointer-events: none;
+    }
+
+    .locked-badge {
+      font-size: 9px;
+      font-weight: var(--a2ui-font-semibold);
+      color: var(--a2ui-text-tertiary);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      background: var(--a2ui-bg-tertiary);
+      border-radius: var(--a2ui-radius-sm);
+      padding: 1px 5px;
+      margin-left: var(--a2ui-space-2);
+    }
+
     /* ── Divider ───────────────────────────────────────── */
 
     .divider {
@@ -305,12 +334,16 @@ export class A2UISettingsPanel extends LitElement {
 
   @state() private contentStyle: ContentStyle = aiConfig.contentStyle;
   @state() private performanceMode: PerformanceMode = aiConfig.performanceMode;
+  @state() private loadingDisplay: LoadingDisplay = aiConfig.loadingDisplay;
   @state() private webSearch = aiConfig.webSearch;
+  @state() private geolocation = aiConfig.geolocation;
   @state() private conversationHistory = aiConfig.conversationHistory;
   @state() private maxHistoryMessages = aiConfig.maxHistoryMessages;
   @state() private styles: StyleOption[] = [];
+  @state() private toolStates: Map<string, ToolState> = new Map();
 
   private static _cachedStyles: StyleOption[] | null = null;
+  private static _cachedTools: ToolState[] | null = null;
 
   connectedCallback() {
     super.connectedCallback();
@@ -320,14 +353,25 @@ export class A2UISettingsPanel extends LitElement {
     } else {
       this.fetchStyles();
     }
+    if (A2UISettingsPanel._cachedTools) {
+      this.toolStates = new Map(A2UISettingsPanel._cachedTools.map(t => [t.id, t]));
+    } else {
+      this.fetchTools();
+    }
   }
 
   private syncFromConfig() {
     this.contentStyle = aiConfig.contentStyle;
     this.performanceMode = aiConfig.performanceMode;
+    this.loadingDisplay = aiConfig.loadingDisplay;
     this.webSearch = aiConfig.webSearch;
+    this.geolocation = aiConfig.geolocation;
     this.conversationHistory = aiConfig.conversationHistory;
     this.maxHistoryMessages = aiConfig.maxHistoryMessages;
+  }
+
+  private isToolLocked(toolId: string): boolean {
+    return this.toolStates.get(toolId)?.locked ?? false;
   }
 
   private async fetchStyles() {
@@ -346,6 +390,20 @@ export class A2UISettingsPanel extends LitElement {
         { id: 'howto', name: 'How-To', description: 'Step-by-step guides' },
         { id: 'quick', name: 'Quick Answer', description: 'Concise responses' },
       ];
+    }
+  }
+
+  private async fetchTools() {
+    try {
+      const resp = await fetch('/api/tools');
+      if (resp.ok) {
+        const data = await resp.json();
+        const tools: ToolState[] = data.tools ?? [];
+        A2UISettingsPanel._cachedTools = tools;
+        this.toolStates = new Map(tools.map(t => [t.id, t]));
+      }
+    } catch {
+      // tools endpoint unavailable — no locking
     }
   }
 
@@ -369,12 +427,25 @@ export class A2UISettingsPanel extends LitElement {
     setAIConfig({ performanceMode: this.performanceMode });
   }
 
+  private handleLoadingDisplay(e: Event) {
+    this.loadingDisplay = (e.target as HTMLSelectElement).value as LoadingDisplay;
+    setAIConfig({ loadingDisplay: this.loadingDisplay });
+  }
+
   private handleWebSearch() {
+    if (this.isToolLocked('web_search')) return;
     this.webSearch = !this.webSearch;
     setAIConfig({ webSearch: this.webSearch });
   }
 
+  private handleGeolocation() {
+    if (this.isToolLocked('geolocation')) return;
+    this.geolocation = !this.geolocation;
+    setAIConfig({ geolocation: this.geolocation });
+  }
+
   private handleHistory() {
+    if (this.isToolLocked('history')) return;
     this.conversationHistory = !this.conversationHistory;
     setAIConfig({ conversationHistory: this.conversationHistory });
   }
@@ -447,11 +518,30 @@ export class A2UISettingsPanel extends LitElement {
               </div>
             </div>
 
-            <!-- Web Search -->
+            <!-- Loading Display -->
             <div class="field">
               <div class="field-row">
                 <div class="field-info">
-                  <p class="field-label">Web Search</p>
+                  <p class="field-label">Loading Display</p>
+                  <p class="field-desc">Detail level for the thinking indicator</p>
+                </div>
+                <select
+                  class="field-select"
+                  @change=${this.handleLoadingDisplay}
+                  aria-label="Loading display level"
+                >
+                  <option value="comprehensive" ?selected=${this.loadingDisplay === 'comprehensive'}>Comprehensive</option>
+                  <option value="moderate" ?selected=${this.loadingDisplay === 'moderate'}>Moderate</option>
+                  <option value="basic" ?selected=${this.loadingDisplay === 'basic'}>Basic</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Web Search -->
+            <div class="field ${this.isToolLocked('web_search') ? 'locked' : ''}">
+              <div class="field-row">
+                <div class="field-info">
+                  <p class="field-label">Web Search${this.isToolLocked('web_search') ? html`<span class="locked-badge">Locked</span>` : ''}</p>
                   <p class="field-desc">Search the web for current information</p>
                 </div>
                 <label class="toggle">
@@ -459,6 +549,24 @@ export class A2UISettingsPanel extends LitElement {
                     type="checkbox"
                     .checked=${this.webSearch}
                     @change=${this.handleWebSearch}
+                  />
+                  <span class="toggle-track"></span>
+                </label>
+              </div>
+            </div>
+
+            <!-- Geolocation -->
+            <div class="field ${this.isToolLocked('geolocation') ? 'locked' : ''}">
+              <div class="field-row">
+                <div class="field-info">
+                  <p class="field-label">Geolocation${this.isToolLocked('geolocation') ? html`<span class="locked-badge">Locked</span>` : ''}</p>
+                  <p class="field-desc">Use device location for weather and local queries</p>
+                </div>
+                <label class="toggle">
+                  <input
+                    type="checkbox"
+                    .checked=${this.geolocation}
+                    @change=${this.handleGeolocation}
                   />
                   <span class="toggle-track"></span>
                 </label>
@@ -473,10 +581,10 @@ export class A2UISettingsPanel extends LitElement {
             <p class="section-label">Conversation</p>
 
             <!-- History -->
-            <div class="field">
+            <div class="field ${this.isToolLocked('history') ? 'locked' : ''}">
               <div class="field-row">
                 <div class="field-info">
-                  <p class="field-label">History</p>
+                  <p class="field-label">History${this.isToolLocked('history') ? html`<span class="locked-badge">Locked</span>` : ''}</p>
                   <p class="field-desc">Include previous messages for context</p>
                 </div>
                 <label class="toggle">
