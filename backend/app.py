@@ -204,7 +204,6 @@ async def chat(request: Request, body: ChatRequest):
                 body.provider,
                 body.model,
                 history=history_dicts,
-                enable_web_search=body.enableWebSearch,
                 user_location=location_dict,
                 content_style=body.contentStyle,
                 performance_mode=body.performanceMode,

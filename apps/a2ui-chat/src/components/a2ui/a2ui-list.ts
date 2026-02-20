@@ -1,5 +1,6 @@
-import { LitElement, html, css } from 'lit';
+import { LitElement, html, css, unsafeCSS } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
+import { md, markdownStyles } from '../../services/markdown';
 
 interface ListItem {
   id: string;
@@ -121,6 +122,8 @@ export class A2UIList extends LitElement {
       background: var(--a2ui-success-bg);
       color: var(--a2ui-success);
     }
+
+    ${unsafeCSS(markdownStyles)}
   `;
 
   @property({ type: Array }) items: ListItem[] = [];
@@ -151,7 +154,7 @@ export class A2UIList extends LitElement {
                 ${item.text}
               </span>
               ${item.subtitle ? html`
-                <div class="item-subtitle">${item.subtitle}</div>
+                <div class="item-subtitle">${md(item.subtitle)}</div>
               ` : ''}
             </div>
             ${item.status && this.variant !== 'checklist' ? html`

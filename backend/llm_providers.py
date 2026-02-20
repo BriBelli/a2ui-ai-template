@@ -383,7 +383,9 @@ class OpenAIProvider(LLMProvider):
     def client(self) -> openai.AsyncOpenAI:
         """Lazily create and reuse a single async client."""
         if self._client is None:
-            self._client = openai.AsyncOpenAI(api_key=self._api_key, timeout=60.0)
+            self._client = openai.AsyncOpenAI(
+                api_key=self._api_key, timeout=60.0, max_retries=0,
+            )
         return self._client
 
     async def _call_llm(
@@ -394,7 +396,15 @@ class OpenAIProvider(LLMProvider):
         system_prompt: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Make a single OpenAI call and return parsed JSON or error dict."""
+        import time as _time
+
         messages = _build_messages(message, history, system_prompt=system_prompt)
+
+        total_chars = sum(len(m.get("content", "")) for m in messages)
+        logger.info(
+            "  [OpenAI] %s  |  %d messages  |  %d chars (~%d tokens)  |  timeout=60s",
+            model, len(messages), total_chars, total_chars // 4,
+        )
 
         # GPT-5+ uses max_completion_tokens and only supports temperature=1
         is_gpt5 = model.startswith("gpt-5")
@@ -404,6 +414,7 @@ class OpenAIProvider(LLMProvider):
             else {"max_tokens": 4000, "temperature": 0.7}
         )
 
+        t0 = _time.monotonic()
         try:
             response = await self.client.chat.completions.create(
                 model=model,
@@ -411,9 +422,37 @@ class OpenAIProvider(LLMProvider):
                 response_format={"type": "json_object"},
                 **extra,
             )
+        except openai.APITimeoutError:
+            elapsed = _time.monotonic() - t0
+            logger.error(
+                "  [OpenAI] TIMEOUT after %.1fs  |  %s  |  %d chars input",
+                elapsed, model, total_chars,
+            )
+            return _error_response(
+                "Request Timeout",
+                "The model took too long to respond. Try again or switch to a faster model.",
+                variant="warning",
+            )
         except openai.APIError as exc:
-            logger.error("OpenAI API error (%s): %s", model, exc)
-            return _error_response("OpenAI Error", str(exc))
+            elapsed = _time.monotonic() - t0
+            logger.error(
+                "  [OpenAI] ERROR after %.1fs  |  %s  |  %s",
+                elapsed, model, exc,
+            )
+            return _error_response(
+                "Something Went Wrong",
+                "The AI service returned an error. Please try again in a moment.",
+            )
+
+        elapsed = _time.monotonic() - t0
+        usage = response.usage
+        logger.info(
+            "  [OpenAI] OK %.1fs  |  %s  |  in=%s  out=%s  total=%s tokens",
+            elapsed, model,
+            usage.prompt_tokens if usage else "?",
+            usage.completion_tokens if usage else "?",
+            usage.total_tokens if usage else "?",
+        )
 
         content = (response.choices[0].message.content or "").strip()
         if not content:
@@ -470,6 +509,7 @@ class AnthropicProvider(LLMProvider):
             self._client = anthropic.AsyncAnthropic(
                 api_key=self._api_key,
                 timeout=60.0,
+                max_retries=0,
             )
         return self._client
 
@@ -501,9 +541,19 @@ class AnthropicProvider(LLMProvider):
                 system=system_prompt,
                 messages=messages,
             )
+        except anthropic.APITimeoutError:
+            logger.error("Anthropic timeout (%s)", model)
+            return _error_response(
+                "Request Timeout",
+                "The model took too long to respond. Try again or switch to a faster model.",
+                variant="warning",
+            )
         except anthropic.APIError as exc:
             logger.error("Anthropic API error (%s): %s", model, exc)
-            return _error_response("Anthropic Error", str(exc))
+            return _error_response(
+                "Something Went Wrong",
+                "The AI service returned an error. Please try again in a moment.",
+            )
 
         content = response.content[0].text.strip()
         if not content:
@@ -567,6 +617,7 @@ class LiteLLMProvider(LLMProvider):
                 api_key=self._api_key,
                 base_url=self.BASE_URL,
                 timeout=60.0,
+                max_retries=0,
                 http_client=httpx.AsyncClient(verify=False, timeout=60.0),
             )
         return self._client
@@ -627,9 +678,19 @@ class LiteLLMProvider(LLMProvider):
                 "Too many requests. Please wait a moment and try again.",
                 variant="warning",
             )
+        except openai.APITimeoutError:
+            logger.error("Exploration Lab timeout (%s)", model)
+            return _error_response(
+                "Request Timeout",
+                "The model took too long to respond. Try again or switch to a faster model.",
+                variant="warning",
+            )
         except openai.APIError as exc:
             logger.error("Exploration Lab API error (%s): %s", model, exc)
-            return _error_response("Exploration Lab Error", str(exc))
+            return _error_response(
+                "Something Went Wrong",
+                "The AI service returned an error. Please try again in a moment.",
+            )
 
         # Guard against gateway returning empty/null choices
         if not response.choices:
@@ -1013,7 +1074,6 @@ class LLMService:
         provider_id: str,
         model: str,
         history: Optional[List[Dict[str, str]]] = None,
-        enable_web_search: bool = False,
         user_location: Optional[Dict[str, Any]] = None,
         content_style: str = "auto",
         performance_mode: str = "auto",
