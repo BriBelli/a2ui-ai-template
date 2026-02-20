@@ -417,13 +417,12 @@ export class A2UISettingsPanel extends LitElement {
                 </div>
                 <select
                   class="field-select"
-                  .value=${this.contentStyle}
                   @change=${this.handleContentStyle}
                   aria-label="Content style"
                 >
-                  <option value="auto">Auto</option>
+                  <option value="auto" ?selected=${this.contentStyle === 'auto'}>Auto</option>
                   ${this.styles.map(
-                    (s) => html`<option value=${s.id}>${s.name}</option>`,
+                    (s) => html`<option value=${s.id} ?selected=${this.contentStyle === s.id}>${s.name}</option>`,
                   )}
                 </select>
               </div>
@@ -438,13 +437,12 @@ export class A2UISettingsPanel extends LitElement {
                 </div>
                 <select
                   class="field-select"
-                  .value=${this.performanceMode}
                   @change=${this.handlePerformance}
                   aria-label="Performance mode"
                 >
-                  <option value="auto">Auto</option>
-                  <option value="comprehensive">Comprehensive</option>
-                  <option value="optimized">Optimized</option>
+                  <option value="auto" ?selected=${this.performanceMode === 'auto'}>Auto</option>
+                  <option value="comprehensive" ?selected=${this.performanceMode === 'comprehensive'}>Comprehensive</option>
+                  <option value="optimized" ?selected=${this.performanceMode === 'optimized'}>Optimized</option>
                 </select>
               </div>
             </div>

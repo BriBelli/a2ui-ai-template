@@ -411,7 +411,7 @@ export class A2UIChatMessage extends LitElement {
             ` : ''}
             <span>${this.formatTime(timestamp)}</span>
             ${!isUser && this.message.style ? html`
-              <span class="style-badge">${this.message.style}</span>
+              <span class="style-badge">${this.message.style.charAt(0).toUpperCase() + this.message.style.slice(1)}</span>
             ` : ''}
           </div>
           ${!isUser && uiConfig.maxSuggestions > 0 && this.message.suggestions?.length ? html`

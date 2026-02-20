@@ -102,15 +102,31 @@ export const aiConfig: AIConfig = {
   performanceMode: 'auto',
 };
 
+const VALID_CONTENT_STYLES: ReadonlySet<ContentStyle> = new Set([
+  'auto', 'analytical', 'content', 'comparison', 'howto', 'quick',
+]);
+const VALID_PERFORMANCE_MODES: ReadonlySet<PerformanceMode> = new Set([
+  'auto', 'comprehensive', 'optimized',
+]);
+
 /**
  * Load persisted settings from localStorage (call once at startup).
+ * Validates saved values to prevent stale/invalid settings from persisting.
  */
 export function loadSettings(): void {
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
     if (!raw) return;
     const saved = JSON.parse(raw);
-    if (saved.ai) Object.assign(aiConfig, saved.ai);
+    if (saved.ai) {
+      Object.assign(aiConfig, saved.ai);
+      if (!VALID_CONTENT_STYLES.has(aiConfig.contentStyle)) {
+        aiConfig.contentStyle = 'auto';
+      }
+      if (!VALID_PERFORMANCE_MODES.has(aiConfig.performanceMode)) {
+        aiConfig.performanceMode = 'auto';
+      }
+    }
     if (saved.ui) Object.assign(uiConfig, saved.ui);
   } catch {
     // corrupted storage — use defaults

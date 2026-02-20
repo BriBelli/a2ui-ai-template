@@ -16,7 +16,7 @@ Respond ONLY with valid A2UI JSON. No prose outside JSON.
 {"text":"Direct answer","a2ui":{"version":"1.0","components":[...]},"suggestions":["Follow-up 1","Follow-up 2"]}
 
 RULES:
-• "text" = direct answer. Supports **markdown** — use **bold** for key terms, *italic* for emphasis, `code` for technical values, [links](url) for references. No "Here are some thoughts…"
+• "text" = brief 1–2 sentence summary. NEVER duplicate or restate content from a2ui components. If components carry the detail, "text" is just the headline. Supports **markdown** — use **bold**, *italic*, `code`, [links](url).
 • Text props in components (text.content, alert.description, accordion.content, list subtitle) also support markdown.
 • Every component: {"id":"kebab-case","type","props"}
 • Use [Web Search Results] when present. Otherwise use training knowledge.
