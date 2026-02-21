@@ -3,6 +3,12 @@ import { aiConfig } from '../config/ui-config';
 import { getUserLocation } from './geolocation-service';
 import { toast } from './toast-service';
 
+export interface SourceCitation {
+  title: string;
+  url: string;
+  type?: 'web' | 'data';
+}
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
@@ -22,6 +28,8 @@ export interface ChatMessage {
   images?: string[];
   /** Content style used for this response (e.g. "content", "analytical") */
   style?: string;
+  /** Source citations (web search results + data sources) */
+  sources?: SourceCitation[];
 }
 
 /** Simplified message format for API history */
@@ -45,6 +53,8 @@ export interface ChatResponse {
   _location?: boolean;
   _images?: string[];
   _style?: string;
+  _sources?: SourceCitation[];
+  _data_sources?: Record<string, unknown>;
 }
 
 /** SSE event from the backend pipeline stream. */

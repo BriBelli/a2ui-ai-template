@@ -687,6 +687,31 @@ export class A2UIApp extends LitElement {
     }));
   }
 
+  private handleDeleteMessage(e: CustomEvent<{ messageId: string }>) {
+    if (this.isLoading) return;
+    const idx = this.messages.findIndex(m => m.id === e.detail.messageId);
+    if (idx === -1) return;
+    let cutAt = idx;
+    if (this.messages[idx].role === 'assistant' && idx > 0 && this.messages[idx - 1].role === 'user') {
+      cutAt = idx - 1;
+    }
+    this.messages = this.messages.slice(0, cutAt);
+    this.persistThread();
+  }
+
+  private handleRegenerateMessage(e: CustomEvent<{ messageId: string }>) {
+    if (this.isLoading) return;
+    const idx = this.messages.findIndex(m => m.id === e.detail.messageId);
+    if (idx === -1) return;
+    const prevUserMsg = this.messages.slice(0, idx).reverse().find(m => m.role === 'user');
+    if (!prevUserMsg) return;
+    this.messages = this.messages.slice(0, idx);
+    this.persistThread();
+    this.handleSendMessage(new CustomEvent('send-message', {
+      detail: { message: prevUserMsg.content },
+    }));
+  }
+
   private async handleSendMessage(e: CustomEvent<{ message: string }>) {
     const { message } = e.detail;
     if (!message.trim()) return;
@@ -805,6 +830,7 @@ export class A2UIApp extends LitElement {
           duration: Math.round(elapsed * 10) / 10,
           images: response._images,
           style: response._style,
+          sources: response._sources,
         },
       ];
 
@@ -1106,6 +1132,8 @@ export class A2UIApp extends LitElement {
           .loadingDisplay=${aiConfig.loadingDisplay}
           @send-message=${this.handleSendMessage}
           @edit-message=${this.handleEditMessage}
+          @delete-message=${this.handleDeleteMessage}
+          @regenerate-message=${this.handleRegenerateMessage}
         ></a2ui-chat-container>
       </main>
 

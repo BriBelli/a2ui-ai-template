@@ -2,10 +2,13 @@ import { LitElement, html, css, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   aiConfig,
+  uiConfig,
   setAIConfig,
+  setUIConfig,
   type ContentStyle,
   type LoadingDisplay,
   type PerformanceMode,
+  type SourcesPosition,
 } from "../config/ui-config";
 
 interface StyleOption {
@@ -355,6 +358,9 @@ export class A2UISettingsPanel extends LitElement {
   @state() private dataSources = aiConfig.dataSources;
   @state() private conversationHistory = aiConfig.conversationHistory;
   @state() private maxHistoryMessages = aiConfig.maxHistoryMessages;
+  @state() private showSources = uiConfig.showSources;
+  @state() private showActions = uiConfig.showActions;
+  @state() private sourcesPosition: SourcesPosition = uiConfig.sourcesPosition;
   @state() private styles: StyleOption[] = [];
   @state() private toolStates: Map<string, ToolState> = new Map();
 
@@ -387,6 +393,9 @@ export class A2UISettingsPanel extends LitElement {
     this.dataSources = aiConfig.dataSources;
     this.conversationHistory = aiConfig.conversationHistory;
     this.maxHistoryMessages = aiConfig.maxHistoryMessages;
+    this.showSources = uiConfig.showSources;
+    this.showActions = uiConfig.showActions;
+    this.sourcesPosition = uiConfig.sourcesPosition;
   }
 
   private isToolLocked(toolId: string): boolean {
@@ -497,6 +506,21 @@ export class A2UISettingsPanel extends LitElement {
       this.maxHistoryMessages = val;
       setAIConfig({ maxHistoryMessages: val });
     }
+  }
+
+  private handleShowSources() {
+    this.showSources = !this.showSources;
+    setUIConfig({ showSources: this.showSources });
+  }
+
+  private handleShowActions() {
+    this.showActions = !this.showActions;
+    setUIConfig({ showActions: this.showActions });
+  }
+
+  private handleSourcesPosition(e: Event) {
+    this.sourcesPosition = (e.target as HTMLSelectElement).value as SourcesPosition;
+    setUIConfig({ sourcesPosition: this.sourcesPosition });
   }
 
   render() {
@@ -756,6 +780,68 @@ export class A2UISettingsPanel extends LitElement {
                   @change=${this.handleMaxHistory}
                   aria-label="Maximum history messages"
                 />
+              </div>
+            </div>
+          </div>
+
+          <div class="divider"></div>
+
+          <!-- ── Display ─────────────────────────────── -->
+          <div class="section">
+            <p class="section-label">Display</p>
+
+            <!-- Show Sources -->
+            <div class="field">
+              <div class="field-row">
+                <div class="field-info">
+                  <p class="field-label">Sources</p>
+                  <p class="field-desc">Show source citations below responses</p>
+                </div>
+                <label class="toggle">
+                  <input
+                    type="checkbox"
+                    .checked=${this.showSources}
+                    @change=${this.handleShowSources}
+                  />
+                  <span class="toggle-track"></span>
+                </label>
+              </div>
+            </div>
+
+            <!-- Sources Position -->
+            <div class="field">
+              <div class="field-row">
+                <div class="field-info">
+                  <p class="field-label">Sources Position</p>
+                  <p class="field-desc">Where citation sources appear</p>
+                </div>
+                <select
+                  class="field-select"
+                  @change=${this.handleSourcesPosition}
+                  aria-label="Sources position"
+                >
+                  <option value="auto" ?selected=${this.sourcesPosition === 'auto'}>Auto</option>
+                  <option value="right" ?selected=${this.sourcesPosition === 'right'}>Right</option>
+                  <option value="bottom" ?selected=${this.sourcesPosition === 'bottom'}>Bottom</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Show Actions -->
+            <div class="field">
+              <div class="field-row">
+                <div class="field-info">
+                  <p class="field-label">Action Bar</p>
+                  <p class="field-desc">Copy, regenerate, and feedback buttons</p>
+                </div>
+                <label class="toggle">
+                  <input
+                    type="checkbox"
+                    .checked=${this.showActions}
+                    @change=${this.handleShowActions}
+                  />
+                  <span class="toggle-track"></span>
+                </label>
               </div>
             </div>
           </div>

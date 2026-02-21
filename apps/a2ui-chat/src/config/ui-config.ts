@@ -37,7 +37,27 @@ export interface UIConfig {
    * survive page refreshes. Threads are scoped per user.
    */
   persistChat: boolean;
+
+  /**
+   * Show source citations below assistant responses
+   */
+  showSources: boolean;
+
+  /**
+   * Show action bar (copy, regenerate, like/dislike) on assistant responses
+   */
+  showActions: boolean;
+
+  /**
+   * Sources panel position relative to the response content.
+   * - 'auto': Side-by-side on wide screens, collapses below on narrow (default)
+   * - 'right': Always side-by-side
+   * - 'bottom': Always below the content
+   */
+  sourcesPosition: SourcesPosition;
 }
+
+export type SourcesPosition = 'auto' | 'right' | 'bottom';
 
 export type ContentStyle = 'auto' | 'analytical' | 'content' | 'comparison' | 'howto' | 'quick';
 export type PerformanceMode = 'auto' | 'comprehensive' | 'optimized';
@@ -108,6 +128,9 @@ export const uiConfig: UIConfig = {
   animateWelcome: true,
   maxSuggestions: 3,
   persistChat: true,
+  showSources: true,
+  showActions: true,
+  sourcesPosition: 'auto',
 };
 
 /**
@@ -133,6 +156,9 @@ const VALID_PERFORMANCE_MODES: ReadonlySet<PerformanceMode> = new Set([
 const VALID_LOADING_DISPLAYS: ReadonlySet<LoadingDisplay> = new Set([
   'comprehensive', 'moderate', 'basic',
 ]);
+const VALID_SOURCES_POSITIONS: ReadonlySet<SourcesPosition> = new Set([
+  'auto', 'right', 'bottom',
+]);
 
 /**
  * Load persisted settings from localStorage (call once at startup).
@@ -155,7 +181,12 @@ export function loadSettings(): void {
         aiConfig.loadingDisplay = 'moderate';
       }
     }
-    if (saved.ui) Object.assign(uiConfig, saved.ui);
+    if (saved.ui) {
+      Object.assign(uiConfig, saved.ui);
+      if (!VALID_SOURCES_POSITIONS.has(uiConfig.sourcesPosition)) {
+        uiConfig.sourcesPosition = 'auto';
+      }
+    }
   } catch {
     // corrupted storage — use defaults
   }

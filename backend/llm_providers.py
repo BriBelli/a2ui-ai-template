@@ -1530,6 +1530,7 @@ class LLMService:
 
         ds_context = ""
         ds_metadata: Optional[Dict[str, Any]] = None
+        ds_active_results: List[Dict[str, Any]] = []
 
         # Passive injection: data_context provided in request body
         if data_context:
@@ -1557,6 +1558,7 @@ class LLMService:
             }}
 
             results = await query_sources(ai_data_queries)
+            ds_active_results = results
             ds_context = format_results_for_context(results)
             successful = [r for r in results if r.get("success")]
             failed = [r for r in results if not r.get("success")]
@@ -1653,6 +1655,12 @@ class LLMService:
 
         if search_metadata:
             response["_search"] = search_metadata
+            if search_results_raw and search_results_raw.get("results"):
+                response["_sources"] = [
+                    {"title": r.get("title", ""), "url": r.get("url", "")}
+                    for r in search_results_raw["results"][:8]
+                    if r.get("url")
+                ]
         if user_location and do_location:
             response["_location"] = True
 
@@ -1664,6 +1672,18 @@ class LLMService:
 
         if ds_metadata:
             response["_data_sources"] = ds_metadata
+            if ds_metadata.get("active") and ds_metadata.get("successful", 0) > 0:
+                ds_source_entries = [
+                    {"title": r.get("_source_name", r.get("_source_id", "Data")), "url": "", "type": "data"}
+                    for r in ds_active_results if r.get("success")
+                ]
+                response.setdefault("_sources", []).extend(ds_source_entries)
+            elif ds_metadata.get("passive"):
+                passive_entries = [
+                    {"title": dc.get("label") or dc.get("source", "Data"), "url": "", "type": "data"}
+                    for dc in (data_context or [])
+                ]
+                response.setdefault("_sources", []).extend(passive_entries)
 
         response["_style"] = style_id
         response["_performance"] = performance_mode

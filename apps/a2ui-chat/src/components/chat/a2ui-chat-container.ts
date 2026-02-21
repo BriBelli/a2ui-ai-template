@@ -25,6 +25,11 @@ export class A2UIChatContainer extends LitElement {
       max-width: var(--a2ui-chat-max-width);
       margin: 0 auto;
       padding: 0 var(--a2ui-space-4);
+      transition: max-width 0.3s ease;
+    }
+
+    .messages-wrapper.expanded {
+      max-width: var(--a2ui-chat-max-width-expanded);
     }
 
     .welcome {
@@ -400,6 +405,11 @@ export class A2UIChatContainer extends LitElement {
     return html`<a2ui-thinking-indicator .steps=${this.thinkingSteps} .displayLevel=${this.loadingDisplay}></a2ui-thinking-indicator>`;
   }
 
+  private get _hasSources(): boolean {
+    return uiConfig.showSources && uiConfig.sourcesPosition !== 'bottom' &&
+      this.messages.some(m => m.role === 'assistant' && m.sources?.length);
+  }
+
   render() {
     const hasMessages = this.messages.length > 0;
 
@@ -407,11 +417,12 @@ export class A2UIChatContainer extends LitElement {
       <div class="messages-area">
         <div class="messages-container">
           ${hasMessages ? html`
-            <div class="messages-wrapper" role="log" aria-label="Chat messages" aria-live="polite">
-              ${this.messages.map(msg => html`
+            <div class="messages-wrapper ${this._hasSources ? 'expanded' : ''}" role="log" aria-label="Chat messages" aria-live="polite">
+              ${this.messages.map((msg, idx) => html`
                 <a2ui-chat-message
                   .message=${msg}
                   .editable=${msg.role === 'user' && !this.isLoading}
+                  .isLast=${msg.role === 'assistant' && idx === this.messages.length - 1 && !this.isLoading}
                 ></a2ui-chat-message>
               `)}
               ${this.isLoading ? this.renderLoading() : ''}
