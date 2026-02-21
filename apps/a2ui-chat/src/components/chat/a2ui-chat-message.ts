@@ -326,7 +326,7 @@ export class A2UIChatMessage extends LitElement {
 
     .response-layout {
       display: flex;
-      gap: var(--a2ui-space-5);
+      gap: var(--a2ui-space-6);
     }
 
     .response-main {
@@ -578,8 +578,8 @@ export class A2UIChatMessage extends LitElement {
       .response-layout.pos-auto .source-thumb,
       .response-layout.pos-auto .source-favicon-wrap,
       .response-layout.pos-auto .source-data-icon {
-        width: 25px;
-        height: 25px;
+        width: 32px;
+        height: 32px;
       }
     }
 

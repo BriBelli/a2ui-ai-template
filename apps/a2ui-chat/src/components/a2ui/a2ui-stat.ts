@@ -1,5 +1,6 @@
-import { LitElement, html, css, nothing } from 'lit';
+import { LitElement, html, css, nothing, unsafeCSS } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
+import { md, markdownStyles } from '../../services/markdown';
 
 /**
  * A2UI Stat — KPI / metric display (Molecular component).
@@ -108,6 +109,8 @@ export class A2UIStat extends LitElement {
       text-overflow: ellipsis;
       white-space: nowrap;
     }
+
+    ${unsafeCSS(markdownStyles)}
   `;
 
   @property({ type: String }) label = '';
@@ -159,7 +162,7 @@ export class A2UIStat extends LitElement {
         ${
           this.description
             ? html`
-          <p class="stat-description">${this.description}</p>
+          <p class="stat-description">${md(this.description)}</p>
         `
             : nothing
         }
