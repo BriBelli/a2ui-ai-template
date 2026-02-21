@@ -1,11 +1,11 @@
-import { LitElement, html, css, unsafeCSS, nothing } from 'lit';
-import { customElement, property, state } from 'lit/decorators.js';
-import type { ChatMessage, SourceCitation } from '../../services/chat-service';
-import { A2UIRenderer } from '../../services/a2ui-renderer';
-import { uiConfig } from '../../config/ui-config';
-import { md, markdownStyles } from '../../services/markdown';
+import { LitElement, html, css, unsafeCSS, nothing } from "lit";
+import { customElement, property, state } from "lit/decorators.js";
+import type { ChatMessage, SourceCitation } from "../../services/chat-service";
+import { A2UIRenderer } from "../../services/a2ui-renderer";
+import { uiConfig } from "../../config/ui-config";
+import { md, markdownStyles } from "../../services/markdown";
 
-@customElement('a2ui-chat-message')
+@customElement("a2ui-chat-message")
 export class A2UIChatMessage extends LitElement {
   static styles = css`
     :host {
@@ -127,8 +127,12 @@ export class A2UIChatMessage extends LitElement {
     }
 
     @keyframes contentFadeIn {
-      from { opacity: 0; }
-      to { opacity: 1; }
+      from {
+        opacity: 0;
+      }
+      to {
+        opacity: 1;
+      }
     }
 
     .meta {
@@ -147,8 +151,12 @@ export class A2UIChatMessage extends LitElement {
     }
 
     @keyframes metaFadeIn {
-      from { opacity: 0; }
-      to { opacity: 1; }
+      from {
+        opacity: 0;
+      }
+      to {
+        opacity: 1;
+      }
     }
 
     .user .meta {
@@ -170,7 +178,8 @@ export class A2UIChatMessage extends LitElement {
       background: var(--a2ui-bg-elevated);
     }
 
-    .duration, .style-badge {
+    .duration,
+    .style-badge {
       text-transform: capitalize;
       color: var(--a2ui-text-tertiary);
     }
@@ -209,7 +218,9 @@ export class A2UIChatMessage extends LitElement {
       resize: vertical;
       outline: none;
       box-sizing: border-box;
-      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+      transition:
+        border-color 0.15s ease,
+        box-shadow 0.15s ease;
     }
 
     .edit-textarea:focus {
@@ -230,7 +241,9 @@ export class A2UIChatMessage extends LitElement {
       font-size: var(--a2ui-text-sm);
       font-weight: var(--a2ui-font-medium);
       cursor: pointer;
-      transition: background 0.15s ease, opacity 0.15s ease;
+      transition:
+        background 0.15s ease,
+        opacity 0.15s ease;
     }
 
     .edit-btn.cancel {
@@ -288,8 +301,9 @@ export class A2UIChatMessage extends LitElement {
       border-radius: var(--a2ui-radius-md);
       overflow: hidden;
       background: var(--a2ui-bg-tertiary);
-      transition: opacity var(--a2ui-transition-fast),
-                  transform var(--a2ui-transition-fast);
+      transition:
+        opacity var(--a2ui-transition-fast),
+        transform var(--a2ui-transition-fast);
     }
 
     .image-strip a:hover {
@@ -428,8 +442,8 @@ export class A2UIChatMessage extends LitElement {
     }
 
     .source-favicon-wrap {
-      width: 72px;
-      height: 72px;
+      width: 50px;
+      height: 50px;
       border-radius: var(--a2ui-radius-md);
       background: var(--a2ui-bg-tertiary);
       flex-shrink: 0;
@@ -496,8 +510,8 @@ export class A2UIChatMessage extends LitElement {
     }
 
     .source-data-icon {
-      width: 72px;
-      height: 72px;
+      width: 50px;
+      height: 50px;
       border-radius: var(--a2ui-radius-md);
       background: var(--a2ui-bg-tertiary);
       color: var(--a2ui-text-tertiary);
@@ -546,16 +560,14 @@ export class A2UIChatMessage extends LitElement {
       }
 
       .response-layout.pos-auto .sources-list {
-        flex-direction: row;
         overflow-x: auto;
-        gap: var(--a2ui-space-3);
+        gap: var(--a2ui-space-1);
         padding-bottom: var(--a2ui-space-1);
         scrollbar-width: thin;
       }
 
       .response-layout.pos-auto .source-card {
-        flex-direction: column;
-        width: 200px;
+        align-items: center;
         flex-shrink: 0;
         border-bottom: none;
         padding: var(--a2ui-space-2);
@@ -566,8 +578,8 @@ export class A2UIChatMessage extends LitElement {
       .response-layout.pos-auto .source-thumb,
       .response-layout.pos-auto .source-favicon-wrap,
       .response-layout.pos-auto .source-data-icon {
-        width: 100%;
-        height: 100px;
+        width: 25px;
+        height: 25px;
       }
     }
 
@@ -619,7 +631,9 @@ export class A2UIChatMessage extends LitElement {
       background: transparent;
       color: var(--a2ui-text-tertiary);
       cursor: pointer;
-      transition: background 0.12s ease, color 0.12s ease;
+      transition:
+        background 0.12s ease,
+        color 0.12s ease;
     }
 
     .action-btn:hover {
@@ -651,10 +665,18 @@ export class A2UIChatMessage extends LitElement {
     }
 
     @keyframes fadeInOut {
-      0% { opacity: 0; }
-      15% { opacity: 1; }
-      75% { opacity: 1; }
-      100% { opacity: 0; }
+      0% {
+        opacity: 0;
+      }
+      15% {
+        opacity: 1;
+      }
+      75% {
+        opacity: 1;
+      }
+      100% {
+        opacity: 0;
+      }
     }
 
     /* ── Follow-up suggestions ─────────────────────────── */
@@ -780,18 +802,19 @@ export class A2UIChatMessage extends LitElement {
   @property({ type: Boolean }) editable = false;
   @property({ type: Boolean }) isLast = false;
   @state() private _editing = false;
-  @state() private _editText = '';
+  @state() private _editText = "";
   @state() private _copied = false;
-  @state() private _liked: 'up' | 'down' | null = null;
+  @state() private _liked: "up" | "down" | null = null;
   @state() private _sourcesExpanded = false;
 
   private _startEdit() {
-    if (!this.editable || this.message.role !== 'user') return;
+    if (!this.editable || this.message.role !== "user") return;
     this._editText = this.message.content;
     this._editing = true;
     this.requestUpdate();
     setTimeout(() => {
-      const ta = this.shadowRoot?.querySelector<HTMLTextAreaElement>('.edit-textarea');
+      const ta =
+        this.shadowRoot?.querySelector<HTMLTextAreaElement>(".edit-textarea");
       if (ta) {
         ta.focus();
         ta.setSelectionRange(ta.value.length, ta.value.length);
@@ -811,61 +834,69 @@ export class A2UIChatMessage extends LitElement {
       return;
     }
     this._editing = false;
-    this.dispatchEvent(new CustomEvent('edit-message', {
-      detail: { messageId: this.message.id, newContent: trimmed },
-      bubbles: true,
-      composed: true,
-    }));
+    this.dispatchEvent(
+      new CustomEvent("edit-message", {
+        detail: { messageId: this.message.id, newContent: trimmed },
+        bubbles: true,
+        composed: true,
+      }),
+    );
   }
 
   private _handleEditKeydown(e: KeyboardEvent) {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       this._submitEdit();
-    } else if (e.key === 'Escape') {
+    } else if (e.key === "Escape") {
       this._cancelEdit();
     }
   }
 
   private _autoResize(el: HTMLTextAreaElement) {
-    el.style.height = 'auto';
-    el.style.height = Math.min(el.scrollHeight, 200) + 'px';
+    el.style.height = "auto";
+    el.style.height = Math.min(el.scrollHeight, 200) + "px";
   }
 
   private async _copyResponse() {
-    const text = this.message.content || '';
+    const text = this.message.content || "";
     try {
       await navigator.clipboard.writeText(text);
       this._copied = true;
-      setTimeout(() => { this._copied = false; }, 1500);
+      setTimeout(() => {
+        this._copied = false;
+      }, 1500);
     } catch {
       /* fallback */
     }
   }
 
   private _regenerate() {
-    this.dispatchEvent(new CustomEvent('regenerate-message', {
-      detail: { messageId: this.message.id },
-      bubbles: true,
-      composed: true,
-    }));
+    this.dispatchEvent(
+      new CustomEvent("regenerate-message", {
+        detail: { messageId: this.message.id },
+        bubbles: true,
+        composed: true,
+      }),
+    );
   }
 
-  private _toggleLike(dir: 'up' | 'down') {
+  private _toggleLike(dir: "up" | "down") {
     this._liked = this._liked === dir ? null : dir;
   }
 
   private _deletePrompt() {
-    this.dispatchEvent(new CustomEvent('delete-message', {
-      detail: { messageId: this.message.id },
-      bubbles: true,
-      composed: true,
-    }));
+    this.dispatchEvent(
+      new CustomEvent("delete-message", {
+        detail: { messageId: this.message.id },
+        bubbles: true,
+        composed: true,
+      }),
+    );
   }
 
   private _getDomain(url: string): string {
     try {
-      return new URL(url).hostname.replace(/^www\./, '');
+      return new URL(url).hostname.replace(/^www\./, "");
     } catch {
       return url;
     }
@@ -876,7 +907,7 @@ export class A2UIChatMessage extends LitElement {
       const domain = new URL(url).hostname;
       return `https://www.google.com/s2/favicons?domain=${domain}&sz=32`;
     } catch {
-      return '';
+      return "";
     }
   }
 
@@ -885,50 +916,109 @@ export class A2UIChatMessage extends LitElement {
 
     const total = sources.length;
     const previewCount = 4;
-    const visible = this._sourcesExpanded ? sources : sources.slice(0, previewCount);
+    const visible = this._sourcesExpanded
+      ? sources
+      : sources.slice(0, previewCount);
     const hasMore = total > previewCount;
 
     return html`
       <div class="sources-panel">
         <div class="sources-header">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <circle cx="12" cy="12" r="10" />
+            <path d="M2 12h20" />
+            <path
+              d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"
+            />
           </svg>
-          <span class="sources-count">${total} source${total !== 1 ? 's' : ''}</span>
+          <span class="sources-count"
+            >${total} source${total !== 1 ? "s" : ""}</span
+          >
         </div>
         <div class="sources-list">
-          ${visible.map(s => s.type === 'data' ? html`
-            <div class="source-card">
-              <div class="source-data-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
-                </svg>
-              </div>
-              <div class="source-info">
-                <div class="source-title">${s.title}</div>
-                <div class="source-meta">
-                  <span class="source-domain">Data source</span>
-                </div>
-              </div>
-            </div>
-          ` : html`
-            <a class="source-card" href=${s.url} target="_blank" rel="noopener noreferrer">
-              <div class="source-favicon-wrap">
-                <img class="source-favicon" src=${this._getFavicon(s.url)} alt="" loading="lazy" @error=${(e: Event) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-              </div>
-              <div class="source-info">
-                <div class="source-title">${s.title || this._getDomain(s.url)}</div>
-                <div class="source-meta">
-                  <img class="source-meta-icon" src=${this._getFavicon(s.url)} alt="" loading="lazy" />
-                  <span class="source-domain">${this._getDomain(s.url)}</span>
-                </div>
-              </div>
-            </a>
-          `)}
+          ${visible.map((s) =>
+            s.type === "data"
+              ? html`
+                  <div class="source-card">
+                    <div class="source-data-icon">
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      >
+                        <ellipse cx="12" cy="5" rx="9" ry="3" />
+                        <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" />
+                        <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
+                      </svg>
+                    </div>
+                    <div class="source-info">
+                      <div class="source-title">${s.title}</div>
+                      <div class="source-meta">
+                        <span class="source-domain">Data source</span>
+                      </div>
+                    </div>
+                  </div>
+                `
+              : html`
+                  <a
+                    class="source-card"
+                    href=${s.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <div class="source-favicon-wrap">
+                      <img
+                        class="source-favicon"
+                        src=${this._getFavicon(s.url)}
+                        alt=""
+                        loading="lazy"
+                        @error=${(e: Event) => {
+                          (e.target as HTMLImageElement).style.display = "none";
+                        }}
+                      />
+                    </div>
+                    <div class="source-info">
+                      <div class="source-title">
+                        ${s.title || this._getDomain(s.url)}
+                      </div>
+                      <div class="source-meta">
+                        <img
+                          class="source-meta-icon"
+                          src=${this._getFavicon(s.url)}
+                          alt=""
+                          loading="lazy"
+                        />
+                        <span class="source-domain"
+                          >${this._getDomain(s.url)}</span
+                        >
+                      </div>
+                    </div>
+                  </a>
+                `,
+          )}
         </div>
-        ${hasMore && !this._sourcesExpanded ? html`
-          <button class="sources-show-all" @click=${() => { this._sourcesExpanded = true; }}>Show all</button>
-        ` : ''}
+        ${hasMore && !this._sourcesExpanded
+          ? html`
+              <button
+                class="sources-show-all"
+                @click=${() => {
+                  this._sourcesExpanded = true;
+                }}
+              >
+                Show all
+              </button>
+            `
+          : ""}
       </div>
     `;
   }
@@ -937,32 +1027,94 @@ export class A2UIChatMessage extends LitElement {
     return html`
       <span class="meta-actions">
         <button class="action-btn" title="Copy" @click=${this._copyResponse}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
           </svg>
         </button>
-        ${this._copied ? html`<span class="copied-toast">Copied!</span>` : ''}
-        <button class="action-btn" title="Regenerate" @click=${this._regenerate}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+        ${this._copied ? html`<span class="copied-toast">Copied!</span>` : ""}
+        <button
+          class="action-btn"
+          title="Regenerate"
+          @click=${this._regenerate}
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <polyline points="23 4 23 10 17 10" />
+            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
           </svg>
         </button>
-        ${this.isLast ? html`
-          <button class="action-btn" title="Delete" @click=${this._deletePrompt}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-            </svg>
-          </button>
-        ` : ''}
+        ${this.isLast
+          ? html`
+              <button
+                class="action-btn"
+                title="Delete"
+                @click=${this._deletePrompt}
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <polyline points="3 6 5 6 21 6" />
+                  <path
+                    d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"
+                  />
+                </svg>
+              </button>
+            `
+          : ""}
         <div class="action-divider"></div>
-        <button class="action-btn ${this._liked === 'up' ? 'active' : ''}" title="Good response" @click=${() => this._toggleLike('up')}>
-          <svg viewBox="0 0 24 24" fill="${this._liked === 'up' ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/>
+        <button
+          class="action-btn ${this._liked === "up" ? "active" : ""}"
+          title="Good response"
+          @click=${() => this._toggleLike("up")}
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="${this._liked === "up" ? "currentColor" : "none"}"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path
+              d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"
+            />
           </svg>
         </button>
-        <button class="action-btn ${this._liked === 'down' ? 'active' : ''}" title="Needs improvement" @click=${() => this._toggleLike('down')}>
-          <svg viewBox="0 0 24 24" fill="${this._liked === 'down' ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"/>
+        <button
+          class="action-btn ${this._liked === "down" ? "active" : ""}"
+          title="Needs improvement"
+          @click=${() => this._toggleLike("down")}
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="${this._liked === "down" ? "currentColor" : "none"}"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path
+              d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"
+            />
           </svg>
         </button>
       </span>
@@ -970,32 +1122,34 @@ export class A2UIChatMessage extends LitElement {
   }
 
   private handleFollowup(text: string) {
-    this.dispatchEvent(new CustomEvent('send-message', {
-      detail: { message: text },
-      bubbles: true,
-      composed: true,
-    }));
+    this.dispatchEvent(
+      new CustomEvent("send-message", {
+        detail: { message: text },
+        bubbles: true,
+        composed: true,
+      }),
+    );
   }
 
   connectedCallback() {
     super.connectedCallback();
     // Apply animation attribute from config
     if (uiConfig.animateMessages) {
-      this.setAttribute('animate', '');
+      this.setAttribute("animate", "");
     }
   }
 
   private formatTime(timestamp: number): string {
-    return new Date(timestamp).toLocaleTimeString([], { 
-      hour: '2-digit', 
-      minute: '2-digit' 
+    return new Date(timestamp).toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
     });
   }
 
   private _isSafeImageUrl(url: string): boolean {
     try {
       const parsed = new URL(url);
-      return parsed.protocol === 'https:' || parsed.protocol === 'http:';
+      return parsed.protocol === "https:" || parsed.protocol === "http:";
     } catch {
       return false;
     }
@@ -1003,106 +1157,178 @@ export class A2UIChatMessage extends LitElement {
 
   render() {
     const { role, content, a2ui, timestamp, model } = this.message;
-    const isUser = role === 'user';
+    const isUser = role === "user";
     const hasSources = !isUser && this.message.sources?.length;
 
     return html`
-      <div class="message ${role}" role="article" aria-label="${isUser ? 'User' : 'Assistant'} message">
+      <div
+        class="message ${role}"
+        role="article"
+        aria-label="${isUser ? "User" : "Assistant"} message"
+      >
         <div class="avatar ${role}" aria-hidden="true">
           ${isUser
-            ? (this.message.avatarUrl
-                ? html`<img src=${this.message.avatarUrl} alt="" />`
-                : (this.message.avatarInitials || 'U'))
-            : 'AI'}
+            ? this.message.avatarUrl
+              ? html`<img src=${this.message.avatarUrl} alt="" />`
+              : this.message.avatarInitials || "U"
+            : "AI"}
         </div>
         <div class="content">
-          ${isUser ? html`
-            ${this._editing ? html`
-              <div class="edit-container">
-                <textarea
-                  class="edit-textarea"
-                  .value=${this._editText}
-                  @input=${(e: InputEvent) => {
-                    const ta = e.target as HTMLTextAreaElement;
-                    this._editText = ta.value;
-                    this._autoResize(ta);
-                  }}
-                  @keydown=${this._handleEditKeydown}
-                ></textarea>
-                <div class="edit-actions">
-                  <button class="edit-btn cancel" @click=${this._cancelEdit}>Cancel</button>
-                  <button
-                    class="edit-btn submit"
-                    ?disabled=${!this._editText.trim() || this._editText.trim() === content}
-                    @click=${this._submitEdit}
-                  >Send</button>
-                </div>
-              </div>
-            ` : html`
-              <div
-                class="bubble ${this.editable ? 'editable' : ''}"
-                @dblclick=${this.editable ? () => this._startEdit() : nothing}
-                title=${this.editable ? 'Double-click to edit' : ''}
-              >
-                <div class="text-content">${content}</div>
-              </div>
-            `}
-          ` : html`
-            <div class="response-layout pos-${uiConfig.sourcesPosition}">
-              <div class="response-main">
-                <div class="bubble">
-                  ${content ? html`
-                    <div class="text-content">${md(content)}</div>
-                  ` : ''}
-                  ${a2ui ? html`
-                    <div class="a2ui-content">
-                      ${A2UIRenderer.render(a2ui)}
+          ${isUser
+            ? html`
+                ${this._editing
+                  ? html`
+                      <div class="edit-container">
+                        <textarea
+                          class="edit-textarea"
+                          .value=${this._editText}
+                          @input=${(e: InputEvent) => {
+                            const ta = e.target as HTMLTextAreaElement;
+                            this._editText = ta.value;
+                            this._autoResize(ta);
+                          }}
+                          @keydown=${this._handleEditKeydown}
+                        ></textarea>
+                        <div class="edit-actions">
+                          <button
+                            class="edit-btn cancel"
+                            @click=${this._cancelEdit}
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            class="edit-btn submit"
+                            ?disabled=${!this._editText.trim() ||
+                            this._editText.trim() === content}
+                            @click=${this._submitEdit}
+                          >
+                            Send
+                          </button>
+                        </div>
+                      </div>
+                    `
+                  : html`
+                      <div
+                        class="bubble ${this.editable ? "editable" : ""}"
+                        @dblclick=${this.editable
+                          ? () => this._startEdit()
+                          : nothing}
+                        title=${this.editable ? "Double-click to edit" : ""}
+                      >
+                        <div class="text-content">${content}</div>
+                      </div>
+                    `}
+              `
+            : html`
+                <div class="response-layout pos-${uiConfig.sourcesPosition}">
+                  <div class="response-main">
+                    <div class="bubble">
+                      ${content
+                        ? html` <div class="text-content">${md(content)}</div> `
+                        : ""}
+                      ${a2ui
+                        ? html`
+                            <div class="a2ui-content">
+                              ${A2UIRenderer.render(a2ui)}
+                            </div>
+                          `
+                        : ""}
                     </div>
-                  ` : ''}
-                </div>
-                ${this.message.images?.length ? html`
-                  <div class="image-strip">
-                    ${this.message.images.filter(url => this._isSafeImageUrl(url)).map(url => html`
-                      <a href=${url} target="_blank" rel="noopener noreferrer">
-                        <img src=${url} alt="" loading="lazy" @error=${(e: Event) => { (e.target as HTMLElement).parentElement!.style.display = 'none'; }} />
-                      </a>
-                    `)}
+                    ${this.message.images?.length
+                      ? html`
+                          <div class="image-strip">
+                            ${this.message.images
+                              .filter((url) => this._isSafeImageUrl(url))
+                              .map(
+                                (url) => html`
+                                  <a
+                                    href=${url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                  >
+                                    <img
+                                      src=${url}
+                                      alt=""
+                                      loading="lazy"
+                                      @error=${(e: Event) => {
+                                        (
+                                          e.target as HTMLElement
+                                        ).parentElement!.style.display = "none";
+                                      }}
+                                    />
+                                  </a>
+                                `,
+                              )}
+                          </div>
+                        `
+                      : ""}
+                    <div class="meta">
+                      ${model
+                        ? html` <span class="model-badge">✨ ${model}</span> `
+                        : ""}
+                      ${this.message.duration
+                        ? html`
+                            <span class="duration"
+                              >${this.message.duration}s</span
+                            >
+                          `
+                        : ""}
+                      <span>${this.formatTime(timestamp)}</span>
+                      ${this.message.style
+                        ? html`
+                            <span class="style-badge"
+                              >${this.message.style.charAt(0).toUpperCase() +
+                              this.message.style.slice(1)}</span
+                            >
+                          `
+                        : ""}
+                      ${uiConfig.showActions ? this._renderActions() : ""}
+                    </div>
+                    ${uiConfig.maxSuggestions > 0 &&
+                    this.message.suggestions?.length
+                      ? html`
+                          <div class="followups">
+                            ${this.message.suggestions
+                              .slice(0, uiConfig.maxSuggestions)
+                              .map(
+                                (s) => html`
+                                  <button
+                                    class="followup"
+                                    aria-label="Follow up: ${s}"
+                                    @click=${() => this.handleFollowup(s)}
+                                  >
+                                    <svg
+                                      class="followup-icon"
+                                      viewBox="0 0 24 24"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      stroke-width="2"
+                                      stroke-linecap="round"
+                                      stroke-linejoin="round"
+                                      aria-hidden="true"
+                                    >
+                                      <path d="M5 12h14M12 5l7 7-7 7" />
+                                    </svg>
+                                    ${s}
+                                  </button>
+                                `,
+                              )}
+                          </div>
+                        `
+                      : ""}
                   </div>
-                ` : ''}
+                  ${uiConfig.showSources && hasSources
+                    ? this._renderSources(this.message.sources!)
+                    : ""}
+                </div>
+              `}
+          ${isUser
+            ? html`
                 <div class="meta">
-                  ${model ? html`
-                    <span class="model-badge">✨ ${model}</span>
-                  ` : ''}
-                  ${this.message.duration ? html`
-                    <span class="duration">${this.message.duration}s</span>
-                  ` : ''}
                   <span>${this.formatTime(timestamp)}</span>
-                  ${this.message.style ? html`
-                    <span class="style-badge">${this.message.style.charAt(0).toUpperCase() + this.message.style.slice(1)}</span>
-                  ` : ''}
-                  ${uiConfig.showActions ? this._renderActions() : ''}
                 </div>
-                ${uiConfig.maxSuggestions > 0 && this.message.suggestions?.length ? html`
-                  <div class="followups">
-                    ${this.message.suggestions.slice(0, uiConfig.maxSuggestions).map(s => html`
-                      <button class="followup" aria-label="Follow up: ${s}" @click=${() => this.handleFollowup(s)}>
-                        <svg class="followup-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                          <path d="M5 12h14M12 5l7 7-7 7"/>
-                        </svg>
-                        ${s}
-                      </button>
-                    `)}
-                  </div>
-                ` : ''}
-              </div>
-              ${uiConfig.showSources && hasSources ? this._renderSources(this.message.sources!) : ''}
-            </div>
-          `}
-          ${isUser ? html`
-            <div class="meta">
-              <span>${this.formatTime(timestamp)}</span>
-            </div>
-          ` : ''}
+              `
+            : ""}
         </div>
       </div>
     `;
