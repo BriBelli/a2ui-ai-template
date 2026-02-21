@@ -10,7 +10,7 @@ export class A2UIChatMessage extends LitElement {
   static styles = css`
     :host {
       display: block;
-      margin-bottom: var(--a2ui-space-6);
+      margin-bottom: var(--a2ui-space-4);
     }
 
     /* Message entrance animation (when enabled) */

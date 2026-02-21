@@ -23,8 +23,7 @@ export class A2UIChatInput extends LitElement {
     .input-container:focus-within {
       background: var(--a2ui-bg-input-focus);
       border-color: var(--a2ui-accent);
-      outline: 2px solid var(--a2ui-accent-subtle);
-      outline-offset: -1px;
+      box-shadow: inset 0 0 0 1px var(--a2ui-accent-subtle);
     }
 
     .input-container.disabled {
@@ -133,7 +132,6 @@ export class A2UIChatInput extends LitElement {
   @state() private value = '';
 
   @query('textarea') private textarea!: HTMLTextAreaElement;
-  private baselineHeight = 0;
 
   private handleInput(e: Event) {
     const target = e.target as HTMLTextAreaElement;
@@ -142,12 +140,10 @@ export class A2UIChatInput extends LitElement {
   }
 
   private autoResize(textarea: HTMLTextAreaElement) {
-    if (!this.baselineHeight) {
-      this.baselineHeight = textarea.offsetHeight;
+    textarea.style.height = '';
+    if (textarea.scrollHeight > textarea.clientHeight) {
+      textarea.style.height = Math.min(textarea.scrollHeight, 200) + 'px';
     }
-    textarea.style.height = 'auto';
-    const newHeight = Math.max(this.baselineHeight, Math.min(textarea.scrollHeight, 200));
-    textarea.style.height = newHeight + 'px';
   }
 
   private handleKeyDown(e: KeyboardEvent) {
@@ -168,7 +164,7 @@ export class A2UIChatInput extends LitElement {
 
     this.value = '';
     if (this.textarea) {
-      this.textarea.style.height = 'auto';
+      this.textarea.style.height = '';
     }
   }
 

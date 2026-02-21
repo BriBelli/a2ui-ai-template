@@ -531,7 +531,6 @@ class AnthropicProvider(LLMProvider):
     models = [
         {"id": "claude-opus-4-6", "name": "Claude Opus 4.6"},
         {"id": "claude-sonnet-4-5-20250929", "name": "Claude Sonnet 4.5"},
-        {"id": "claude-sonnet-4-20250514", "name": "Claude Sonnet 4"},
         {"id": "claude-haiku-4-5-20251001", "name": "Claude Haiku 4.5 (Fast)"},
     ]
 
