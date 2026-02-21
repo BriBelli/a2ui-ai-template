@@ -16,14 +16,15 @@ export class A2UIChatInput extends LitElement {
       background: var(--a2ui-bg-input);
       border: 1px solid var(--a2ui-border-default);
       border-radius: var(--a2ui-radius-2xl);
-      transition: border-color var(--a2ui-transition-fast), box-shadow var(--a2ui-transition-fast);
+      transition: border-color var(--a2ui-transition-fast);
       position: relative;
     }
 
     .input-container:focus-within {
       background: var(--a2ui-bg-input-focus);
       border-color: var(--a2ui-accent);
-      box-shadow: 0 0 0 2px var(--a2ui-accent-subtle);
+      outline: 2px solid var(--a2ui-accent-subtle);
+      outline-offset: -1px;
     }
 
     .input-container.disabled {
@@ -43,6 +44,7 @@ export class A2UIChatInput extends LitElement {
       resize: none;
       max-height: 200px;
       padding: var(--a2ui-space-1) 0;
+      overflow-y: hidden;
     }
 
     textarea::placeholder {
@@ -131,6 +133,7 @@ export class A2UIChatInput extends LitElement {
   @state() private value = '';
 
   @query('textarea') private textarea!: HTMLTextAreaElement;
+  private baselineHeight = 0;
 
   private handleInput(e: Event) {
     const target = e.target as HTMLTextAreaElement;
@@ -139,8 +142,12 @@ export class A2UIChatInput extends LitElement {
   }
 
   private autoResize(textarea: HTMLTextAreaElement) {
+    if (!this.baselineHeight) {
+      this.baselineHeight = textarea.offsetHeight;
+    }
     textarea.style.height = 'auto';
-    textarea.style.height = Math.min(textarea.scrollHeight, 200) + 'px';
+    const newHeight = Math.max(this.baselineHeight, Math.min(textarea.scrollHeight, 200));
+    textarea.style.height = newHeight + 'px';
   }
 
   private handleKeyDown(e: KeyboardEvent) {
