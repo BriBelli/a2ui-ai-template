@@ -329,16 +329,14 @@ export class A2UIChatContainer extends LitElement {
 
   updated(changedProperties: Map<string, unknown>) {
     if (changedProperties.has('messages') || changedProperties.has('isLoading')) {
-      // Auto-scroll only if user is near the bottom (don't hijack if they scrolled up)
       if (this._userNearBottom) {
-        this.scrollToBottom();
+        this._scrollToLastUserMessage();
       } else if (changedProperties.has('messages')) {
-        // If they scrolled up but a new user message was just added, scroll anyway
         const prev = changedProperties.get('messages') as ChatMessage[] | undefined;
         if (prev && this.messages.length > prev.length) {
           const lastNew = this.messages[this.messages.length - 1];
           if (lastNew.role === 'user') {
-            this.scrollToBottom();
+            this._scrollToLastUserMessage();
           }
         }
       }
@@ -367,6 +365,32 @@ export class A2UIChatContainer extends LitElement {
         this.srAnnouncement = 'Generating response, please wait...';
       }
     }
+  }
+
+  private _scrollToLastUserMessage() {
+    requestAnimationFrame(() => {
+      const el = this.messagesContainer;
+      if (!el) return;
+
+      const messageElements = el.querySelectorAll('a2ui-chat-message');
+      let lastUserEl: Element | null = null;
+
+      for (let i = this.messages.length - 1; i >= 0; i--) {
+        if (this.messages[i].role === 'user' && messageElements[i]) {
+          lastUserEl = messageElements[i];
+          break;
+        }
+      }
+
+      if (lastUserEl) {
+        const containerTop = el.getBoundingClientRect().top;
+        const msgTop = lastUserEl.getBoundingClientRect().top;
+        const offset = msgTop - containerTop + el.scrollTop;
+        el.scrollTo({ top: Math.max(0, offset - 8), behavior: 'smooth' });
+      } else {
+        el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+      }
+    });
   }
 
   private scrollToBottom() {

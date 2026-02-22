@@ -7,20 +7,29 @@ import {
   type Plugin,
   type TooltipItem,
 } from 'chart.js';
+import { MatrixController, MatrixElement } from 'chartjs-chart-matrix';
+import { TreemapController, TreemapElement } from 'chartjs-chart-treemap';
+import { SankeyController, Flow } from 'chartjs-chart-sankey';
+import { FunnelController, TrapezoidElement } from 'chartjs-chart-funnel';
 
-// Register all Chart.js components
-Chart.register(...registerables);
+Chart.register(
+  ...registerables,
+  MatrixController, MatrixElement,
+  TreemapController, TreemapElement,
+  SankeyController, Flow,
+  FunnelController, TrapezoidElement,
+);
 
 interface ChartDataset {
   label: string;
-  data: number[];
+  data: number[] | Array<{ x: number; y: number; r?: number }>;
   backgroundColor?: string | string[];
   borderColor?: string | string[];
   borderWidth?: number;
 }
 
 interface ChartData {
-  labels: string[];
+  labels?: string[];
   datasets: ChartDataset[];
 }
 
@@ -161,9 +170,9 @@ export class A2UIChart extends LitElement {
     }
   `;
 
-  @property({ type: String }) chartType: 'bar' | 'line' | 'pie' | 'doughnut' = 'bar';
+  @property({ type: String }) chartType: 'bar' | 'line' | 'pie' | 'doughnut' | 'radar' | 'polarArea' | 'scatter' | 'bubble' | 'matrix' | 'treemap' | 'sankey' | 'funnel' = 'bar';
   @property({ type: String }) title = '';
-  @property({ type: Object }) data: ChartData = { labels: [], datasets: [] };
+  @property({ type: Object }) data: ChartData = { labels: undefined, datasets: [] };
   @property({ type: Object }) options: ChartOptions = {};
 
   @query('canvas') private canvas!: HTMLCanvasElement;
@@ -260,6 +269,17 @@ export class A2UIChart extends LitElement {
     const isLine = this.chartType === 'line';
     const isBar = this.chartType === 'bar';
     const isPie = this.chartType === 'pie' || this.chartType === 'doughnut';
+    const isRadar = this.chartType === 'radar';
+    const isPolar = this.chartType === 'polarArea';
+    const isScatter = this.chartType === 'scatter';
+    const isBubble = this.chartType === 'bubble';
+    const isMatrix = this.chartType === 'matrix';
+    const isTreemap = this.chartType === 'treemap';
+    const isSankey = this.chartType === 'sankey';
+    const isFunnel = this.chartType === 'funnel';
+    const isRadial = isRadar || isPolar;
+    const isPointBased = isScatter || isBubble;
+    const isPlugin = isMatrix || isTreemap || isSankey || isFunnel;
     const isSingleDataset = this.data.datasets.length === 1;
     const chartHeight = this.options.height || 240;
 
@@ -267,32 +287,57 @@ export class A2UIChart extends LitElement {
     const shouldFill = isLine && (this.options.fillArea !== undefined ? this.options.fillArea : isSingleDataset);
 
     // Determine grid visibility
-    const showGrid = this.options.showGrid !== undefined ? this.options.showGrid : isBar;
+    const showGrid = this.options.showGrid !== undefined ? this.options.showGrid : (isBar || isRadial);
 
     // Determine legend visibility
     const showLegend = this.options.showLegend !== undefined
       ? this.options.showLegend
-      : (isPie || this.data.datasets.length > 1);
+      : (isPie || isPolar || isFunnel || this.data.datasets.length > 1);
 
     // Build datasets
     const datasets = this.data.datasets.map((ds, i) => {
       const color = (ds.borderColor as string) || this.getColor(i);
-      const bgColor = ds.backgroundColor || (isLine
-        ? (shouldFill ? this.createGradient(ctx, color, chartHeight) : 'transparent')
-        : isPie ? this.palette.slice(0, this.data.labels.length) : this.hexToRgba(color, 0.7));
+      const labelsLen = this.data.labels?.length ?? 0;
+
+      // Plugin chart types manage their own styling — pass data through with palette colors
+      if (isPlugin) {
+        const pluginBg = ds.backgroundColor
+          || (isTreemap || isMatrix ? this.palette.map(c => this.hexToRgba(c, 0.7)) : this.hexToRgba(color, 0.7));
+        return {
+          ...ds,
+          borderColor: ds.borderColor || color,
+          backgroundColor: pluginBg,
+          borderWidth: ds.borderWidth ?? 1,
+        };
+      }
+
+      let bgColor: string | string[] | CanvasGradient;
+      if (ds.backgroundColor) {
+        bgColor = ds.backgroundColor;
+      } else if (isLine) {
+        bgColor = shouldFill ? this.createGradient(ctx, color, chartHeight) : 'transparent';
+      } else if (isPie || isPolar) {
+        bgColor = this.palette.slice(0, labelsLen).map(c => this.hexToRgba(c, 0.7));
+      } else if (isRadar) {
+        bgColor = this.hexToRgba(color, 0.15);
+      } else if (isScatter || isBubble) {
+        bgColor = this.hexToRgba(color, 0.6);
+      } else {
+        bgColor = this.hexToRgba(color, 0.7);
+      }
 
       return {
         ...ds,
         borderColor: color,
         backgroundColor: bgColor,
-        borderWidth: ds.borderWidth ?? (isLine ? 2.5 : 0),
+        borderWidth: ds.borderWidth ?? (isLine || isRadar ? 2.5 : isScatter || isBubble ? 1 : 0),
         tension: isLine ? 0.35 : undefined,
-        fill: isLine ? shouldFill : undefined,
-        pointRadius: isLine ? 0 : undefined,
-        pointHoverRadius: isLine ? 5 : undefined,
-        pointHoverBackgroundColor: isLine ? color : undefined,
-        pointHoverBorderColor: isLine ? bgApp : undefined,
-        pointHoverBorderWidth: isLine ? 2 : undefined,
+        fill: isLine ? shouldFill : (isRadar ? true : undefined),
+        pointRadius: isLine ? 0 : (isRadar ? 3 : (isScatter ? 4 : undefined)),
+        pointHoverRadius: isLine || isRadar ? 5 : (isScatter ? 6 : undefined),
+        pointHoverBackgroundColor: (isLine || isRadar || isScatter) ? color : undefined,
+        pointHoverBorderColor: (isLine || isRadar || isScatter) ? bgApp : undefined,
+        pointHoverBorderWidth: (isLine || isRadar || isScatter) ? 2 : undefined,
         borderRadius: isBar ? 4 : undefined,
         maxBarThickness: isBar ? 48 : undefined,
       };
@@ -303,7 +348,7 @@ export class A2UIChart extends LitElement {
     const config: ChartConfiguration = {
       type: this.chartType,
       data: {
-        labels: this.data.labels,
+        ...(this.data.labels ? { labels: this.data.labels } : {}),
         datasets,
       },
       options: {
@@ -366,9 +411,28 @@ export class A2UIChart extends LitElement {
             boxPadding: 4,
             usePointStyle: true,
             callbacks: {
-              label(context: TooltipItem<'bar' | 'line' | 'pie' | 'doughnut'>) {
+              label(context: TooltipItem<'bar'>) {
                 const label = context.dataset.label || '';
-                const value = self.formatValue(context.parsed.y ?? (context.parsed as unknown as number));
+                const raw = context.raw;
+
+                // Radar/polar: raw is just a number
+                if (typeof raw === 'number') {
+                  const value = self.formatValue(raw);
+                  return label ? `${label}: ${value}` : value;
+                }
+
+                // Scatter/bubble: raw is {x, y, r?}
+                if (raw && typeof raw === 'object' && 'x' in raw && 'y' in raw) {
+                  const pt = raw as { x: number; y: number; r?: number };
+                  const x = self.formatValue(pt.x);
+                  const y = self.formatValue(pt.y);
+                  const rStr = pt.r !== undefined ? `, size: ${pt.r}` : '';
+                  return label ? `${label}: (${x}, ${y}${rStr})` : `(${x}, ${y}${rStr})`;
+                }
+
+                // Bar/line/pie: parsed.y or raw number
+                const parsed = context.parsed as unknown as Record<string, number>;
+                const value = self.formatValue(parsed.y ?? (raw as number));
                 return label ? `${label}: ${value}` : value;
               },
             },
@@ -378,7 +442,21 @@ export class A2UIChart extends LitElement {
             ? { value: this.options.referenceLine, label: this.options.referenceLabel }
             : undefined,
         } as Record<string, unknown>,
-        scales: !isPie ? {
+        scales: (isPlugin || isPie) ? undefined : isRadial ? {
+          r: {
+            grid: { color: borderSubtle },
+            angleLines: { color: borderSubtle },
+            pointLabels: {
+              color: textSecondary,
+              font: { family: 'Google Sans, Roboto, sans-serif', size: 11 },
+            },
+            ticks: {
+              color: textTertiary,
+              backdropColor: 'transparent',
+              font: { family: 'Google Sans, Roboto, sans-serif', size: 9 },
+            },
+          },
+        } : {
           x: {
             grid: {
               display: showGrid,
@@ -445,7 +523,7 @@ export class A2UIChart extends LitElement {
               callback: (value: string | number) => self.formatValue(Number(value)),
             },
           },
-        } : undefined,
+        },
       },
     };
 

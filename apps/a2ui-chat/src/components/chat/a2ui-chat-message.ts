@@ -3,7 +3,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import type { ChatMessage, SourceCitation } from "../../services/chat-service";
 import { A2UIRenderer } from "../../services/a2ui-renderer";
 import { uiConfig } from "../../config/ui-config";
-import { md, markdownStyles } from "../../services/markdown";
+import { md, markdownStyles, renderMermaidDiagrams } from "../../services/markdown";
 
 @customElement("a2ui-chat-message")
 export class A2UIChatMessage extends LitElement {
@@ -326,6 +326,7 @@ export class A2UIChatMessage extends LitElement {
 
     .response-layout {
       display: flex;
+      flex-wrap: wrap;
       gap: var(--a2ui-space-6);
     }
 
@@ -345,11 +346,21 @@ export class A2UIChatMessage extends LitElement {
     /* Position: bottom — always stacked */
     .response-layout.pos-bottom {
       flex-direction: column;
+      gap: var(--a2ui-space-4);
     }
 
     .response-layout.pos-bottom .sources-panel {
       width: 100%;
       position: static;
+      order: 1;
+    }
+
+    .response-layout.pos-bottom .response-main {
+      order: 2;
+    }
+
+    .response-layout.pos-bottom .followups {
+      order: 3;
     }
 
     .response-layout.pos-bottom .sources-list {
@@ -552,11 +563,14 @@ export class A2UIChatMessage extends LitElement {
     @container (max-width: 900px) {
       .response-layout.pos-auto {
         flex-direction: column;
+        margin-right: 40px;
+        gap: var(--a2ui-space-4);
       }
 
       .response-layout.pos-auto .sources-panel {
         width: 100%;
         position: static;
+        order: 1;
       }
 
       .response-layout.pos-auto .sources-list {
@@ -580,6 +594,14 @@ export class A2UIChatMessage extends LitElement {
       .response-layout.pos-auto .source-data-icon {
         width: 32px;
         height: 32px;
+      }
+
+      .response-layout.pos-auto .response-main {
+        order: 2;
+      }
+
+      .response-layout.pos-auto .followups {
+        order: 3;
       }
     }
 
@@ -685,7 +707,7 @@ export class A2UIChatMessage extends LitElement {
       display: flex;
       flex-direction: column;
       gap: var(--a2ui-space-2);
-      margin-top: var(--a2ui-space-3);
+      width: 100%;
     }
 
     .followup {
@@ -1133,10 +1155,13 @@ export class A2UIChatMessage extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
-    // Apply animation attribute from config
     if (uiConfig.animateMessages) {
       this.setAttribute("animate", "");
     }
+  }
+
+  protected updated() {
+    renderMermaidDiagrams(this.shadowRoot!);
   }
 
   private formatTime(timestamp: number): string {
@@ -1284,41 +1309,41 @@ export class A2UIChatMessage extends LitElement {
                         : ""}
                       ${uiConfig.showActions ? this._renderActions() : ""}
                     </div>
-                    ${uiConfig.maxSuggestions > 0 &&
-                    this.message.suggestions?.length
-                      ? html`
-                          <div class="followups">
-                            ${this.message.suggestions
-                              .slice(0, uiConfig.maxSuggestions)
-                              .map(
-                                (s) => html`
-                                  <button
-                                    class="followup"
-                                    aria-label="Follow up: ${s}"
-                                    @click=${() => this.handleFollowup(s)}
-                                  >
-                                    <svg
-                                      class="followup-icon"
-                                      viewBox="0 0 24 24"
-                                      fill="none"
-                                      stroke="currentColor"
-                                      stroke-width="2"
-                                      stroke-linecap="round"
-                                      stroke-linejoin="round"
-                                      aria-hidden="true"
-                                    >
-                                      <path d="M5 12h14M12 5l7 7-7 7" />
-                                    </svg>
-                                    ${s}
-                                  </button>
-                                `,
-                              )}
-                          </div>
-                        `
-                      : ""}
                   </div>
                   ${uiConfig.showSources && hasSources
                     ? this._renderSources(this.message.sources!)
+                    : ""}
+                  ${uiConfig.maxSuggestions > 0 &&
+                  this.message.suggestions?.length
+                    ? html`
+                        <div class="followups">
+                          ${this.message.suggestions
+                            .slice(0, uiConfig.maxSuggestions)
+                            .map(
+                              (s) => html`
+                                <button
+                                  class="followup"
+                                  aria-label="Follow up: ${s}"
+                                  @click=${() => this.handleFollowup(s)}
+                                >
+                                  <svg
+                                    class="followup-icon"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    stroke-width="2"
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    aria-hidden="true"
+                                  >
+                                    <path d="M5 12h14M12 5l7 7-7 7" />
+                                  </svg>
+                                  ${s}
+                                </button>
+                              `,
+                            )}
+                        </div>
+                      `
                     : ""}
                 </div>
               `}

@@ -22,15 +22,16 @@ export function buildComponentTree(response: A2UIResponse): ComponentNode | null
     componentMap.set(comp.id, comp);
   });
 
-  // Recursive function to build tree
-  function buildNode(id: string): ComponentNode | null {
-    const component = componentMap.get(id);
+  function buildNode(idOrComp: string | A2UIComponent): ComponentNode | null {
+    const component = typeof idOrComp === 'string'
+      ? componentMap.get(idOrComp)
+      : idOrComp;
     if (!component) return null;
 
     const childNodes: ComponentNode[] = [];
     if (component.children) {
-      for (const childId of component.children) {
-        const childNode = buildNode(childId);
+      for (const child of component.children) {
+        const childNode = buildNode(child);
         if (childNode) {
           childNodes.push(childNode);
         }
@@ -43,6 +44,7 @@ export function buildComponentTree(response: A2UIResponse): ComponentNode | null
     };
   }
 
+  if (!response.root) return null;
   return buildNode(response.root);
 }
 
@@ -86,15 +88,18 @@ export function applyUpdate(
       newResponse.components = response.components.filter(
         (c) => c.id !== update.targetId
       );
-      // Also remove from parent's children arrays
       newResponse.components = newResponse.components.map((c) => {
-        if (c.children?.includes(update.targetId)) {
-          return {
-            ...c,
-            children: c.children.filter((id) => id !== update.targetId),
-          };
-        }
-        return c;
+        if (!c.children) return c;
+        const hasTarget = c.children.some((child) =>
+          typeof child === 'string' ? child === update.targetId : child.id === update.targetId
+        );
+        if (!hasTarget) return c;
+        return {
+          ...c,
+          children: c.children.filter((child) =>
+            typeof child === 'string' ? child !== update.targetId : child.id !== update.targetId
+          ) as typeof c.children,
+        };
       });
       break;
 
