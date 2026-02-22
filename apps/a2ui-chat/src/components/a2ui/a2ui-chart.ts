@@ -7,14 +7,12 @@ import {
   type Plugin,
   type TooltipItem,
 } from 'chart.js';
-import { MatrixController, MatrixElement } from 'chartjs-chart-matrix';
 import { TreemapController, TreemapElement } from 'chartjs-chart-treemap';
 import { SankeyController, Flow } from 'chartjs-chart-sankey';
 import { FunnelController, TrapezoidElement } from 'chartjs-chart-funnel';
 
 Chart.register(
   ...registerables,
-  MatrixController, MatrixElement,
   TreemapController, TreemapElement,
   SankeyController, Flow,
   FunnelController, TrapezoidElement,
@@ -170,7 +168,7 @@ export class A2UIChart extends LitElement {
     }
   `;
 
-  @property({ type: String }) chartType: 'bar' | 'line' | 'pie' | 'doughnut' | 'radar' | 'polarArea' | 'scatter' | 'bubble' | 'matrix' | 'treemap' | 'sankey' | 'funnel' = 'bar';
+  @property({ type: String }) chartType: 'bar' | 'line' | 'pie' | 'doughnut' | 'radar' | 'polarArea' | 'scatter' | 'bubble' | 'treemap' | 'sankey' | 'funnel' = 'bar';
   @property({ type: String }) title = '';
   @property({ type: Object }) data: ChartData = { labels: undefined, datasets: [] };
   @property({ type: Object }) options: ChartOptions = {};
@@ -273,41 +271,66 @@ export class A2UIChart extends LitElement {
     const isPolar = this.chartType === 'polarArea';
     const isScatter = this.chartType === 'scatter';
     const isBubble = this.chartType === 'bubble';
-    const isMatrix = this.chartType === 'matrix';
     const isTreemap = this.chartType === 'treemap';
     const isSankey = this.chartType === 'sankey';
     const isFunnel = this.chartType === 'funnel';
     const isRadial = isRadar || isPolar;
     const isPointBased = isScatter || isBubble;
-    const isPlugin = isMatrix || isTreemap || isSankey || isFunnel;
+    const isPlugin = isTreemap || isSankey || isFunnel;
     const isSingleDataset = this.data.datasets.length === 1;
     const chartHeight = this.options.height || 240;
 
-    // Determine whether to fill area under lines
     const shouldFill = isLine && (this.options.fillArea !== undefined ? this.options.fillArea : isSingleDataset);
-
-    // Determine grid visibility
     const showGrid = this.options.showGrid !== undefined ? this.options.showGrid : (isBar || isRadial);
-
-    // Determine legend visibility
     const showLegend = this.options.showLegend !== undefined
       ? this.options.showLegend
-      : (isPie || isPolar || isFunnel || this.data.datasets.length > 1);
+      : (isPie || isPolar || this.data.datasets.length > 1);
 
-    // Build datasets
+    const palette = this.palette;
     const datasets = this.data.datasets.map((ds, i) => {
       const color = (ds.borderColor as string) || this.getColor(i);
       const labelsLen = this.data.labels?.length ?? 0;
 
-      // Plugin chart types manage their own styling — pass data through with palette colors
-      if (isPlugin) {
-        const pluginBg = ds.backgroundColor
-          || (isTreemap || isMatrix ? this.palette.map(c => this.hexToRgba(c, 0.7)) : this.hexToRgba(color, 0.7));
+      if (isTreemap) {
+        return {
+          ...ds,
+          borderColor: this.token('--a2ui-border-subtle') || 'rgba(255,255,255,0.15)',
+          borderWidth: 2,
+          spacing: 2,
+          backgroundColor: (ctx: unknown) => {
+            const c = ctx as { dataIndex?: number };
+            return palette[(c.dataIndex ?? 0) % palette.length] + 'CC';
+          },
+          labels: {
+            display: true,
+            align: 'center' as const,
+            position: 'middle' as const,
+            color: textPrimary,
+            font: { family: 'Google Sans, Roboto, sans-serif', size: 12, weight: 'bold' as const },
+            formatter: (ctx: unknown) => {
+              const c = ctx as { raw?: { _data?: { label?: string; group?: string }; v?: number } };
+              return c.raw?._data?.label || c.raw?._data?.group || '';
+            },
+          },
+        };
+      }
+
+      if (isSankey || isFunnel) {
         return {
           ...ds,
           borderColor: ds.borderColor || color,
-          backgroundColor: pluginBg,
+          backgroundColor: ds.backgroundColor || this.hexToRgba(color, 0.7),
           borderWidth: ds.borderWidth ?? 1,
+          ...(isSankey ? {
+            colorFrom: (ctx: unknown) => {
+              const c = ctx as { dataIndex?: number };
+              return palette[(c.dataIndex ?? 0) % palette.length] + 'CC';
+            },
+            colorTo: (ctx: unknown) => {
+              const c = ctx as { dataIndex?: number };
+              return palette[((c.dataIndex ?? 0) + 1) % palette.length] + 'CC';
+            },
+          } : {}),
         };
       }
 
