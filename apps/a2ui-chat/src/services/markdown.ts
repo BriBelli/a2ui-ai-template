@@ -72,7 +72,7 @@ marked.setOptions({
   gfm: true,
 });
 
-const MERMAID_BLOCK_RE = /```mermaid\s*\n([\s\S]*?)```/g;
+const MERMAID_BLOCK_RE = /```[Mm]ermaid\s*\n([\s\S]*?)```/g;
 
 /**
  * Parse a markdown string into sanitized HTML.
