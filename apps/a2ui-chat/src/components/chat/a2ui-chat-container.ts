@@ -482,6 +482,7 @@ export class A2UIChatContainer extends LitElement {
         <div class="input-wrapper">
           <a2ui-chat-input
             ?disabled=${this.isLoading}
+            ?autofocus=${true}
             @send-message=${this.handleSendMessage}
           ></a2ui-chat-input>
         </div>

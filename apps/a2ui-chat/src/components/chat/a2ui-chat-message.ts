@@ -190,6 +190,10 @@ export class A2UIChatMessage extends LitElement {
       flex-shrink: 0;
       border-radius: 2px;
     }
+    
+    .model-badge .sparkles-icon {
+      max-width: 10px;
+    }
 
     .duration,
     .style-badge {
@@ -571,6 +575,21 @@ export class A2UIChatMessage extends LitElement {
       background: var(--a2ui-bg-secondary);
     }
 
+    /* ── Mobile sources chevron (hidden on desktop) ──── */
+
+    .sources-chevron {
+      display: none;
+      width: 12px;
+      height: 12px;
+      margin-left: auto;
+      flex-shrink: 0;
+      transition: transform 0.2s ease;
+    }
+
+    .sources-panel.mobile-open .sources-chevron {
+      transform: rotate(90deg);
+    }
+
     /* ── Sources: auto collapse via container query ───── */
 
     @container (max-width: 900px) {
@@ -586,11 +605,50 @@ export class A2UIChatMessage extends LitElement {
         order: 1;
       }
 
-      .response-layout.pos-auto .sources-list {
+      .sources-header {
+        cursor: pointer;
+        padding: var(--a2ui-space-1) var(--a2ui-space-3);
+        border-radius: var(--a2ui-radius-full);
+        background: var(--a2ui-bg-secondary);
+        border-bottom: none;
+        margin-bottom: 0;
+        width: fit-content;
+        transition: background 0.15s ease;
+      }
+
+      .sources-header:hover {
+        background: var(--a2ui-bg-tertiary);
+      }
+
+      .sources-chevron {
+        display: block;
+      }
+
+      .sources-panel .sources-list,
+      .sources-panel .sources-show-all {
+        display: none;
+      }
+
+      .sources-panel.mobile-open .sources-header {
+        margin-bottom: var(--a2ui-space-2);
+      }
+
+      .sources-panel.mobile-open .sources-list {
+        display: flex;
         overflow-x: auto;
         gap: var(--a2ui-space-1);
         padding-bottom: var(--a2ui-space-1);
         scrollbar-width: thin;
+        animation: sourcesSlideDown 0.25s ease forwards;
+      }
+
+      @keyframes sourcesSlideDown {
+        from { opacity: 0; transform: translateY(-6px); }
+        to   { opacity: 1; transform: translateY(0); }
+      }
+
+      .sources-panel.mobile-open .sources-show-all {
+        display: flex;
       }
 
       .response-layout.pos-auto .source-card {
@@ -619,14 +677,10 @@ export class A2UIChatMessage extends LitElement {
     }
 
     @container (max-width: 500px) {
-      .response-layout.pos-auto .source-card,
-      .response-layout.pos-bottom .source-card {
-        width: 160px;
-      }
 
-      .response-layout.pos-auto .source-thumb,
-      .response-layout.pos-auto .source-favicon-wrap,
-      .response-layout.pos-auto .source-data-icon,
+      .sources-panel.mobile-open .source-thumb,
+      .sources-panel.mobile-open .source-favicon-wrap,
+      .sources-panel.mobile-open .source-data-icon,
       .response-layout.pos-bottom .source-thumb,
       .response-layout.pos-bottom .source-favicon-wrap,
       .response-layout.pos-bottom .source-data-icon {
@@ -841,12 +895,12 @@ export class A2UIChatMessage extends LitElement {
   @state() private _copied = false;
   @state() private _liked: "up" | "down" | null = null;
   @state() private _sourcesExpanded = false;
+  @state() private _mobileSourcesOpen = false;
 
   private _renderWandIcon() {
     return html`<svg class="wand-icon" viewBox="0 0 24 24" fill="currentColor">
-      <path d="M12 2l1.09 3.41L16.5 6.5l-3.41 1.09L12 11l-1.09-3.41L7.5 6.5l3.41-1.09L12 2z"/>
-      <path d="M18 12l.72 2.28L21 15l-2.28.72L18 18l-.72-2.28L15 15l2.28-.72L18 12z" opacity=".7"/>
-      <path d="M5 16l.54 1.71L7.25 18.25l-1.71.54L5 20.5l-.54-1.71L2.75 18.25l1.71-.54L5 16z" opacity=".5"/>
+      <path d="M9.937 2.5 11.5 8.5 17.5 10.063 11.5 11.625 9.937 17.625 8.375 11.625 2.375 10.063 8.375 8.5Z"/>
+      <path d="M18.25 13l.875 2.875L22 16.75l-2.875.875L18.25 20.5l-.875-2.875L14.5 16.75l2.875-.875Z"/>
     </svg>`;
   }
 
@@ -854,28 +908,22 @@ export class A2UIChatMessage extends LitElement {
     const model = this.message.model?.toLowerCase() || '';
     const p = provider?.toLowerCase() || '';
 
+    let src = '';
     if (p.includes('anthropic') || model.includes('claude')) {
-      return html`<svg class="provider-icon" viewBox="0 0 24 24" fill="currentColor">
-        <path d="M13.827 3.52l3.603 11.117h-7.207L13.827 3.52zm-9.236 16.96L11.063 3.52h2.474l6.776 16.96h-2.586l-1.61-4.28H8.856l-1.679 4.28H4.591z"/>
+      src = '/icons/anthropic.ico';
+    } else if (p.includes('openai') || model.includes('gpt') || model.includes('o4')) {
+      src = '/icons/gpt.ico';
+    } else if (p.includes('google') || model.includes('gemini')) {
+      src = '/icons/gemini.png';
+    }
+
+    if (!src) {
+      return html`<svg class="provider-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3"/><path d="M12 1v4m0 14v4M4.22 4.22l2.83 2.83m9.9 9.9l2.83 2.83M1 12h4m14 0h4M4.22 19.78l2.83-2.83m9.9-9.9l2.83-2.83"/>
       </svg>`;
     }
-    if (p.includes('openai') || model.includes('gpt') || model.includes('o4')) {
-      return html`<svg class="provider-icon" viewBox="0 0 24 24" fill="currentColor">
-        <path d="M22.282 9.821a5.985 5.985 0 0 0-.516-4.91 6.046 6.046 0 0 0-6.51-2.9A6.065 6.065 0 0 0 4.981 4.18a5.998 5.998 0 0 0-3.998 2.9 6.042 6.042 0 0 0 .743 7.097 5.98 5.98 0 0 0 .51 4.911 6.051 6.051 0 0 0 6.515 2.9A5.985 5.985 0 0 0 13.26 24a6.056 6.056 0 0 0 5.772-4.206 5.99 5.99 0 0 0 3.997-2.9 6.056 6.056 0 0 0-.747-7.073zM13.26 22.43a4.476 4.476 0 0 1-2.876-1.04l.141-.081 4.779-2.758a.795.795 0 0 0 .392-.681v-6.737l2.02 1.168a.071.071 0 0 1 .038.052v5.583a4.504 4.504 0 0 1-4.494 4.494zM3.6 18.304a4.47 4.47 0 0 1-.535-3.014l.142.085 4.783 2.759a.771.771 0 0 0 .78 0l5.843-3.369v2.332a.08.08 0 0 1-.033.062L9.74 19.95a4.5 4.5 0 0 1-6.14-1.646zM2.34 7.896a4.485 4.485 0 0 1 2.366-1.973V11.6a.766.766 0 0 0 .388.676l5.815 3.355-2.02 1.168a.076.076 0 0 1-.071 0l-4.83-2.786A4.504 4.504 0 0 1 2.34 7.872zm16.597 3.855l-5.833-3.387L15.119 7.2a.076.076 0 0 1 .071 0l4.83 2.791a4.494 4.494 0 0 1-.676 8.105v-5.678a.79.79 0 0 0-.407-.667zm2.01-3.023l-.141-.085-4.774-2.782a.776.776 0 0 0-.785 0L9.409 9.23V6.897a.066.066 0 0 1 .028-.061l4.83-2.787a4.5 4.5 0 0 1 6.68 4.66zm-12.64 4.135l-2.02-1.164a.08.08 0 0 1-.038-.057V6.075a4.5 4.5 0 0 1 7.375-3.453l-.142.08L8.704 5.46a.795.795 0 0 0-.393.681zm1.097-2.365l2.602-1.5 2.607 1.5v2.999l-2.597 1.5-2.607-1.5z"/>
-      </svg>`;
-    }
-    if (p.includes('google') || model.includes('gemini')) {
-      return html`<svg class="provider-icon" viewBox="0 0 24 24" fill="currentColor">
-        <path d="M12 24c6.627 0 12-5.373 12-12S18.627 0 12 0 0 5.373 0 12s5.373 12 12 12z" fill="url(#gemini_g)"/>
-        <defs><linearGradient id="gemini_g" x1="0" y1="12" x2="24" y2="12" gradientUnits="userSpaceOnUse">
-          <stop stop-color="#4285F4"/><stop offset="1" stop-color="#886FBF"/>
-        </linearGradient></defs>
-        <path d="M12 4.5c4.136 0 7.5 3.364 7.5 7.5s-3.364 7.5-7.5 7.5S4.5 16.136 4.5 12 7.864 4.5 12 4.5z" fill="white" fill-opacity=".25"/>
-      </svg>`;
-    }
-    return html`<svg class="provider-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <circle cx="12" cy="12" r="3"/><path d="M12 1v4m0 14v4M4.22 4.22l2.83 2.83m9.9 9.9l2.83 2.83M1 12h4m14 0h4M4.22 19.78l2.83-2.83m9.9-9.9l2.83-2.83"/>
-    </svg>`;
+
+    return html`<img class="provider-icon" src=${src} alt="" @error=${(e: Event) => { (e.target as HTMLElement).style.display = 'none'; }} />`;
   }
 
   private _startEdit() {
@@ -965,6 +1013,10 @@ export class A2UIChatMessage extends LitElement {
     );
   }
 
+  private _toggleMobileSources() {
+    this._mobileSourcesOpen = !this._mobileSourcesOpen;
+  }
+
   private _getDomain(url: string): string {
     try {
       return new URL(url).hostname.replace(/^www\./, "");
@@ -993,8 +1045,14 @@ export class A2UIChatMessage extends LitElement {
     const hasMore = total > previewCount;
 
     return html`
-      <div class="sources-panel">
-        <div class="sources-header">
+      <div class="sources-panel ${this._mobileSourcesOpen ? 'mobile-open' : ''}">
+        <div
+          class="sources-header"
+          @click=${this._toggleMobileSources}
+          role="button"
+          aria-expanded="${this._mobileSourcesOpen}"
+          aria-label="Toggle sources"
+        >
           <svg
             viewBox="0 0 24 24"
             fill="none"
@@ -1012,6 +1070,9 @@ export class A2UIChatMessage extends LitElement {
           <span class="sources-count"
             >${total} source${total !== 1 ? "s" : ""}</span
           >
+          <svg class="sources-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="9 18 15 12 9 6" />
+          </svg>
         </div>
         <div class="sources-list">
           ${visible.map((s) =>
@@ -1098,6 +1159,43 @@ export class A2UIChatMessage extends LitElement {
     return html`
       <span class="meta-actions">
         <button
+          class="action-btn ${this._liked === "up" ? "active" : ""}"
+          title="Good response"
+          @click=${() => this._toggleLike("up")}
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="${this._liked === "up" ? "currentColor" : "none"}"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path
+              d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"
+            />
+          </svg>
+        </button>
+        <button
+          class="action-btn ${this._liked === "down" ? "active" : ""}"
+          title="Needs improvement"
+          @click=${() => this._toggleLike("down")}
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="${this._liked === "down" ? "currentColor" : "none"}"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path
+              d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"
+            />
+          </svg>
+        </button>
+        <div class="action-divider"></div>
+        <button
           class="action-btn"
           title="Regenerate"
           @click=${this._regenerate}
@@ -1150,43 +1248,6 @@ export class A2UIChatMessage extends LitElement {
               </button>
             `
           : ""}
-        <div class="action-divider"></div>
-        <button
-          class="action-btn ${this._liked === "up" ? "active" : ""}"
-          title="Good response"
-          @click=${() => this._toggleLike("up")}
-        >
-          <svg
-            viewBox="0 0 24 24"
-            fill="${this._liked === "up" ? "currentColor" : "none"}"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <path
-              d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"
-            />
-          </svg>
-        </button>
-        <button
-          class="action-btn ${this._liked === "down" ? "active" : ""}"
-          title="Needs improvement"
-          @click=${() => this._toggleLike("down")}
-        >
-          <svg
-            viewBox="0 0 24 24"
-            fill="${this._liked === "down" ? "currentColor" : "none"}"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <path
-              d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"
-            />
-          </svg>
-        </button>
       </span>
     `;
   }
@@ -1337,7 +1398,7 @@ export class A2UIChatMessage extends LitElement {
                       : ""}
                     <div class="meta">
                       ${model
-                        ? html`<span class="model-badge">${this.message.modelUpgraded ? this._renderWandIcon() : ''}${this._renderProviderIcon(this.message.provider)} ${model}</span>`
+                        ? html`<span class="model-badge">${this.message.modelUpgraded ? `<span class="sparkles-icon">✨</span>` : ''} ${this._renderProviderIcon(this.message.provider)} ${model}</span>`
                         : ""}
                       ${this.message.duration
                         ? html`

@@ -129,9 +129,16 @@ export class A2UIChatInput extends LitElement {
   `;
 
   @property({ type: Boolean }) disabled = false;
+  @property({ type: Boolean }) autofocus = false;
   @state() private value = '';
 
   @query('textarea') private textarea!: HTMLTextAreaElement;
+
+  protected firstUpdated() {
+    if (this.autofocus) {
+      requestAnimationFrame(() => this.textarea?.focus());
+    }
+  }
 
   private handleInput(e: Event) {
     const target = e.target as HTMLTextAreaElement;

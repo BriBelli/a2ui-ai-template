@@ -396,8 +396,14 @@ class LLMProvider(ABC):
         model: str,
         history: Optional[List[Dict[str, str]]] = None,
         system_prompt: Optional[str] = None,
+        effort: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Generate a response for the given message with optional history."""
+        """Generate a response for the given message with optional history.
+
+        Args:
+            effort: Thinking effort level for models that support adaptive
+                    thinking ("low", "medium", "high", "max"). None = provider default.
+        """
 
 
 # ── Provider Implementations ──────────────────────────────────
@@ -516,6 +522,7 @@ class OpenAIProvider(LLMProvider):
         model: str = "gpt-4.1",
         history: Optional[List[Dict[str, str]]] = None,
         system_prompt: Optional[str] = None,
+        effort: Optional[str] = None,
     ) -> Dict[str, Any]:
         result = await self._call_llm(message, model, history, system_prompt)
 
@@ -532,6 +539,7 @@ class AnthropicProvider(LLMProvider):
     name = "Anthropic"
     models = [
         {"id": "claude-opus-4-6", "name": "Claude Opus 4.6"},
+        {"id": "claude-sonnet-4-6", "name": "Claude Sonnet 4.6"},
         {"id": "claude-sonnet-4-5-20250929", "name": "Claude Sonnet 4.5"},
         {"id": "claude-haiku-4-5-20251001", "name": "Claude Haiku 4.5 (Fast)"},
     ]
@@ -554,12 +562,18 @@ class AnthropicProvider(LLMProvider):
             )
         return self._client
 
+    # Models that support adaptive thinking (type: "adaptive" + effort)
+    _ADAPTIVE_MODELS = frozenset({"claude-opus-4-6", "claude-sonnet-4-6"})
+    # Sonnet 4.6 also supports manual extended thinking; adaptive is preferred
+    _THINKING_MODELS = _ADAPTIVE_MODELS
+
     async def _call_llm(
         self,
         message: str,
         model: str,
         history: Optional[List[Dict[str, str]]] = None,
         system_prompt: Optional[str] = None,
+        effort: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Make a single Anthropic call and return parsed JSON or error dict."""
         if system_prompt is None:
@@ -575,13 +589,26 @@ class AnthropicProvider(LLMProvider):
             messages.append({"role": msg["role"], "content": msg["content"]})
         messages.append({"role": "user", "content": message})
 
+        # Build kwargs — add adaptive thinking for 4.6 models
+        kwargs: Dict[str, Any] = dict(
+            model=model,
+            max_tokens=16000 if model in self._THINKING_MODELS and effort else 4000,
+            system=system_prompt,
+            messages=messages,
+        )
+
+        if model in self._ADAPTIVE_MODELS and effort:
+            valid_efforts = ("low", "medium", "high", "max")
+            effort_val = effort if effort in valid_efforts else "high"
+            # "max" effort only supported on Opus 4.6
+            if effort_val == "max" and model != "claude-opus-4-6":
+                effort_val = "high"
+            kwargs["thinking"] = {"type": "adaptive"}
+            kwargs["output_config"] = {"effort": effort_val}
+            logger.info("  [Anthropic] %s  adaptive thinking  effort=%s", model, effort_val)
+
         try:
-            response = await self.client.messages.create(
-                model=model,
-                max_tokens=4000,
-                system=system_prompt,
-                messages=messages,
-            )
+            response = await self.client.messages.create(**kwargs)
         except anthropic.APITimeoutError:
             logger.error("Anthropic timeout (%s)", model)
             return _error_response(
@@ -596,7 +623,13 @@ class AnthropicProvider(LLMProvider):
                 "The AI service returned an error. Please try again in a moment.",
             )
 
-        content = response.content[0].text.strip()
+        # Extract text from response — skip thinking blocks
+        text_parts = []
+        for block in response.content:
+            if hasattr(block, "text") and block.type == "text":
+                text_parts.append(block.text)
+        content = " ".join(text_parts).strip()
+
         if not content:
             logger.warning("%s returned empty content", model)
             return _error_response(
@@ -612,13 +645,14 @@ class AnthropicProvider(LLMProvider):
         model: str = "claude-opus-4-6",
         history: Optional[List[Dict[str, str]]] = None,
         system_prompt: Optional[str] = None,
+        effort: Optional[str] = None,
     ) -> Dict[str, Any]:
-        result = await self._call_llm(message, model, history, system_prompt)
+        result = await self._call_llm(message, model, history, system_prompt, effort)
 
         # Refusal guard — retry with stronger nudge
         return await _retry_on_refusal(
             result, message,
-            lambda msg, hist: self._call_llm(msg, model, hist, system_prompt),
+            lambda msg, hist: self._call_llm(msg, model, hist, system_prompt, effort),
         )
 
 
@@ -633,6 +667,7 @@ class LiteLLMProvider(LLMProvider):
         {"id": "gpt-5", "name": "GPT-5"},
         {"id": "gpt-5-nano", "name": "GPT-5 Nano (Fast)"},
         {"id": "o4-mini", "name": "o4 Mini (Reasoning)"},
+        {"id": "claude-sonnet-4-6", "name": "Claude Sonnet 4.6"},
         {"id": "claude-sonnet-4-5-20250929", "name": "Claude Sonnet 4.5"},
         {"id": "gpt-4o", "name": "GPT-4o"},
     ]
@@ -795,6 +830,7 @@ class LiteLLMProvider(LLMProvider):
         model: str = "gpt-4o-mini",
         history: Optional[List[Dict[str, str]]] = None,
         system_prompt: Optional[str] = None,
+        effort: Optional[str] = None,
     ) -> Dict[str, Any]:
         messages = _build_messages(message, history, system_prompt=system_prompt)
         result = await self._call_llm(messages, model)
@@ -881,6 +917,7 @@ class GeminiProvider(LLMProvider):
         model: str = "gemini-3-flash-preview",
         history: Optional[List[Dict[str, str]]] = None,
         system_prompt: Optional[str] = None,
+        effort: Optional[str] = None,
     ) -> Dict[str, Any]:
         result = await self._call_llm(message, model, history, system_prompt)
 
@@ -1031,8 +1068,9 @@ _SPEED_SCORE = {"fast": 0, "medium": 1, "slow": 2}
 
 _MODEL_ROSTER: List[Dict[str, Any]] = [
     # Anthropic — best structured JSON precision, fast response times
-    {"provider": "anthropic", "model": "claude-sonnet-4-5-20250929",   "tier": 3, "tags": {"structured", "creative"},              "speed": "medium"},
+    {"provider": "anthropic", "model": "claude-sonnet-4-6",   "tier": 4, "tags": {"structured", "reasoning", "creative"}, "speed": "medium"},
     {"provider": "anthropic", "model": "claude-opus-4-6",              "tier": 4, "tags": {"structured", "reasoning", "creative"}, "speed": "medium"},
+    {"provider": "anthropic", "model": "claude-sonnet-4-5-20250929",   "tier": 3, "tags": {"structured", "creative"},              "speed": "medium"},
     {"provider": "anthropic", "model": "claude-haiku-4-5-20251001",    "tier": 1, "tags": set(),                                   "speed": "fast"},
     # OpenAI
     {"provider": "openai",   "model": "gpt-4.1",                      "tier": 2, "tags": set(),                                    "speed": "fast"},
@@ -1040,6 +1078,7 @@ _MODEL_ROSTER: List[Dict[str, Any]] = [
     {"provider": "openai",   "model": "gpt-4.1-mini",                 "tier": 1, "tags": set(),                                    "speed": "fast"},
     {"provider": "openai",   "model": "gpt-5",                        "tier": 3, "tags": {"structured", "reasoning"},              "speed": "slow"},
     # LiteLLM gateway — cross-provider access (primary upgrade path)
+    {"provider": "litellm",  "model": "claude-sonnet-4-6",   "tier": 4, "tags": {"structured", "reasoning", "creative"}, "speed": "medium"},
     {"provider": "litellm",  "model": "claude-sonnet-4-5-20250929",   "tier": 3, "tags": {"structured", "creative"},              "speed": "medium"},
     {"provider": "litellm",  "model": "o4-mini",                      "tier": 3, "tags": {"reasoning"},                            "speed": "medium"},
     {"provider": "litellm",  "model": "gpt-4.1",                      "tier": 2, "tags": set(),                                    "speed": "fast"},
@@ -1048,8 +1087,8 @@ _MODEL_ROSTER: List[Dict[str, Any]] = [
     {"provider": "litellm",  "model": "gpt-4o-mini",                  "tier": 1, "tags": set(),                                    "speed": "fast"},
     {"provider": "litellm",  "model": "gpt-5-nano",                   "tier": 1, "tags": set(),                                    "speed": "fast"},
     {"provider": "litellm",  "model": "gpt-5",                        "tier": 3, "tags": {"structured", "reasoning"},              "speed": "slow"},
-    # Gemini
-    {"provider": "gemini",   "model": "gemini-3-pro-preview",         "tier": 2, "tags": {"structured"},                           "speed": "medium"},
+    # Gemini — strong multimodal + structured data, large context
+    {"provider": "gemini",   "model": "gemini-3-pro-preview",         "tier": 3, "tags": {"structured", "reasoning"},              "speed": "medium"},
     {"provider": "gemini",   "model": "gemini-2.5-flash-preview-05-20", "tier": 1, "tags": set(),                                  "speed": "fast"},
 ]
 
@@ -1154,6 +1193,50 @@ def _find_best_model(
     ))
 
     best = candidates[0]
+    return (best["provider"], best["model"])
+
+
+def _find_faster_model(
+    current_provider_id: str,
+    current_model: str,
+    providers: Dict[str, "LLMProvider"],
+) -> Optional[tuple]:
+    """For standard-complexity tasks, find a faster model if the current one is slow.
+
+    Only downgrades if the current model is medium or slow speed.
+    Returns (provider_id, model_id) or None if already fast.
+    """
+    current_entry = _get_model_entry(current_provider_id, current_model)
+    if not current_entry:
+        return None
+
+    current_speed = _SPEED_SCORE.get(current_entry["speed"], 0)
+    if current_speed == 0:
+        return None  # Already fast
+
+    # Find the fastest tier-1+ model available (standard tasks need tier 1 minimum)
+    candidates: List[Dict[str, Any]] = []
+    for pid, prov in providers.items():
+        if not prov.is_available():
+            continue
+        for entry in _ROSTER_BY_PROVIDER.get(pid, []):
+            entry_speed = _SPEED_SCORE.get(entry["speed"], 2)
+            if entry_speed < current_speed and entry["tier"] >= 1:
+                candidates.append(entry)
+
+    if not candidates:
+        return None
+
+    # Fastest first, then highest tier (prefer capable fast models), then same provider
+    candidates.sort(key=lambda e: (
+        _SPEED_SCORE.get(e["speed"], 2),
+        -e["tier"],
+        0 if e["provider"] == current_provider_id else 1,
+    ))
+
+    best = candidates[0]
+    if best["provider"] == current_provider_id and best["model"] == current_model:
+        return None
     return (best["provider"], best["model"])
 
 
@@ -1817,6 +1900,7 @@ class LLMService:
         effective_provider_id = provider_id
         effective_model = model
         effective_provider = provider
+        effective_complexity = "standard"
 
         if performance_mode in ("auto", "comprehensive"):
             effective_complexity = _derive_complexity(ai_complexity, ai_component_hints)
@@ -1854,20 +1938,56 @@ class LLMService:
                         "── MODEL ROUTE ──  %s/%s already meets %s requirements",
                         provider_id, model, effective_complexity,
                     )
+            else:
+                # Standard task — downgrade slow/expensive models to faster ones
+                downgrade = _find_faster_model(provider_id, model, self.providers)
+                if downgrade:
+                    new_pid, new_mid = downgrade
+                    new_provider = self.get_provider(new_pid)
+                    if new_provider:
+                        effective_provider_id = new_pid
+                        effective_model = new_mid
+                        effective_provider = new_provider
+
+                        cross = " (cross-provider)" if new_pid != provider_id else ""
+                        logger.info(
+                            "── MODEL ROUTE (fast) ──  %s/%s → %s/%s  standard task, using faster model%s",
+                            provider_id, model, new_pid, new_mid, cross,
+                        )
+                        yield {"event": "step", "data": {
+                            "id": "model_upgrade", "status": "start",
+                            "label": "Optimizing for speed",
+                            "detail": f"{provider_id}/{model} → {new_pid}/{new_mid}",
+                        }}
+                        yield {"event": "step", "data": {
+                            "id": "model_upgrade", "status": "done",
+                            "label": "Using faster model for simple task",
+                            "detail": f"{new_pid}/{new_mid}",
+                        }}
 
         # ── Step 4: LLM generation ────────────────────────────
+        # Map task complexity → adaptive thinking effort level
+        _COMPLEXITY_TO_EFFORT = {
+            "standard": None,       # No thinking needed
+            "moderate": "medium",   # Light reasoning
+            "high": "high",         # Deep structured data work
+            "reasoning": "high",    # Multi-step logic
+        }
+        thinking_effort = _COMPLEXITY_TO_EFFORT.get(effective_complexity) if performance_mode in ("auto", "comprehensive") else None
+
         yield {"event": "step", "data": {
             "id": "llm", "status": "start",
             "label": "Generating response",
-            "detail": f"{effective_provider_id}/{effective_model}",
+            "detail": f"{effective_provider_id}/{effective_model}" + (f" (thinking: {thinking_effort})" if thinking_effort else ""),
         }}
         logger.info(
-            "── GENERATE ──  sending to %s/%s  (%d chars)",
-            effective_provider_id, effective_model, len(augmented_message),
+            "── GENERATE ──  sending to %s/%s  (%d chars)  effort=%s",
+            effective_provider_id, effective_model, len(augmented_message), thinking_effort,
         )
         llm_t0 = time.time()
         response = await effective_provider.generate(
-            augmented_message, effective_model, effective_history, system_prompt=system_prompt,
+            augmented_message, effective_model, effective_history,
+            system_prompt=system_prompt, effort=thinking_effort,
         )
         llm_elapsed = time.time() - llm_t0
         logger.info(
