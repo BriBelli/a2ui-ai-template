@@ -10,12 +10,14 @@ import {
 import { TreemapController, TreemapElement } from 'chartjs-chart-treemap';
 import { SankeyController, Flow } from 'chartjs-chart-sankey';
 import { FunnelController, TrapezoidElement } from 'chartjs-chart-funnel';
+import { MatrixController, MatrixElement } from 'chartjs-chart-matrix';
 
 Chart.register(
   ...registerables,
   TreemapController, TreemapElement,
   SankeyController, Flow,
   FunnelController, TrapezoidElement,
+  MatrixController, MatrixElement,
 );
 
 interface ChartDataset {
@@ -168,7 +170,7 @@ export class A2UIChart extends LitElement {
     }
   `;
 
-  @property({ type: String }) chartType: 'bar' | 'line' | 'pie' | 'doughnut' | 'radar' | 'polarArea' | 'scatter' | 'bubble' | 'treemap' | 'sankey' | 'funnel' = 'bar';
+  @property({ type: String }) chartType: 'bar' | 'line' | 'pie' | 'doughnut' | 'radar' | 'polarArea' | 'scatter' | 'bubble' | 'treemap' | 'sankey' | 'funnel' | 'matrix' = 'bar';
   @property({ type: String }) title = '';
   @property({ type: Object }) data: ChartData = { labels: undefined, datasets: [] };
   @property({ type: Object }) options: ChartOptions = {};
@@ -250,10 +252,43 @@ export class A2UIChart extends LitElement {
     return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   }
 
+  /**
+   * Normalize matrix data: ensure labels[] only contains x-axis values,
+   * deduplicate, and strip any data points missing the v property.
+   */
+  private normalizeMatrixData(): void {
+    if (this.chartType !== 'matrix') return;
+    const ds = this.data.datasets?.[0];
+    if (!ds?.data || !Array.isArray(ds.data)) return;
+
+    const points = ds.data as Array<{ x: string | number; y: string | number; v?: number }>;
+    const validPoints = points.filter(p => p.x != null && p.y != null && typeof p.v === 'number');
+
+    const xValues = [...new Set(validPoints.map(p => String(p.x)))];
+    const yValues = [...new Set(validPoints.map(p => String(p.y)))];
+
+    // labels[] should ONLY be x-axis values — rebuild from actual data
+    this.data = {
+      ...this.data,
+      labels: xValues,
+      datasets: [{ ...ds, data: validPoints as unknown as number[] }],
+    };
+
+    if (validPoints.length !== points.length) {
+      console.warn(
+        `[a2ui-chart] Matrix: filtered ${points.length - validPoints.length} invalid points. ` +
+        `Grid: ${yValues.length} rows × ${xValues.length} cols = ${validPoints.length} cells`
+      );
+    }
+  }
+
   private renderChart() {
     if (!this.canvas) return;
 
     this.chart?.destroy();
+
+    this.normalizeMatrixData();
+
     const ctx = this.canvas.getContext('2d');
     if (!ctx) return;
 
@@ -274,9 +309,10 @@ export class A2UIChart extends LitElement {
     const isTreemap = this.chartType === 'treemap';
     const isSankey = this.chartType === 'sankey';
     const isFunnel = this.chartType === 'funnel';
+    const isMatrix = this.chartType === 'matrix';
     const isRadial = isRadar || isPolar;
     const isPointBased = isScatter || isBubble;
-    const isPlugin = isTreemap || isSankey || isFunnel;
+    const isPlugin = isTreemap || isSankey || isFunnel || isMatrix;
     const isSingleDataset = this.data.datasets.length === 1;
     const chartHeight = this.options.height || 240;
 
@@ -311,6 +347,39 @@ export class A2UIChart extends LitElement {
               const c = ctx as { raw?: { _data?: { label?: string; group?: string }; v?: number } };
               return c.raw?._data?.label || c.raw?._data?.group || '';
             },
+          },
+        };
+      }
+
+      if (isMatrix) {
+        const allData = ds.data as Array<{ x: number | string; y: number | string; v: number }>;
+        const values = allData.map(d => d.v ?? 0);
+        const minV = Math.min(...values);
+        const maxV = Math.max(...values);
+        const range = maxV - minV || 1;
+
+        return {
+          ...ds,
+          borderColor: this.token('--a2ui-border-subtle') || 'rgba(255,255,255,0.08)',
+          borderWidth: 1,
+          borderRadius: 2,
+          width: ({ chart }: { chart: Chart }) => {
+            const xLabels = chart.scales?.x?.ticks?.length || 1;
+            return (chart.chartArea?.width || 200) / xLabels - 2;
+          },
+          height: ({ chart }: { chart: Chart }) => {
+            const yLabels = chart.scales?.y?.ticks?.length || 1;
+            return (chart.chartArea?.height || 200) / yLabels - 2;
+          },
+          backgroundColor: (ctx: unknown) => {
+            const c = ctx as { raw?: { v?: number } };
+            const v = c.raw?.v ?? 0;
+            const t = (v - minV) / range;
+            // Cool-to-warm gradient: blue (#8ab4f8) → yellow (#fdd663) → red (#f28b82)
+            const r = Math.round(t < 0.5 ? 138 + t * 2 * (253 - 138) : 253 - (t - 0.5) * 2 * (253 - 242));
+            const g = Math.round(t < 0.5 ? 180 + t * 2 * (214 - 180) : 214 - (t - 0.5) * 2 * (214 - 139));
+            const b = Math.round(t < 0.5 ? 248 - t * 2 * (248 - 99) : 99 + (t - 0.5) * 2 * (130 - 99));
+            return `rgba(${r}, ${g}, ${b}, 0.85)`;
           },
         };
       }
@@ -438,6 +507,13 @@ export class A2UIChart extends LitElement {
                 const label = context.dataset.label || '';
                 const raw = context.raw;
 
+                // Matrix/heatmap: raw has v for value
+                if (raw && typeof raw === 'object' && 'v' in raw) {
+                  const pt = raw as { x: string | number; y: string | number; v: number };
+                  const value = self.formatValue(pt.v);
+                  return `${pt.y} × ${pt.x}: ${value}`;
+                }
+
                 // Radar/polar: raw is just a number
                 if (typeof raw === 'number') {
                   const value = self.formatValue(raw);
@@ -465,7 +541,48 @@ export class A2UIChart extends LitElement {
             ? { value: this.options.referenceLine, label: this.options.referenceLabel }
             : undefined,
         } as Record<string, unknown>,
-        scales: (isPlugin || isPie) ? undefined : isRadial ? {
+        scales: isMatrix ? {
+          x: {
+            type: 'category' as const,
+            offset: true,
+            grid: { display: false },
+            border: { display: false },
+            ticks: {
+              color: textTertiary,
+              font: { family: 'Google Sans, Roboto, sans-serif', size: 10 },
+              maxRotation: 45,
+            },
+            ...(this.options.xAxisLabel ? {
+              title: {
+                display: true,
+                text: this.options.xAxisLabel,
+                color: textSecondary,
+                font: { family: 'Google Sans, Roboto, sans-serif', size: 11, weight: 'bold' as const },
+                padding: { top: 8 },
+              },
+            } : {}),
+          },
+          y: {
+            type: 'category' as const,
+            offset: true,
+            reverse: true,
+            grid: { display: false },
+            border: { display: false },
+            ticks: {
+              color: textTertiary,
+              font: { family: 'Google Sans, Roboto, sans-serif', size: 10 },
+            },
+            ...(this.options.yAxisLabel ? {
+              title: {
+                display: true,
+                text: this.options.yAxisLabel,
+                color: textSecondary,
+                font: { family: 'Google Sans, Roboto, sans-serif', size: 11, weight: 'bold' as const },
+                padding: { bottom: 8 },
+              },
+            } : {}),
+          },
+        } : ((isPlugin && !isMatrix) || isPie) ? undefined : isRadial ? {
           r: {
             grid: { color: borderSubtle },
             angleLines: { color: borderSubtle },

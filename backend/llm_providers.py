@@ -929,17 +929,34 @@ _ANALYZER_SYSTEM = (
     "3. Whether the user's geographic location is relevant\n"
     "4. If search is needed, an optimized search query\n"
     "5. Whether any available data sources should be queried, and if so which endpoints/questions to use\n"
+    "6. Which specialized chart/component types the response will likely need\n"
+    "7. The task complexity level for model routing\n"
     "Respond with ONLY a valid JSON object. No markdown, no explanation."
 )
 
 _ANALYZER_PROMPT_TEMPLATE = (
     "Content styles:\n{descriptions}\n\n"
+    "Component hints (include when the query likely needs these specific visualizations):\n"
+    "  chart_matrix — heatmaps, 2D grids, correlation matrices, temperature/schedule grids\n"
+    "  chart_treemap — hierarchical data, market share breakdowns, proportional area displays\n"
+    "  chart_sankey — flow/allocation diagrams, budget flows, process pipelines, conversions\n"
+    "  chart_funnel — conversion funnels, sales pipelines, progressive filtering\n"
+    "  chart_radar — multi-axis comparisons, scoring/rating profiles, feature comparisons\n"
+    "  chart_scatter — correlation analysis, distribution plots, x-y relationship data\n\n"
     "{data_sources_section}"
     "{context_section}"
     "User query: {query}\n\n"
     'Reply with JSON: {{"style":"<style_id>","search":<true|false>,"location":<true|false>,'
     '"search_query":"<optimized query or empty>",'
-    '"data_sources":[{{"source":"<source_id>","endpoint":"<path or question>","params":{{}}}}]}}\n'
+    '"data_sources":[{{"source":"<source_id>","endpoint":"<path or question>","params":{{}}}}],'
+    '"components":["<component_key>"],'
+    '"complexity":"<standard|moderate|high|reasoning>"}}\n'
+    "components: array of component hint keys from the list above. Empty array if none are needed (standard bar/line/pie are always available).\n"
+    "complexity: how hard this task is for the generation model.\n"
+    '  "standard" — simple Q&A, basic text, simple charts (bar/line/pie)\n'
+    '  "moderate" — multi-dataset charts, comparisons, structured tables, radar/scatter\n'
+    '  "high" — complex visualizations (heatmap/matrix, treemap, sankey, funnel), precise JSON structures, multi-component layouts\n'
+    '  "reasoning" — multi-step math, statistical analysis, logic chains, calculations\n'
     "If no data sources are relevant, return an empty array for data_sources."
 )
 
@@ -993,6 +1010,149 @@ PERFORMANCE_MODES = {
 }
 
 _AUTO_DEGRADE_THRESHOLD = 0.75
+
+# ── Adaptive Model Routing ─────────────────────────────────────
+#
+# Task-based model selection: the analyzer classifies complexity
+# and the pipeline routes to the BEST + FASTEST model available.
+# Speed is king — a slow model is a broken model. Cross-provider
+# routing via LiteLLM is preferred over slow same-provider models.
+#
+# Complexity tiers:
+#   "standard"  — no upgrade needed (text, simple charts)
+#   "moderate"  — structured data, multi-dataset charts
+#   "high"      — complex viz (matrix, sankey, treemap), deep analysis
+#   "reasoning" — multi-step math, logic chains, statistical analysis
+
+# Speed scores: lower = faster = better
+_SPEED_SCORE = {"fast": 0, "medium": 1, "slow": 2}
+
+_MODEL_ROSTER: List[Dict[str, Any]] = [
+    # Anthropic — best structured JSON precision, fast response times
+    {"provider": "anthropic", "model": "claude-sonnet-4-5-20250929",   "tier": 3, "tags": {"structured", "creative"},              "speed": "medium"},
+    {"provider": "anthropic", "model": "claude-opus-4-6",              "tier": 4, "tags": {"structured", "reasoning", "creative"}, "speed": "medium"},
+    {"provider": "anthropic", "model": "claude-haiku-4-5-20251001",    "tier": 1, "tags": set(),                                   "speed": "fast"},
+    # OpenAI
+    {"provider": "openai",   "model": "gpt-4.1",                      "tier": 2, "tags": set(),                                    "speed": "fast"},
+    {"provider": "openai",   "model": "gpt-5-mini",                   "tier": 2, "tags": {"structured"},                           "speed": "medium"},
+    {"provider": "openai",   "model": "gpt-4.1-mini",                 "tier": 1, "tags": set(),                                    "speed": "fast"},
+    {"provider": "openai",   "model": "gpt-5",                        "tier": 3, "tags": {"structured", "reasoning"},              "speed": "slow"},
+    # LiteLLM gateway — cross-provider access (primary upgrade path)
+    {"provider": "litellm",  "model": "claude-sonnet-4-5-20250929",   "tier": 3, "tags": {"structured", "creative"},              "speed": "medium"},
+    {"provider": "litellm",  "model": "o4-mini",                      "tier": 3, "tags": {"reasoning"},                            "speed": "medium"},
+    {"provider": "litellm",  "model": "gpt-4.1",                      "tier": 2, "tags": set(),                                    "speed": "fast"},
+    {"provider": "litellm",  "model": "gpt-4o",                       "tier": 2, "tags": set(),                                    "speed": "medium"},
+    {"provider": "litellm",  "model": "gpt-4.1-mini",                 "tier": 1, "tags": set(),                                    "speed": "fast"},
+    {"provider": "litellm",  "model": "gpt-4o-mini",                  "tier": 1, "tags": set(),                                    "speed": "fast"},
+    {"provider": "litellm",  "model": "gpt-5-nano",                   "tier": 1, "tags": set(),                                    "speed": "fast"},
+    {"provider": "litellm",  "model": "gpt-5",                        "tier": 3, "tags": {"structured", "reasoning"},              "speed": "slow"},
+    # Gemini
+    {"provider": "gemini",   "model": "gemini-3-pro-preview",         "tier": 2, "tags": {"structured"},                           "speed": "medium"},
+    {"provider": "gemini",   "model": "gemini-2.5-flash-preview-05-20", "tier": 1, "tags": set(),                                  "speed": "fast"},
+]
+
+# Build fast lookups
+_ROSTER_BY_PROVIDER: Dict[str, List[Dict[str, Any]]] = {}
+for _entry in _MODEL_ROSTER:
+    _ROSTER_BY_PROVIDER.setdefault(_entry["provider"], []).append(_entry)
+
+def _get_model_entry(provider_id: str, model_id: str) -> Optional[Dict[str, Any]]:
+    """Return the roster entry for a model, or None."""
+    for entry in _ROSTER_BY_PROVIDER.get(provider_id, []):
+        if entry["model"] == model_id:
+            return entry
+    return None
+
+def _get_model_tier(provider_id: str, model_id: str) -> int:
+    """Return the tier (1-4) of a model, or 1 if unknown."""
+    entry = _get_model_entry(provider_id, model_id)
+    return entry["tier"] if entry else 1
+
+# Complexity → minimum tier required, plus any tag requirements
+_COMPLEXITY_REQUIREMENTS: Dict[str, Dict[str, Any]] = {
+    "standard":  {"min_tier": 1, "tags": set()},
+    "moderate":  {"min_tier": 2, "tags": set()},
+    "high":      {"min_tier": 3, "tags": {"structured"}},
+    "reasoning": {"min_tier": 3, "tags": {"reasoning"}},
+}
+
+_COMPLEX_COMPONENTS = frozenset({
+    "chart_matrix", "chart_treemap", "chart_sankey",
+    "chart_funnel",
+})
+
+_MODERATE_COMPONENTS = frozenset({
+    "chart_scatter", "chart_radar",
+})
+
+
+def _derive_complexity(
+    analyzer_complexity: str,
+    component_hints: List[str],
+) -> str:
+    """Derive effective complexity from analyzer output + component hints."""
+    hint_set = set(component_hints)
+
+    if hint_set & _COMPLEX_COMPONENTS:
+        return "high"
+    if hint_set & _MODERATE_COMPONENTS and analyzer_complexity in ("standard",):
+        return "moderate"
+
+    return analyzer_complexity if analyzer_complexity in _COMPLEXITY_REQUIREMENTS else "standard"
+
+
+def _find_best_model(
+    current_provider_id: str,
+    current_model: str,
+    complexity: str,
+    providers: Dict[str, "LLMProvider"],
+) -> Optional[tuple]:
+    """Find the best available model for the given complexity.
+
+    Collects ALL candidates across ALL available providers, then picks
+    the fastest one that meets the tier+tag requirement. Speed is the
+    primary sort key — a slow same-provider model loses to a fast
+    cross-provider model every time.
+
+    Returns (provider_id, model_id) or None if current model is sufficient.
+    """
+    req = _COMPLEXITY_REQUIREMENTS.get(complexity)
+    if not req:
+        return None
+
+    min_tier = req["min_tier"]
+    required_tags = req["tags"]
+
+    current_entry = _get_model_entry(current_provider_id, current_model)
+    if current_entry:
+        if (current_entry["tier"] >= min_tier
+                and required_tags.issubset(current_entry["tags"])):
+            return None  # Already sufficient
+
+    # Collect candidates from ALL available providers
+    candidates: List[Dict[str, Any]] = []
+    for pid, prov in providers.items():
+        if not prov.is_available():
+            continue
+        for entry in _ROSTER_BY_PROVIDER.get(pid, []):
+            if (entry["tier"] >= min_tier
+                    and required_tags.issubset(entry["tags"])
+                    and not (entry["provider"] == current_provider_id
+                             and entry["model"] == current_model)):
+                candidates.append(entry)
+
+    if not candidates:
+        return None
+
+    # Sort: fastest first, then lowest sufficient tier, then prefer same provider
+    candidates.sort(key=lambda e: (
+        _SPEED_SCORE.get(e["speed"], 2),     # speed first (fast=0, medium=1, slow=2)
+        e["tier"],                            # lowest tier that still qualifies
+        0 if e["provider"] == current_provider_id else 1,  # same-provider tiebreaker
+    ))
+
+    best = candidates[0]
+    return (best["provider"], best["model"])
 
 
 # ── Service Layer ──────────────────────────────────────────────
@@ -1188,20 +1348,29 @@ class LLMService:
                 if not isinstance(ds_queries, list):
                     ds_queries = []
 
+                components = result.get("components") or []
+                if not isinstance(components, list):
+                    components = []
+                components = [str(c) for c in components if isinstance(c, str)]
+
+                raw_complexity = str(result.get("complexity", "standard")).lower().strip()
+
                 analysis = {
                     "style": style,
                     "search": bool(result.get("search", False)),
                     "location": bool(result.get("location", False)),
                     "search_query": str(result.get("search_query", "")),
                     "data_sources": ds_queries,
+                    "components": components,
+                    "complexity": raw_complexity,
                 }
 
                 logger.info(
-                    "── ANALYZE OK ──  %s via %s/%s  |  style=%s  search=%s  location=%s  query='%s'  data_sources=%d",
+                    "── ANALYZE OK ──  %s via %s/%s  |  style=%s  complexity=%s  search=%s  location=%s  query='%s'  data_sources=%d  components=%s",
                     message[:50], provider_id, model_id,
-                    analysis["style"], analysis["search"],
+                    analysis["style"], raw_complexity, analysis["search"],
                     analysis["location"], analysis["search_query"][:60],
-                    len(ds_queries),
+                    len(ds_queries), components,
                 )
                 return analysis
 
@@ -1318,15 +1487,15 @@ class LLMService:
         ai_wants_location = False
         ai_search_query = ""
         ai_data_queries: List[Dict[str, Any]] = []
+        ai_component_hints: List[str] = []
+        ai_complexity: str = "standard"
         style_id = DEFAULT_STYLE
 
         yield {"event": "step", "data": {"id": "analyzer", "status": "start", "label": "Analyzing intent"}}
 
         if content_style != "auto":
-            # User explicitly chose a style — skip AI for style
             style_id = content_style
             logger.info("── ANALYZE ──  explicit style from user: '%s'", style_id)
-            # Still run AI to decide tools (search/location)
             if classifier_active:
                 analysis = await self._analyze_intent(message, history=effective_history)
                 if analysis:
@@ -1334,9 +1503,11 @@ class LLMService:
                     ai_wants_location = analysis["location"]
                     ai_search_query = analysis["search_query"]
                     ai_data_queries = analysis.get("data_sources") or []
+                    ai_component_hints = analysis.get("components") or []
+                    ai_complexity = analysis.get("complexity", "standard")
                     logger.info(
-                        "── ANALYZE ──  tools: search=%s  location=%s  query='%s'  data_sources=%d",
-                        ai_wants_search, ai_wants_location, ai_search_query[:60], len(ai_data_queries),
+                        "── ANALYZE ──  tools: search=%s  location=%s  query='%s'  data_sources=%d  components=%s  complexity=%s",
+                        ai_wants_search, ai_wants_location, ai_search_query[:60], len(ai_data_queries), ai_component_hints, ai_complexity,
                     )
                 else:
                     logger.warning("── ANALYZE ──  AI failed, falling back to regex for tool decisions")
@@ -1348,7 +1519,6 @@ class LLMService:
                 ai_wants_location = self._regex_needs_location(message)
 
         elif classifier_active:
-            # Auto mode — AI decides everything
             analysis = await self._analyze_intent(message, history=effective_history)
             if analysis:
                 style_id = analysis["style"]
@@ -1356,9 +1526,11 @@ class LLMService:
                 ai_wants_location = analysis["location"]
                 ai_search_query = analysis["search_query"]
                 ai_data_queries = analysis.get("data_sources") or []
+                ai_component_hints = analysis.get("components") or []
+                ai_complexity = analysis.get("complexity", "standard")
                 logger.info(
-                    "── ANALYZE OK ──  style=%s  search=%s  location=%s  query='%s'  data_sources=%d",
-                    style_id, ai_wants_search, ai_wants_location, ai_search_query[:60], len(ai_data_queries),
+                    "── ANALYZE OK ──  style=%s  complexity=%s  search=%s  location=%s  query='%s'  data_sources=%d  components=%s",
+                    style_id, ai_complexity, ai_wants_search, ai_wants_location, ai_search_query[:60], len(ai_data_queries), ai_component_hints,
                 )
             else:
                 style_id = DEFAULT_STYLE
@@ -1369,7 +1541,6 @@ class LLMService:
                     style_id, ai_wants_search, ai_wants_location,
                 )
         else:
-            # AI disabled entirely — full regex fallback
             from content_styles import classify_style
             style_id = classify_style(message)
             ai_wants_search = should_search(message)
@@ -1606,6 +1777,23 @@ class LLMService:
             list(component_priority)[:5],
         )
 
+        # ── Step 3c: Micro-context assembly ────────────────────
+        # Inject detailed component instructions based on analyzer hints.
+        # Only adds context for the specific components this request needs.
+        from micro_contexts import assemble as assemble_micro_contexts, AVAILABLE_KEYS
+
+        if ai_component_hints:
+            valid_hints = [k for k in ai_component_hints if k in AVAILABLE_KEYS]
+            if valid_hints:
+                micro_budget = 1500 if max_body_bytes else None
+                micro_block = assemble_micro_contexts(valid_hints, max_bytes=micro_budget)
+                if micro_block:
+                    system_prompt = f"{system_prompt}\n\n{micro_block}"
+                    logger.info(
+                        "── MICRO-CONTEXT ──  injected %d fragments (%dB): %s",
+                        len(valid_hints), len(micro_block.encode("utf-8")), valid_hints,
+                    )
+
         if max_body_bytes is not None and performance_mode == "auto":
             prompt_bytes = len(system_prompt.encode("utf-8"))
             if prompt_bytes > max_body_bytes * _AUTO_DEGRADE_THRESHOLD:
@@ -1621,19 +1809,63 @@ class LLMService:
         if location_context:
             augmented_message = f"{location_context}{augmented_message}"
 
+        # ── Step 3d: Adaptive model routing ───────────────────
+        # Derive effective complexity from analyzer output + component hints,
+        # then find the best model that meets the requirement.
+        effective_provider_id = provider_id
+        effective_model = model
+        effective_provider = provider
+
+        if performance_mode in ("auto", "comprehensive"):
+            effective_complexity = _derive_complexity(ai_complexity, ai_component_hints)
+
+            if effective_complexity != "standard":
+                route = _find_best_model(
+                    provider_id, model, effective_complexity, self.providers,
+                )
+                if route:
+                    new_pid, new_mid = route
+                    new_provider = self.get_provider(new_pid)
+                    if new_provider:
+                        effective_provider_id = new_pid
+                        effective_model = new_mid
+                        effective_provider = new_provider
+
+                        cross = " (cross-provider)" if new_pid != provider_id else ""
+                        logger.info(
+                            "── MODEL ROUTE ──  %s/%s → %s/%s  complexity=%s  components=%s%s",
+                            provider_id, model, new_pid, new_mid,
+                            effective_complexity, ai_component_hints, cross,
+                        )
+                        yield {"event": "step", "data": {
+                            "id": "model_upgrade", "status": "start",
+                            "label": f"Routing to stronger model ({effective_complexity})",
+                            "detail": f"{provider_id}/{model} → {new_pid}/{new_mid}",
+                        }}
+                        yield {"event": "step", "data": {
+                            "id": "model_upgrade", "status": "done",
+                            "label": f"Model routed for {effective_complexity} task",
+                            "detail": f"{new_pid}/{new_mid}",
+                        }}
+                else:
+                    logger.info(
+                        "── MODEL ROUTE ──  %s/%s already meets %s requirements",
+                        provider_id, model, effective_complexity,
+                    )
+
         # ── Step 4: LLM generation ────────────────────────────
         yield {"event": "step", "data": {
             "id": "llm", "status": "start",
             "label": "Generating response",
-            "detail": f"{provider_id}/{model}",
+            "detail": f"{effective_provider_id}/{effective_model}",
         }}
         logger.info(
             "── GENERATE ──  sending to %s/%s  (%d chars)",
-            provider_id, model, len(augmented_message),
+            effective_provider_id, effective_model, len(augmented_message),
         )
         llm_t0 = time.time()
-        response = await provider.generate(
-            augmented_message, model, effective_history, system_prompt=system_prompt,
+        response = await effective_provider.generate(
+            augmented_message, effective_model, effective_history, system_prompt=system_prompt,
         )
         llm_elapsed = time.time() - llm_t0
         logger.info(
@@ -1686,10 +1918,15 @@ class LLMService:
 
         response["_style"] = style_id
         response["_performance"] = performance_mode
+        response["_model"] = effective_model
+        response["_provider"] = effective_provider_id
+        if effective_model != model or effective_provider_id != provider_id:
+            response["_model_upgraded_from"] = model
+            response["_provider_upgraded_from"] = provider_id
 
         logger.info(
-            "══ GENERATE DONE ══  style=%s  keys=%s",
-            style_id, list(response.keys()),
+            "══ GENERATE DONE ══  style=%s  model=%s/%s  keys=%s",
+            style_id, effective_provider_id, effective_model, list(response.keys()),
         )
         yield {"event": "complete", "data": response}
 

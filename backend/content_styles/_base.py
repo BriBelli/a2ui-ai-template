@@ -40,12 +40,10 @@ Molecules:
   stat — label, value(number/price), trend?, trendDirection?(up|down|neutral), description?
   list — items[{id,text,subtitle?}], variant(bullet|numbered|checklist)
   data-table — columns[{key,label,align?}], data[rows]. align:"right" for numbers.
-  chart — chartType(bar|line|pie|doughnut|radar|polarArea|scatter|bubble|treemap|sankey|funnel), title?, data, options?
-    Standard: {labels[],datasets[{label,data[]}]}. Scatter/bubble: datasets[{label,data[{x,y,r?}]}]. Radar: labels=axes.
-    Treemap: datasets[{tree[{value,group,label}],key:"value",groups:["group"],labels:{display:true}}]. NO labels[] for treemap — tree array IS the data.
-    Sankey: datasets[{data[{from:"A",to:"B",flow:number}]}]. NO labels[]. Funnel: {labels[],datasets[{data:[numbers descending]}]}.
+  chart — chartType(bar|line|pie|doughnut|radar|polarArea|scatter|bubble|treemap|sankey|funnel|matrix), title?, data, options?
+    Standard: {labels[],datasets[{label,data[]}]}. Radar: labels=axes, data=scores.
     Options: fillArea?,currency?,height?,xAxisLabel?,yAxisLabel?,showGrid?,showLegend?,referenceLine?,referenceLabel?
-    ALWAYS include xAxisLabel/yAxisLabel on cartesian charts.
+    ALWAYS include xAxisLabel/yAxisLabel on cartesian charts. Specialized chart data shapes provided when needed.
   accordion — items[{id,title,content}]
   tabs — tabs[{id,label,content}]
   alert — variant(info|success|warning|error), title, description

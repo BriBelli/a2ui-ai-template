@@ -55,6 +55,10 @@ export interface ChatResponse {
   _style?: string;
   _sources?: SourceCitation[];
   _data_sources?: Record<string, unknown>;
+  _model?: string;
+  _provider?: string;
+  _model_upgraded_from?: string;
+  _provider_upgraded_from?: string;
 }
 
 /** SSE event from the backend pipeline stream. */
