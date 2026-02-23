@@ -181,6 +181,9 @@ export class A2UIChart extends LitElement {
    *  in the template, so @state() would only cause a spurious re-render. */
   private chart?: Chart;
 
+  /** Row labels (y-axis categories) extracted by normalizeMatrixData. */
+  private _matrixRows: string[] = [];
+
   // Default palette -- muted yet vibrant, works great on dark backgrounds
   private palette = [
     '#8ab4f8', // blue
@@ -253,33 +256,106 @@ export class A2UIChart extends LitElement {
   }
 
   /**
-   * Normalize matrix data: ensure labels[] only contains x-axis values,
-   * deduplicate, and strip any data points missing the v property.
+   * Normalize matrix data into a single dense grid.
+   * Returns a cleaned copy without mutating this.data (avoids re-render loop).
    */
-  private normalizeMatrixData(): void {
-    if (this.chartType !== 'matrix') return;
-    const ds = this.data.datasets?.[0];
-    if (!ds?.data || !Array.isArray(ds.data)) return;
+  private normalizeMatrixData(): ChartData {
+    if (this.chartType !== 'matrix') return this.data;
+    if (!this.data.datasets?.length) return this.data;
 
-    const points = ds.data as Array<{ x: string | number; y: string | number; v?: number }>;
-    const validPoints = points.filter(p => p.x != null && p.y != null && typeof p.v === 'number');
+    // Merge ALL datasets into one flat point array
+    const allPoints: Array<{ x: string; y: string; v: number }> = [];
+    for (const ds of this.data.datasets) {
+      if (!Array.isArray(ds.data)) continue;
+      for (const raw of ds.data as unknown[]) {
+        if (!raw || typeof raw !== 'object') continue;
+        const obj = raw as Record<string, unknown>;
+        const v = typeof obj.v === 'number' ? obj.v : undefined;
+        if (v === undefined) continue;
 
-    const xValues = [...new Set(validPoints.map(p => String(p.x)))];
-    const yValues = [...new Set(validPoints.map(p => String(p.y)))];
-
-    // labels[] should ONLY be x-axis values — rebuild from actual data
-    this.data = {
-      ...this.data,
-      labels: xValues,
-      datasets: [{ ...ds, data: validPoints as unknown as number[] }],
-    };
-
-    if (validPoints.length !== points.length) {
-      console.warn(
-        `[a2ui-chart] Matrix: filtered ${points.length - validPoints.length} invalid points. ` +
-        `Grid: ${yValues.length} rows × ${xValues.length} cols = ${validPoints.length} cells`
-      );
+        const x = obj.x != null ? String(obj.x) : undefined;
+        const y = obj.y != null ? String(obj.y) : undefined;
+        if (x && y) allPoints.push({ x, y, v });
+      }
     }
+
+    console.log(`[a2ui-chart] Matrix normalize: ${this.data.datasets.length} datasets → ${allPoints.length} points`);
+    if (allPoints.length > 0) {
+      console.log('[a2ui-chart] Matrix sample point:', JSON.stringify(allPoints[0]));
+    }
+
+    if (allPoints.length === 0) {
+      console.warn('[a2ui-chart] Matrix: no valid {x, y, v} points found in data');
+      return this.data;
+    }
+
+    // Collect all unique values from each dimension
+    const rawXVals = [...new Set(allPoints.map(p => p.x))];
+    const rawYVals = [...new Set(allPoints.map(p => p.y))];
+
+    console.log(`[a2ui-chart] Matrix dimensions: x=${rawXVals.length} [${rawXVals.slice(0, 3).join(', ')}...] y=${rawYVals.length} [${rawYVals.slice(0, 3).join(', ')}...]`);
+
+    // Determine which dimension is columns (x-axis) vs rows (y-axis).
+    // Use original labels[] as a hint if available — the LLM is told labels = x-axis only.
+    const origLabels = (this.data.labels || []).map(String);
+    let colVals: string[];  // x-axis (columns)
+    let rowVals: string[];  // y-axis (rows)
+
+    if (origLabels.length > 0) {
+      // Trust original labels as the column definition
+      const labelSet = new Set(origLabels);
+      const xInLabels = rawXVals.filter(v => labelSet.has(v));
+      const yInLabels = rawYVals.filter(v => labelSet.has(v));
+
+      if (xInLabels.length >= yInLabels.length && xInLabels.length > 0) {
+        // x-values match labels → correct orientation
+        colVals = origLabels;
+        rowVals = rawYVals;
+      } else {
+        // y-values match labels → axes are swapped
+        console.warn('[a2ui-chart] Matrix: axes swapped (labels match y), flipping');
+        colVals = origLabels;
+        rowVals = rawXVals;
+        for (const p of allPoints) {
+          const tmp = p.x; p.x = p.y; p.y = tmp;
+        }
+      }
+    } else {
+      // No labels hint: larger unique set = columns
+      if (rawXVals.length >= rawYVals.length) {
+        colVals = rawXVals;
+        rowVals = rawYVals;
+      } else {
+        console.warn('[a2ui-chart] Matrix: axes appear swapped, flipping');
+        colVals = rawYVals;
+        rowVals = rawXVals;
+        for (const p of allPoints) {
+          const tmp = p.x; p.x = p.y; p.y = tmp;
+        }
+      }
+    }
+
+    // Filter to only valid grid points and deduplicate
+    const colSet = new Set(colVals);
+    const rowSet = new Set(rowVals);
+    const seen = new Map<string, { x: string; y: string; v: number }>();
+    for (const p of allPoints) {
+      if (colSet.has(p.x) && rowSet.has(p.y)) {
+        seen.set(`${p.x}|${p.y}`, p);
+      }
+    }
+    const finalPoints = [...seen.values()];
+
+    console.log(`[a2ui-chart] Matrix result: ${rowVals.length} rows × ${colVals.length} cols = ${finalPoints.length} cells`);
+
+    this._matrixRows = rowVals;
+
+    const firstDs = this.data.datasets[0];
+    return {
+      ...this.data,
+      labels: colVals,
+      datasets: [{ ...firstDs, data: finalPoints as unknown as number[] }],
+    };
   }
 
   private renderChart() {
@@ -287,7 +363,7 @@ export class A2UIChart extends LitElement {
 
     this.chart?.destroy();
 
-    this.normalizeMatrixData();
+    const chartData = this.normalizeMatrixData();
 
     const ctx = this.canvas.getContext('2d');
     if (!ctx) return;
@@ -313,19 +389,19 @@ export class A2UIChart extends LitElement {
     const isRadial = isRadar || isPolar;
     const isPointBased = isScatter || isBubble;
     const isPlugin = isTreemap || isSankey || isFunnel || isMatrix;
-    const isSingleDataset = this.data.datasets.length === 1;
+    const isSingleDataset = chartData.datasets.length === 1;
     const chartHeight = this.options.height || 240;
 
     const shouldFill = isLine && (this.options.fillArea !== undefined ? this.options.fillArea : isSingleDataset);
     const showGrid = this.options.showGrid !== undefined ? this.options.showGrid : (isBar || isRadial);
     const showLegend = this.options.showLegend !== undefined
       ? this.options.showLegend
-      : (isPie || isPolar || this.data.datasets.length > 1);
+      : (isPie || isPolar || chartData.datasets.length > 1);
 
     const palette = this.palette;
-    const datasets = this.data.datasets.map((ds, i) => {
+    const datasets = chartData.datasets.map((ds, i) => {
       const color = (ds.borderColor as string) || this.getColor(i);
-      const labelsLen = this.data.labels?.length ?? 0;
+      const labelsLen = chartData.labels?.length ?? 0;
 
       if (isTreemap) {
         return {
@@ -440,7 +516,7 @@ export class A2UIChart extends LitElement {
     const config: ChartConfiguration = {
       type: this.chartType,
       data: {
-        ...(this.data.labels ? { labels: this.data.labels } : {}),
+        ...(chartData.labels ? { labels: chartData.labels } : {}),
         datasets,
       },
       options: {
@@ -497,7 +573,7 @@ export class A2UIChart extends LitElement {
               family: 'Google Sans, Roboto, sans-serif',
               size: 11,
             },
-            displayColors: this.data.datasets.length > 1,
+            displayColors: chartData.datasets.length > 1,
             boxWidth: 8,
             boxHeight: 8,
             boxPadding: 4,
@@ -564,8 +640,8 @@ export class A2UIChart extends LitElement {
           },
           y: {
             type: 'category' as const,
+            labels: this._matrixRows,
             offset: true,
-            reverse: true,
             grid: { display: false },
             border: { display: false },
             ticks: {

@@ -46,8 +46,10 @@ export class A2UIGrid extends LitElement {
     /* ── Fixed-column mode ───────────────── */
     /* Each item targets 100%/N minus gap share.         */
     /* Items shrink down to min-width, then wrap.        */
+    /* flex-grow:1 lets orphans on the last row stretch  */
+    /* to fill space instead of sitting alone.           */
     .mode-fixed ::slotted(*) {
-      flex: 0 1 calc(
+      flex: 1 1 calc(
         (100% - (var(--grid-columns, 2) - 1) * var(--grid-gap, 20px))
         / var(--grid-columns, 2)
       );

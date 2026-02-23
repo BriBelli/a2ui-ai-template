@@ -166,7 +166,7 @@ export class A2UIChatMessage extends LitElement {
     .model-badge {
       display: inline-flex;
       align-items: center;
-      gap: var(--a2ui-space-1);
+      gap: 4px;
       padding: 2px 6px;
       background: var(--a2ui-bg-tertiary);
       border-radius: var(--a2ui-radius-sm);
@@ -176,6 +176,19 @@ export class A2UIChatMessage extends LitElement {
 
     .model-badge:hover {
       background: var(--a2ui-bg-elevated);
+    }
+
+    .model-badge .wand-icon {
+      width: 12px;
+      height: 12px;
+      flex-shrink: 0;
+    }
+
+    .model-badge .provider-icon {
+      width: 12px;
+      height: 12px;
+      flex-shrink: 0;
+      border-radius: 2px;
     }
 
     .duration,
@@ -829,6 +842,42 @@ export class A2UIChatMessage extends LitElement {
   @state() private _liked: "up" | "down" | null = null;
   @state() private _sourcesExpanded = false;
 
+  private _renderWandIcon() {
+    return html`<svg class="wand-icon" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M12 2l1.09 3.41L16.5 6.5l-3.41 1.09L12 11l-1.09-3.41L7.5 6.5l3.41-1.09L12 2z"/>
+      <path d="M18 12l.72 2.28L21 15l-2.28.72L18 18l-.72-2.28L15 15l2.28-.72L18 12z" opacity=".7"/>
+      <path d="M5 16l.54 1.71L7.25 18.25l-1.71.54L5 20.5l-.54-1.71L2.75 18.25l1.71-.54L5 16z" opacity=".5"/>
+    </svg>`;
+  }
+
+  private _renderProviderIcon(provider?: string) {
+    const model = this.message.model?.toLowerCase() || '';
+    const p = provider?.toLowerCase() || '';
+
+    if (p.includes('anthropic') || model.includes('claude')) {
+      return html`<svg class="provider-icon" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M13.827 3.52l3.603 11.117h-7.207L13.827 3.52zm-9.236 16.96L11.063 3.52h2.474l6.776 16.96h-2.586l-1.61-4.28H8.856l-1.679 4.28H4.591z"/>
+      </svg>`;
+    }
+    if (p.includes('openai') || model.includes('gpt') || model.includes('o4')) {
+      return html`<svg class="provider-icon" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M22.282 9.821a5.985 5.985 0 0 0-.516-4.91 6.046 6.046 0 0 0-6.51-2.9A6.065 6.065 0 0 0 4.981 4.18a5.998 5.998 0 0 0-3.998 2.9 6.042 6.042 0 0 0 .743 7.097 5.98 5.98 0 0 0 .51 4.911 6.051 6.051 0 0 0 6.515 2.9A5.985 5.985 0 0 0 13.26 24a6.056 6.056 0 0 0 5.772-4.206 5.99 5.99 0 0 0 3.997-2.9 6.056 6.056 0 0 0-.747-7.073zM13.26 22.43a4.476 4.476 0 0 1-2.876-1.04l.141-.081 4.779-2.758a.795.795 0 0 0 .392-.681v-6.737l2.02 1.168a.071.071 0 0 1 .038.052v5.583a4.504 4.504 0 0 1-4.494 4.494zM3.6 18.304a4.47 4.47 0 0 1-.535-3.014l.142.085 4.783 2.759a.771.771 0 0 0 .78 0l5.843-3.369v2.332a.08.08 0 0 1-.033.062L9.74 19.95a4.5 4.5 0 0 1-6.14-1.646zM2.34 7.896a4.485 4.485 0 0 1 2.366-1.973V11.6a.766.766 0 0 0 .388.676l5.815 3.355-2.02 1.168a.076.076 0 0 1-.071 0l-4.83-2.786A4.504 4.504 0 0 1 2.34 7.872zm16.597 3.855l-5.833-3.387L15.119 7.2a.076.076 0 0 1 .071 0l4.83 2.791a4.494 4.494 0 0 1-.676 8.105v-5.678a.79.79 0 0 0-.407-.667zm2.01-3.023l-.141-.085-4.774-2.782a.776.776 0 0 0-.785 0L9.409 9.23V6.897a.066.066 0 0 1 .028-.061l4.83-2.787a4.5 4.5 0 0 1 6.68 4.66zm-12.64 4.135l-2.02-1.164a.08.08 0 0 1-.038-.057V6.075a4.5 4.5 0 0 1 7.375-3.453l-.142.08L8.704 5.46a.795.795 0 0 0-.393.681zm1.097-2.365l2.602-1.5 2.607 1.5v2.999l-2.597 1.5-2.607-1.5z"/>
+      </svg>`;
+    }
+    if (p.includes('google') || model.includes('gemini')) {
+      return html`<svg class="provider-icon" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M12 24c6.627 0 12-5.373 12-12S18.627 0 12 0 0 5.373 0 12s5.373 12 12 12z" fill="url(#gemini_g)"/>
+        <defs><linearGradient id="gemini_g" x1="0" y1="12" x2="24" y2="12" gradientUnits="userSpaceOnUse">
+          <stop stop-color="#4285F4"/><stop offset="1" stop-color="#886FBF"/>
+        </linearGradient></defs>
+        <path d="M12 4.5c4.136 0 7.5 3.364 7.5 7.5s-3.364 7.5-7.5 7.5S4.5 16.136 4.5 12 7.864 4.5 12 4.5z" fill="white" fill-opacity=".25"/>
+      </svg>`;
+    }
+    return html`<svg class="provider-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="3"/><path d="M12 1v4m0 14v4M4.22 4.22l2.83 2.83m9.9 9.9l2.83 2.83M1 12h4m14 0h4M4.22 19.78l2.83-2.83m9.9-9.9l2.83-2.83"/>
+    </svg>`;
+  }
+
   private _startEdit() {
     if (!this.editable || this.message.role !== "user") return;
     this._editText = this.message.content;
@@ -1048,20 +1097,6 @@ export class A2UIChatMessage extends LitElement {
   private _renderActions() {
     return html`
       <span class="meta-actions">
-        <button class="action-btn" title="Copy" @click=${this._copyResponse}>
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-          </svg>
-        </button>
-        ${this._copied ? html`<span class="copied-toast">Copied!</span>` : ""}
         <button
           class="action-btn"
           title="Regenerate"
@@ -1077,6 +1112,19 @@ export class A2UIChatMessage extends LitElement {
           >
             <polyline points="23 4 23 10 17 10" />
             <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+          </svg>
+        </button>
+        <button class="action-btn" title="Copy" @click=${this._copyResponse}>
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
           </svg>
         </button>
         ${this.isLast
@@ -1289,7 +1337,7 @@ export class A2UIChatMessage extends LitElement {
                       : ""}
                     <div class="meta">
                       ${model
-                        ? html` <span class="model-badge">✨ ${model}</span> `
+                        ? html`<span class="model-badge">${this.message.modelUpgraded ? this._renderWandIcon() : ''}${this._renderProviderIcon(this.message.provider)} ${model}</span>`
                         : ""}
                       ${this.message.duration
                         ? html`

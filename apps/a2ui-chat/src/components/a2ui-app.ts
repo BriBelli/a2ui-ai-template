@@ -847,13 +847,8 @@ export class A2UIApp extends LitElement {
         actualProvider?.models.find((m) => m.id === actualModelId) ||
         fallbackProvider?.models.find((m) => m.id === actualModelId);
 
-      let modelLabel = actualModel?.name || actualModelId;
-      if (response._model_upgraded_from) {
-        const crossProvider =
-          response._provider_upgraded_from &&
-          response._provider_upgraded_from !== actualProviderId;
-        modelLabel = crossProvider ? `${modelLabel} ↑↑` : `${modelLabel} ↑`;
-      }
+      const modelLabel = actualModel?.name || actualModelId;
+      const wasUpgraded = !!response._model_upgraded_from;
 
       const elapsed = (performance.now() - startTime) / 1000;
 
@@ -866,6 +861,8 @@ export class A2UIApp extends LitElement {
           a2ui: response.a2ui,
           timestamp: Date.now(),
           model: modelLabel,
+          provider: actualProviderId,
+          modelUpgraded: wasUpgraded,
           suggestions: response.suggestions,
           duration: Math.round(elapsed * 10) / 10,
           images: response._images,

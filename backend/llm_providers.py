@@ -66,8 +66,10 @@ def _sanitize_for_prompt(text: str) -> str:
     return text
 
 
-def _sanitize_label(text: str, max_len: int = 200) -> str:
+def _sanitize_label(text: Any, max_len: int = 200) -> str:
     """Sanitize a label/tag before embedding in a prompt context block."""
+    if not isinstance(text, str):
+        text = str(text) if text is not None else ""
     text = re.sub(r"<<<\s*\w+\s*>>>", "", text)
     text = re.sub(r"[\n\r\x00]", " ", text)
     return text[:max_len].strip()
@@ -424,7 +426,7 @@ class OpenAIProvider(LLMProvider):
         """Lazily create and reuse a single async client."""
         if self._client is None:
             self._client = openai.AsyncOpenAI(
-                api_key=self._api_key, timeout=60.0, max_retries=0,
+                api_key=self._api_key, timeout=120.0, max_retries=0,
             )
         return self._client
 
@@ -442,7 +444,7 @@ class OpenAIProvider(LLMProvider):
 
         total_chars = sum(len(m.get("content", "")) for m in messages)
         logger.info(
-            "  [OpenAI] %s  |  %d messages  |  %d chars (~%d tokens)  |  timeout=60s",
+            "  [OpenAI] %s  |  %d messages  |  %d chars (~%d tokens)  |  timeout=120s",
             model, len(messages), total_chars, total_chars // 4,
         )
 
@@ -547,7 +549,7 @@ class AnthropicProvider(LLMProvider):
         if self._client is None:
             self._client = anthropic.AsyncAnthropic(
                 api_key=self._api_key,
-                timeout=60.0,
+                timeout=120.0,
                 max_retries=0,
             )
         return self._client
@@ -655,9 +657,9 @@ class LiteLLMProvider(LLMProvider):
             self._client = openai.AsyncOpenAI(
                 api_key=self._api_key,
                 base_url=self.BASE_URL,
-                timeout=60.0,
+                timeout=120.0,
                 max_retries=0,
-                http_client=httpx.AsyncClient(verify=False, timeout=60.0),
+                http_client=httpx.AsyncClient(verify=False, timeout=120.0),
             )
         return self._client
 

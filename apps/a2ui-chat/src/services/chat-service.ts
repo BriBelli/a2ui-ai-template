@@ -30,6 +30,10 @@ export interface ChatMessage {
   style?: string;
   /** Source citations (web search results + data sources) */
   sources?: SourceCitation[];
+  /** Provider ID (e.g. "openai", "anthropic", "google") */
+  provider?: string;
+  /** True when model was dynamically upgraded by adaptive routing */
+  modelUpgraded?: boolean;
 }
 
 /** Simplified message format for API history */
@@ -434,6 +438,12 @@ export class ChatService {
             throw e;
           }
         }
+      }
+
+      // Once we have the final response, stop reading — don't wait for connection close
+      if (finalResponse) {
+        reader.cancel();
+        break;
       }
     }
 
