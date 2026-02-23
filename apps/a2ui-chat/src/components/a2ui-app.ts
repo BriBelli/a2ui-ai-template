@@ -603,9 +603,9 @@ export class A2UIApp extends LitElement {
 
   /** Build grouped options for the model selector from providers. */
   private get modelGroups(): SelectGroup[] {
-    return this.providers.map(p => ({
+    return this.providers.map((p) => ({
       label: p.name,
-      items: p.models.map(m => ({
+      items: p.models.map((m) => ({
         value: `${p.id}::${m.id}`,
         label: m.name,
       })),
@@ -616,12 +616,12 @@ export class A2UIApp extends LitElement {
   private get modelSelectorValue(): string {
     return this.selectedProvider && this.selectedModel
       ? `${this.selectedProvider}::${this.selectedModel}`
-      : '';
+      : "";
   }
 
   private handleModelChange(e: CustomEvent<{ value: string }>) {
     const val = e.detail.value;
-    const sep = val.indexOf('::');
+    const sep = val.indexOf("::");
     if (sep === -1) return;
     this.selectedProvider = val.slice(0, sep);
     this.selectedModel = val.slice(sep + 2);
@@ -672,27 +672,35 @@ export class A2UIApp extends LitElement {
 
   // ── Chat actions ───────────────────────────────────────
 
-  private handleEditMessage(e: CustomEvent<{ messageId: string; newContent: string }>) {
+  private handleEditMessage(
+    e: CustomEvent<{ messageId: string; newContent: string }>,
+  ) {
     const { messageId, newContent } = e.detail;
     if (this.isLoading) return;
 
-    const idx = this.messages.findIndex(m => m.id === messageId);
+    const idx = this.messages.findIndex((m) => m.id === messageId);
     if (idx === -1) return;
 
     this.messages = this.messages.slice(0, idx);
     this.persistThread();
 
-    this.handleSendMessage(new CustomEvent('send-message', {
-      detail: { message: newContent },
-    }));
+    this.handleSendMessage(
+      new CustomEvent("send-message", {
+        detail: { message: newContent },
+      }),
+    );
   }
 
   private handleDeleteMessage(e: CustomEvent<{ messageId: string }>) {
     if (this.isLoading) return;
-    const idx = this.messages.findIndex(m => m.id === e.detail.messageId);
+    const idx = this.messages.findIndex((m) => m.id === e.detail.messageId);
     if (idx === -1) return;
     let cutAt = idx;
-    if (this.messages[idx].role === 'assistant' && idx > 0 && this.messages[idx - 1].role === 'user') {
+    if (
+      this.messages[idx].role === "assistant" &&
+      idx > 0 &&
+      this.messages[idx - 1].role === "user"
+    ) {
       cutAt = idx - 1;
     }
     this.messages = this.messages.slice(0, cutAt);
@@ -701,12 +709,12 @@ export class A2UIApp extends LitElement {
 
   private handleRegenerateMessage(e: CustomEvent<{ messageId: string }>) {
     if (this.isLoading) return;
-    const idx = this.messages.findIndex(m => m.id === e.detail.messageId);
+    const idx = this.messages.findIndex((m) => m.id === e.detail.messageId);
     if (idx === -1) return;
 
     let prevUserIdx = -1;
     for (let i = idx - 1; i >= 0; i--) {
-      if (this.messages[i].role === 'user') {
+      if (this.messages[i].role === "user") {
         prevUserIdx = i;
         break;
       }
@@ -716,9 +724,11 @@ export class A2UIApp extends LitElement {
     const prevUserContent = this.messages[prevUserIdx].content;
     this.messages = this.messages.slice(0, prevUserIdx);
     this.persistThread();
-    this.handleSendMessage(new CustomEvent('send-message', {
-      detail: { message: prevUserContent },
-    }));
+    this.handleSendMessage(
+      new CustomEvent("send-message", {
+        detail: { message: prevUserContent },
+      }),
+    );
   }
 
   private async handleSendMessage(e: CustomEvent<{ message: string }>) {
@@ -782,7 +792,11 @@ export class A2UIApp extends LitElement {
       if (evt.status === "start") {
         if (existing !== undefined) {
           // Update existing step (shouldn't happen, but defensive)
-          steps[existing] = { ...steps[existing], label: evt.label, detail: evt.detail };
+          steps[existing] = {
+            ...steps[existing],
+            label: evt.label,
+            detail: evt.detail,
+          };
           this.thinkingSteps = [...steps];
         } else {
           push(evt.label, evt.detail, evt.id);
@@ -803,7 +817,8 @@ export class A2UIApp extends LitElement {
         (phase, _detail, streamEvent?) => {
           switch (phase) {
             case "location":
-              if (!locationCached) push("Getting your location", undefined, "client-location");
+              if (!locationCached)
+                push("Getting your location", undefined, "client-location");
               break;
             case "location-done": {
               const locIdx = stepIndexByTool.get("client-location");
@@ -822,18 +837,22 @@ export class A2UIApp extends LitElement {
       // If the server routed to a different model/provider, reflect that
       const actualProviderId = response._provider || this.selectedProvider;
       const actualModelId = response._model || this.selectedModel;
-      const actualProvider = this.providers.find((p) => p.id === actualProviderId);
-      const fallbackProvider = this.providers.find((p) => p.id === this.selectedProvider);
-      const actualModel = actualProvider?.models.find((m) => m.id === actualModelId)
-        || fallbackProvider?.models.find((m) => m.id === actualModelId);
+      const actualProvider = this.providers.find(
+        (p) => p.id === actualProviderId,
+      );
+      const fallbackProvider = this.providers.find(
+        (p) => p.id === this.selectedProvider,
+      );
+      const actualModel =
+        actualProvider?.models.find((m) => m.id === actualModelId) ||
+        fallbackProvider?.models.find((m) => m.id === actualModelId);
 
       let modelLabel = actualModel?.name || actualModelId;
       if (response._model_upgraded_from) {
-        const crossProvider = response._provider_upgraded_from
-          && response._provider_upgraded_from !== actualProviderId;
-        modelLabel = crossProvider
-          ? `${modelLabel} ↑↑`
-          : `${modelLabel} ↑`;
+        const crossProvider =
+          response._provider_upgraded_from &&
+          response._provider_upgraded_from !== actualProviderId;
+        modelLabel = crossProvider ? `${modelLabel} ↑↑` : `${modelLabel} ↑`;
       }
 
       const elapsed = (performance.now() - startTime) / 1000;
@@ -1040,7 +1059,11 @@ export class A2UIApp extends LitElement {
                           class="user-menu-backdrop"
                           @click=${this.closeUserMenu}
                         ></div>
-                        <div class="user-menu" role="menu" aria-label="User menu">
+                        <div
+                          class="user-menu"
+                          role="menu"
+                          aria-label="User menu"
+                        >
                           <div class="user-menu-header">
                             <div class="user-menu-avatar">
                               ${this.user.picture
@@ -1061,7 +1084,8 @@ export class A2UIApp extends LitElement {
                             </div>
                           </div>
 
-                          <!-- Settings -->
+                          <div class="user-menu-body">
+                            <!-- Settings -->
                             <button
                               class="menu-item"
                               role="menuitem"
@@ -1077,8 +1101,6 @@ export class A2UIApp extends LitElement {
                               </svg>
                               <span>Settings</span>
                             </button>
-
-                          <div class="user-menu-body">
                             <!-- Theme toggle -->
                             <button
                               class="menu-item"
@@ -1162,7 +1184,9 @@ export class A2UIApp extends LitElement {
 
       <a2ui-settings-panel
         .open=${this.showSettings}
-        @close=${() => { this.showSettings = false; }}
+        @close=${() => {
+          this.showSettings = false;
+        }}
       ></a2ui-settings-panel>
     `;
   }

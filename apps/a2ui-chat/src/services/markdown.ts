@@ -96,6 +96,7 @@ export function renderMarkdown(text: string): string {
       'p', 'br', 'strong', 'b', 'em', 'i', 'a', 'code', 'pre',
       'blockquote', 'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'h4',
       'del', 'hr', 'span', 'div',
+      'table', 'thead', 'tbody', 'tr', 'th', 'td', 'caption',
     ],
     ALLOWED_ATTR: ['href', 'target', 'rel', 'class', 'data-idx', 'data-mermaid'],
   });
@@ -224,6 +225,50 @@ export const markdownStyles = `
     border: none;
     border-top: 1px solid var(--a2ui-border-default);
     margin: 0.75em 0;
+  }
+
+  /* ── Tables ────────────────────────────────────── */
+
+  .md table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0.5em 0;
+    font-size: var(--a2ui-text-sm, 0.875rem);
+    line-height: 1.5;
+  }
+
+  .md thead {
+    border-bottom: 2px solid var(--a2ui-border-default, rgba(255,255,255,0.12));
+  }
+
+  .md th {
+    text-align: left;
+    font-weight: var(--a2ui-font-semibold, 600);
+    color: var(--a2ui-text-primary);
+    padding: 0.5em 0.75em;
+    white-space: nowrap;
+  }
+
+  .md td {
+    padding: 0.5em 0.75em;
+    color: var(--a2ui-text-secondary);
+    border-bottom: 1px solid var(--a2ui-border-subtle, rgba(255,255,255,0.06));
+  }
+
+  .md tbody tr:last-child td {
+    border-bottom: none;
+  }
+
+  .md tbody tr:hover {
+    background: var(--a2ui-bg-secondary, rgba(255,255,255,0.03));
+  }
+
+  .md caption {
+    caption-side: bottom;
+    font-size: var(--a2ui-text-xs, 0.75rem);
+    color: var(--a2ui-text-tertiary);
+    padding-top: 0.5em;
+    text-align: left;
   }
 
   /* ── Mermaid diagrams ─────────────────────────── */
