@@ -356,6 +356,7 @@ export class A2UISettingsPanel extends LitElement {
   @state() private webSearch = aiConfig.webSearch;
   @state() private geolocation = aiConfig.geolocation;
   @state() private dataSources = aiConfig.dataSources;
+  @state() private smartRouting = aiConfig.smartRouting;
   @state() private conversationHistory = aiConfig.conversationHistory;
   @state() private maxHistoryMessages = aiConfig.maxHistoryMessages;
   @state() private showSources = uiConfig.showSources;
@@ -391,6 +392,7 @@ export class A2UISettingsPanel extends LitElement {
     this.webSearch = aiConfig.webSearch;
     this.geolocation = aiConfig.geolocation;
     this.dataSources = aiConfig.dataSources;
+    this.smartRouting = aiConfig.smartRouting;
     this.conversationHistory = aiConfig.conversationHistory;
     this.maxHistoryMessages = aiConfig.maxHistoryMessages;
     this.showSources = uiConfig.showSources;
@@ -494,6 +496,11 @@ export class A2UISettingsPanel extends LitElement {
     setAIConfig({ dataSources: this.dataSources });
   }
 
+  private handleSmartRouting() {
+    this.smartRouting = !this.smartRouting;
+    setAIConfig({ smartRouting: this.smartRouting });
+  }
+
   private handleHistory() {
     if (this.isToolLocked("history")) return;
     this.conversationHistory = !this.conversationHistory;
@@ -519,7 +526,8 @@ export class A2UISettingsPanel extends LitElement {
   }
 
   private handleSourcesPosition(e: Event) {
-    this.sourcesPosition = (e.target as HTMLSelectElement).value as SourcesPosition;
+    this.sourcesPosition = (e.target as HTMLSelectElement)
+      .value as SourcesPosition;
     setUIConfig({ sourcesPosition: this.sourcesPosition });
   }
 
@@ -618,39 +626,23 @@ export class A2UISettingsPanel extends LitElement {
               </div>
             </div>
 
-            <!-- Loading Display -->
+            <!-- Smart Model Routing -->
             <div class="field">
               <div class="field-row">
                 <div class="field-info">
-                  <p class="field-label">Loading Display</p>
+                  <p class="field-label">Smart Model Routing</p>
                   <p class="field-desc">
-                    Detail level for the thinking indicator
+                    Let the AI pick the best model based on task complexity
                   </p>
                 </div>
-                <select
-                  class="field-select"
-                  @change=${this.handleLoadingDisplay}
-                  aria-label="Loading display level"
-                >
-                  <option
-                    value="comprehensive"
-                    ?selected=${this.loadingDisplay === "comprehensive"}
-                  >
-                    Comprehensive
-                  </option>
-                  <option
-                    value="moderate"
-                    ?selected=${this.loadingDisplay === "moderate"}
-                  >
-                    Moderate
-                  </option>
-                  <option
-                    value="basic"
-                    ?selected=${this.loadingDisplay === "basic"}
-                  >
-                    Basic
-                  </option>
-                </select>
+                <label class="toggle">
+                  <input
+                    type="checkbox"
+                    .checked=${this.smartRouting}
+                    @change=${this.handleSmartRouting}
+                  />
+                  <span class="toggle-track"></span>
+                </label>
               </div>
             </div>
 
@@ -709,7 +701,10 @@ export class A2UISettingsPanel extends LitElement {
 
             <div
               class="field"
-              style="opacity: ${this.isToolLocked("data_sources") ? "0.5" : "1"}">
+              style="opacity: ${this.isToolLocked("data_sources")
+                ? "0.5"
+                : "1"}"
+            >
               <div class="field-row">
                 <div class="field-info">
                   <p class="field-label">
@@ -789,50 +784,14 @@ export class A2UISettingsPanel extends LitElement {
           <!-- ── Display ─────────────────────────────── -->
           <div class="section">
             <p class="section-label">Display</p>
-
-            <!-- Show Sources -->
-            <div class="field">
-              <div class="field-row">
-                <div class="field-info">
-                  <p class="field-label">Sources</p>
-                  <p class="field-desc">Show source citations below responses</p>
-                </div>
-                <label class="toggle">
-                  <input
-                    type="checkbox"
-                    .checked=${this.showSources}
-                    @change=${this.handleShowSources}
-                  />
-                  <span class="toggle-track"></span>
-                </label>
-              </div>
-            </div>
-
-            <!-- Sources Position -->
-            <div class="field">
-              <div class="field-row">
-                <div class="field-info">
-                  <p class="field-label">Sources Position</p>
-                  <p class="field-desc">Where citation sources appear</p>
-                </div>
-                <select
-                  class="field-select"
-                  @change=${this.handleSourcesPosition}
-                  aria-label="Sources position"
-                >
-                  <option value="auto" ?selected=${this.sourcesPosition === 'auto'}>Auto</option>
-                  <option value="right" ?selected=${this.sourcesPosition === 'right'}>Right</option>
-                  <option value="bottom" ?selected=${this.sourcesPosition === 'bottom'}>Bottom</option>
-                </select>
-              </div>
-            </div>
-
             <!-- Show Actions -->
             <div class="field">
               <div class="field-row">
                 <div class="field-info">
                   <p class="field-label">Action Bar</p>
-                  <p class="field-desc">Copy, regenerate, and feedback buttons</p>
+                  <p class="field-desc">
+                    Copy, regenerate, and feedback buttons
+                  </p>
                 </div>
                 <label class="toggle">
                   <input
@@ -843,6 +802,92 @@ export class A2UISettingsPanel extends LitElement {
                   <span class="toggle-track"></span>
                 </label>
               </div>
+            </div>
+          </div>
+          <!-- Show Sources -->
+          <div class="field">
+            <div class="field-row">
+              <div class="field-info">
+                <p class="field-label">Sources</p>
+                <p class="field-desc">Show source citations below responses</p>
+              </div>
+              <label class="toggle">
+                <input
+                  type="checkbox"
+                  .checked=${this.showSources}
+                  @change=${this.handleShowSources}
+                />
+                <span class="toggle-track"></span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Sources Position -->
+          <div class="field">
+            <div class="field-row">
+              <div class="field-info">
+                <p class="field-label">Sources Position</p>
+                <p class="field-desc">Where citation sources appear</p>
+              </div>
+              <select
+                class="field-select"
+                @change=${this.handleSourcesPosition}
+                aria-label="Sources position"
+              >
+                <option
+                  value="auto"
+                  ?selected=${this.sourcesPosition === "auto"}
+                >
+                  Auto
+                </option>
+                <option
+                  value="right"
+                  ?selected=${this.sourcesPosition === "right"}
+                >
+                  Right
+                </option>
+                <option
+                  value="bottom"
+                  ?selected=${this.sourcesPosition === "bottom"}
+                >
+                  Bottom
+                </option>
+              </select>
+            </div>
+          </div>
+          <!-- Loading Display -->
+          <div class="field">
+            <div class="field-row">
+              <div class="field-info">
+                <p class="field-label">Loading Display</p>
+                <p class="field-desc">
+                  Detail level for the thinking indicator
+                </p>
+              </div>
+              <select
+                class="field-select"
+                @change=${this.handleLoadingDisplay}
+                aria-label="Loading display level"
+              >
+                <option
+                  value="comprehensive"
+                  ?selected=${this.loadingDisplay === "comprehensive"}
+                >
+                  Comprehensive
+                </option>
+                <option
+                  value="moderate"
+                  ?selected=${this.loadingDisplay === "moderate"}
+                >
+                  Moderate
+                </option>
+                <option
+                  value="basic"
+                  ?selected=${this.loadingDisplay === "basic"}
+                >
+                  Basic
+                </option>
+              </select>
             </div>
           </div>
         </div>

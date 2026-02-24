@@ -595,21 +595,26 @@ export class A2UIApp extends LitElement {
 
   private async loadProviders() {
     this.providers = await this.chatService.getProviders();
-    if (this.providers.length > 0) {
-      this.selectedProvider = this.providers[0].id;
-      this.selectedModel = this.providers[0].models[0]?.id || "";
+    if (this.providers.length > 0 && !this.selectedProvider) {
+      this.selectedProvider = 'auto';
+      this.selectedModel = 'auto';
     }
   }
 
   /** Build grouped options for the model selector from providers. */
   private get modelGroups(): SelectGroup[] {
-    return this.providers.map((p) => ({
+    const autoGroup: SelectGroup = {
+      label: '',
+      items: [{ value: 'auto::auto', label: 'Auto' }],
+    };
+    const providerGroups = this.providers.map((p) => ({
       label: p.name,
       items: p.models.map((m) => ({
         value: `${p.id}::${m.id}`,
         label: m.name,
       })),
     }));
+    return [autoGroup, ...providerGroups];
   }
 
   /** Composite value for the model selector (provider::model). */
@@ -625,6 +630,26 @@ export class A2UIApp extends LitElement {
     if (sep === -1) return;
     this.selectedProvider = val.slice(0, sep);
     this.selectedModel = val.slice(sep + 2);
+  }
+
+  /** True when user has selected "Auto" model (pipeline picks the model). */
+  private get isAutoModel(): boolean {
+    return this.selectedProvider === 'auto' && this.selectedModel === 'auto';
+  }
+
+  /** Resolve actual provider/model for API calls (defaults for "Auto" mode). */
+  private get resolvedProvider(): string {
+    if (this.isAutoModel && this.providers.length > 0) {
+      return this.providers[0].id;
+    }
+    return this.selectedProvider;
+  }
+
+  private get resolvedModel(): string {
+    if (this.isAutoModel && this.providers.length > 0) {
+      return this.providers[0].models[0]?.id || '';
+    }
+    return this.selectedModel;
   }
 
   // ── Persistence helpers ──────────────────────────────────
@@ -649,8 +674,8 @@ export class A2UIApp extends LitElement {
       messages: this.messages,
       createdAt: existing?.createdAt ?? this.messages[0].timestamp,
       updatedAt: Date.now(),
-      provider: this.selectedProvider || undefined,
-      model: this.selectedModel || undefined,
+      provider: this.resolvedProvider || undefined,
+      model: this.resolvedModel || undefined,
     };
     chatHistoryService.saveThread(thread);
     sessionStorage.setItem(A2UIApp.ACTIVE_KEY, this.activeThreadId);
@@ -809,11 +834,13 @@ export class A2UIApp extends LitElement {
     };
 
     try {
+      const smartRouting = this.isAutoModel || aiConfig.smartRouting;
       const response = await this.chatService.sendMessage(
         message,
-        this.selectedProvider,
-        this.selectedModel,
+        this.resolvedProvider,
+        this.resolvedModel,
         this.messages,
+        smartRouting,
         (phase, _detail, streamEvent?) => {
           switch (phase) {
             case "location":
@@ -1082,22 +1109,6 @@ export class A2UIApp extends LitElement {
                           </div>
 
                           <div class="user-menu-body">
-                            <!-- Settings -->
-                            <button
-                              class="menu-item"
-                              role="menuitem"
-                              @click=${() => {
-                                this.showSettings = true;
-                                this.closeUserMenu();
-                              }}
-                            >
-                              <svg viewBox="0 0 24 24" fill="currentColor">
-                                <path
-                                  d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.488.488 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1112 8.4a3.6 3.6 0 010 7.2z"
-                                />
-                              </svg>
-                              <span>Settings</span>
-                            </button>
                             <!-- Theme toggle -->
                             <button
                               class="menu-item"
@@ -1127,6 +1138,22 @@ export class A2UIApp extends LitElement {
                                     </svg>
                                     <span class="theme-label">Dark mode</span>
                                   `}
+                            </button>
+                            <!-- Settings -->
+                            <button
+                              class="menu-item"
+                              role="menuitem"
+                              @click=${() => {
+                                this.showSettings = true;
+                                this.closeUserMenu();
+                              }}
+                            >
+                              <svg viewBox="0 0 24 24" fill="currentColor">
+                                <path
+                                  d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.488.488 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1112 8.4a3.6 3.6 0 010 7.2z"
+                                />
+                              </svg>
+                              <span>Settings</span>
                             </button>
 
                             <div class="menu-divider"></div>

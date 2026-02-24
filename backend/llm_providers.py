@@ -1483,6 +1483,7 @@ class LLMService:
         user_location: Optional[Dict[str, Any]] = None,
         content_style: str = "auto",
         performance_mode: str = "auto",
+        smart_routing: bool = True,
         enable_web_search: bool = True,
         enable_geolocation: bool = True,
         enable_data_sources: bool = True,
@@ -1902,7 +1903,7 @@ class LLMService:
         effective_provider = provider
         effective_complexity = "standard"
 
-        if performance_mode in ("auto", "comprehensive"):
+        if smart_routing and performance_mode in ("auto", "comprehensive"):
             effective_complexity = _derive_complexity(ai_complexity, ai_component_hints)
 
             if effective_complexity != "standard":
@@ -1964,6 +1965,11 @@ class LLMService:
                             "label": "Using faster model for simple task",
                             "detail": f"{new_pid}/{new_mid}",
                         }}
+        elif not smart_routing:
+            logger.info(
+                "── MODEL ROUTE ──  smart_routing=off, using selected %s/%s as-is",
+                provider_id, model,
+            )
 
         # ── Step 4: LLM generation ────────────────────────────
         # Map task complexity → adaptive thinking effort level
@@ -1973,7 +1979,7 @@ class LLMService:
             "high": "high",         # Deep structured data work
             "reasoning": "high",    # Multi-step logic
         }
-        thinking_effort = _COMPLEXITY_TO_EFFORT.get(effective_complexity) if performance_mode in ("auto", "comprehensive") else None
+        thinking_effort = _COMPLEXITY_TO_EFFORT.get(effective_complexity) if smart_routing and performance_mode in ("auto", "comprehensive") else None
 
         yield {"event": "step", "data": {
             "id": "llm", "status": "start",
@@ -2061,6 +2067,7 @@ class LLMService:
         user_location: Optional[Dict[str, Any]] = None,
         content_style: str = "auto",
         performance_mode: str = "auto",
+        smart_routing: bool = True,
         enable_web_search: bool = True,
         enable_geolocation: bool = True,
         enable_data_sources: bool = True,
@@ -2074,6 +2081,7 @@ class LLMService:
             user_location=user_location,
             content_style=content_style,
             performance_mode=performance_mode,
+            smart_routing=smart_routing,
             enable_web_search=enable_web_search,
             enable_geolocation=enable_geolocation,
             enable_data_sources=enable_data_sources,

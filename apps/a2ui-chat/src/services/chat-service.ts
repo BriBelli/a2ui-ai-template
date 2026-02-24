@@ -271,6 +271,7 @@ export class ChatService {
     provider?: string,
     model?: string,
     history?: ChatMessage[],
+    smartRouting?: boolean,
     onProgress?: (
       phase: 'location' | 'location-done' | 'stream-event',
       detail?: string,
@@ -294,6 +295,7 @@ export class ChatService {
         enableDataSources: aiConfig.dataSources,
         contentStyle: aiConfig.contentStyle,
         performanceMode: aiConfig.performanceMode,
+        smartRouting: smartRouting ?? aiConfig.smartRouting,
         ...(location && { userLocation: location }),
       };
 

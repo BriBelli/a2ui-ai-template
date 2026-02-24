@@ -151,6 +151,7 @@ class ChatRequest(BaseModel):
         default="auto",
         max_length=30,
     )
+    smartRouting: bool = True
 
     @field_validator("history")
     @classmethod
@@ -271,6 +272,7 @@ async def chat(request: Request, body: ChatRequest):
                     user_location=location_dict,
                     content_style=body.contentStyle,
                     performance_mode=body.performanceMode,
+                    smart_routing=body.smartRouting,
                     enable_web_search=body.enableWebSearch,
                     enable_geolocation=body.enableGeolocation,
                     enable_data_sources=body.enableDataSources,
@@ -304,6 +306,7 @@ async def chat(request: Request, body: ChatRequest):
             user_location=location_dict,
             content_style=body.contentStyle,
             performance_mode=body.performanceMode,
+            smart_routing=body.smartRouting,
             enable_web_search=body.enableWebSearch,
             enable_geolocation=body.enableGeolocation,
             enable_data_sources=body.enableDataSources,

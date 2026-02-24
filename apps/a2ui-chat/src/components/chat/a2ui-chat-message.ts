@@ -1398,7 +1398,7 @@ export class A2UIChatMessage extends LitElement {
                       : ""}
                     <div class="meta">
                       ${model
-                        ? html`<span class="model-badge">${this.message.modelUpgraded ? `<span class="sparkles-icon">✨</span>` : ''} ${this._renderProviderIcon(this.message.provider)} ${model}</span>`
+                        ? html`<span class="model-badge">${this.message.modelUpgraded ? html`<span class="sparkles-icon">✨</span>` : nothing} ${this._renderProviderIcon(this.message.provider)} ${model}</span>`
                         : ""}
                       ${this.message.duration
                         ? html`

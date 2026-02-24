@@ -198,11 +198,13 @@ export class A2UIModelSelector extends LitElement {
           ${hasGroups
             ? (this.groups.length === 1
                 ? this.groups[0].items.map(item => this.renderOption(item))
-                : this.groups.map(group => html`
-                    <optgroup label=${group.label}>
-                      ${group.items.map(item => this.renderOption(item))}
-                    </optgroup>
-                  `))
+                : this.groups.map(group =>
+                    group.label
+                      ? html`<optgroup label=${group.label}>
+                          ${group.items.map(item => this.renderOption(item))}
+                        </optgroup>`
+                      : group.items.map(item => this.renderOption(item))
+                  ))
             : this.normalizeItems(this.items).map(item => this.renderOption(item))
           }
         </select>

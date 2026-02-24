@@ -115,6 +115,13 @@ export interface AIConfig {
    * - 'basic': Just "Thinking..." with elapsed time
    */
   loadingDisplay: LoadingDisplay;
+
+  /**
+   * Allow the AI pipeline to dynamically route to a stronger or faster model
+   * based on task complexity analysis. When disabled, the selected model is
+   * always used as-is with no substitution.
+   */
+  smartRouting: boolean;
 }
 
 const SETTINGS_KEY = 'a2ui_settings';
@@ -145,6 +152,7 @@ export const aiConfig: AIConfig = {
   contentStyle: 'auto',
   performanceMode: 'auto',
   loadingDisplay: 'moderate',
+  smartRouting: true,
 };
 
 const VALID_CONTENT_STYLES: ReadonlySet<ContentStyle> = new Set([
