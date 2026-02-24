@@ -192,7 +192,7 @@ export class A2UIChatMessage extends LitElement {
     }
     
     .model-badge .sparkles-icon {
-      max-width: 10px;
+      max-width: 12px;
     }
 
     .duration,

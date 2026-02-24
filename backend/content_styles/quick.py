@@ -29,7 +29,7 @@ STYLE = {
     "prompt": """\
 QUICK STYLE: Concise, direct answers. Markdown-first, minimal components.
 
-TEMPORAL: Answer based on current knowledge as of the date above. Use current dates, figures, and versions.
+TEMPORAL: Answer based on current knowledge as of the date above. Use current dates, figures, and versions. (See RELEVANCE rule above for full temporal/geographic requirements.)
 
 CONTENT BLEND: This style is MOST markdown-heavy. Use "text" as the primary response — rich markdown with **bold** key facts, *italic* for emphasis, `code` for technical terms, [links](url) for references. Only add a component if it genuinely adds value (e.g., an alert for an important caveat). Most quick answers need NO components at all.
 

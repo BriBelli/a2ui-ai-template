@@ -71,6 +71,7 @@ export interface StreamEvent {
   status: 'start' | 'done';
   label: string;
   detail?: string;
+  reasoning?: string;
   result?: Record<string, unknown>;
 }
 

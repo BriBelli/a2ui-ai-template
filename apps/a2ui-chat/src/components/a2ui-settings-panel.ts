@@ -6,7 +6,8 @@ import {
   setAIConfig,
   setUIConfig,
   type ContentStyle,
-  type LoadingDisplay,
+  type LoadingDetail,
+  type LoadingStyle,
   type PerformanceMode,
   type SourcesPosition,
 } from "../config/ui-config";
@@ -352,7 +353,8 @@ export class A2UISettingsPanel extends LitElement {
 
   @state() private contentStyle: ContentStyle = aiConfig.contentStyle;
   @state() private performanceMode: PerformanceMode = aiConfig.performanceMode;
-  @state() private loadingDisplay: LoadingDisplay = aiConfig.loadingDisplay;
+  @state() private loadingDetail: LoadingDetail = aiConfig.loadingDetail;
+  @state() private loadingStyle: LoadingStyle = aiConfig.loadingStyle;
   @state() private webSearch = aiConfig.webSearch;
   @state() private geolocation = aiConfig.geolocation;
   @state() private dataSources = aiConfig.dataSources;
@@ -388,7 +390,8 @@ export class A2UISettingsPanel extends LitElement {
   private syncFromConfig() {
     this.contentStyle = aiConfig.contentStyle;
     this.performanceMode = aiConfig.performanceMode;
-    this.loadingDisplay = aiConfig.loadingDisplay;
+    this.loadingDetail = aiConfig.loadingDetail;
+    this.loadingStyle = aiConfig.loadingStyle;
     this.webSearch = aiConfig.webSearch;
     this.geolocation = aiConfig.geolocation;
     this.dataSources = aiConfig.dataSources;
@@ -472,10 +475,16 @@ export class A2UISettingsPanel extends LitElement {
     setAIConfig({ performanceMode: this.performanceMode });
   }
 
-  private handleLoadingDisplay(e: Event) {
-    this.loadingDisplay = (e.target as HTMLSelectElement)
-      .value as LoadingDisplay;
-    setAIConfig({ loadingDisplay: this.loadingDisplay });
+  private handleLoadingDetail(e: Event) {
+    this.loadingDetail = (e.target as HTMLSelectElement)
+      .value as LoadingDetail;
+    setAIConfig({ loadingDetail: this.loadingDetail });
+  }
+
+  private handleLoadingStyle(e: Event) {
+    this.loadingStyle = (e.target as HTMLSelectElement)
+      .value as LoadingStyle;
+    setAIConfig({ loadingStyle: this.loadingStyle });
   }
 
   private handleWebSearch() {
@@ -855,41 +864,83 @@ export class A2UISettingsPanel extends LitElement {
               </select>
             </div>
           </div>
-          <!-- Loading Display -->
-          <div class="field">
-            <div class="field-row">
-              <div class="field-info">
-                <p class="field-label">Loading Display</p>
-                <p class="field-desc">
-                  Detail level for the thinking indicator
-                </p>
+          <!-- Loading Detail -->
+            <div class="field">
+              <div class="field-row">
+                <div class="field-info">
+                  <p class="field-label">Loading Detail</p>
+                  <p class="field-desc">
+                    How much pipeline info the thinking indicator shows
+                  </p>
+                </div>
+                <select
+                  class="field-select"
+                  @change=${this.handleLoadingDetail}
+                  aria-label="Loading detail level"
+                >
+                  <option
+                    value="basic"
+                    ?selected=${this.loadingDetail === "basic"}
+                  >
+                    Basic
+                  </option>
+                  <option
+                    value="moderate"
+                    ?selected=${this.loadingDetail === "moderate"}
+                  >
+                    Moderate
+                  </option>
+                  <option
+                    value="comprehensive"
+                    ?selected=${this.loadingDetail === "comprehensive"}
+                  >
+                    Comprehensive
+                  </option>
+                  <option
+                    value="thought"
+                    ?selected=${this.loadingDetail === "thought"}
+                  >
+                    Thought
+                  </option>
+                </select>
               </div>
-              <select
-                class="field-select"
-                @change=${this.handleLoadingDisplay}
-                aria-label="Loading display level"
-              >
-                <option
-                  value="comprehensive"
-                  ?selected=${this.loadingDisplay === "comprehensive"}
-                >
-                  Comprehensive
-                </option>
-                <option
-                  value="moderate"
-                  ?selected=${this.loadingDisplay === "moderate"}
-                >
-                  Moderate
-                </option>
-                <option
-                  value="basic"
-                  ?selected=${this.loadingDisplay === "basic"}
-                >
-                  Basic
-                </option>
-              </select>
             </div>
-          </div>
+
+            <!-- Loading Style -->
+            <div class="field">
+              <div class="field-row">
+                <div class="field-info">
+                  <p class="field-label">Loading Style</p>
+                  <p class="field-desc">
+                    How pipeline steps are animated during loading
+                  </p>
+                </div>
+                <select
+                  class="field-select"
+                  @change=${this.handleLoadingStyle}
+                  aria-label="Loading animation style"
+                >
+                  <option
+                    value="basic"
+                    ?selected=${this.loadingStyle === "basic"}
+                  >
+                    Basic
+                  </option>
+                  <option
+                    value="focus"
+                    ?selected=${this.loadingStyle === "focus"}
+                  >
+                    Focus
+                  </option>
+                  <option
+                    value="stack"
+                    ?selected=${this.loadingStyle === "stack"}
+                  >
+                    Stack
+                  </option>
+                </select>
+              </div>
+            </div>
         </div>
       </aside>
     `;

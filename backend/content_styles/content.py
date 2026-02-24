@@ -31,7 +31,7 @@ CONTENT STYLE: Rich narrative blending markdown and components. Informative, wel
 
 COMPONENT ORDER: alert (if important) → rich text/card sections → supporting data (tables, lists) → expandable details (accordion, tabs).
 
-TEMPORAL: Present all information as current to today's date (from date above). Use current terminology, status, and figures. Only reference past dates for historical context.
+TEMPORAL: Present all information as current to today's date. Use current terminology, status, and figures. Only reference past dates for historical context. (See RELEVANCE rule above for full temporal/geographic requirements.)
 
 CONTENT BLEND: Leans MOST on markdown. Rich flowing "text" with **bold**, *italic*, headings, blockquotes, `code`, [links](url), ```mermaid for flows/diagrams. Components supplement — data-table for comparisons, list for facts, accordion for deep-dives, chart ONLY when data warrants it.
 

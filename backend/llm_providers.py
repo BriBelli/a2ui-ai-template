@@ -960,18 +960,21 @@ def _wants_images(message: str) -> bool:
 
 # ── LLM Classifier ─────────────────────────────────────────────
 
-_ANALYZER_SYSTEM = (
-    "You are an intent analyzer for an AI UI system. "
-    "Given a user query, decide:\n"
-    "1. The best content presentation style\n"
-    "2. Whether real-time web search is needed (current events, prices, weather, live data)\n"
-    "3. Whether the user's geographic location is relevant\n"
-    "4. If search is needed, an optimized search query\n"
-    "5. Whether any available data sources should be queried, and if so which endpoints/questions to use\n"
-    "6. Which specialized chart/component types the response will likely need\n"
-    "7. The task complexity level for model routing\n"
-    "Respond with ONLY a valid JSON object. No markdown, no explanation."
-)
+def _make_analyzer_system() -> str:
+    from datetime import date
+    today = date.today().strftime("%B %d, %Y")
+    return (
+        f"You are an intent analyzer for an AI UI system. Today is {today}.\n"
+        "Given a user query, decide:\n"
+        "1. The best content presentation style\n"
+        "2. Whether real-time web search is needed (current events, prices, weather, live data)\n"
+        "3. Whether the user's geographic location is relevant\n"
+        "4. If search is needed, an optimized search query (MUST include the current year for time-sensitive topics)\n"
+        "5. Whether any available data sources should be queried, and if so which endpoints/questions to use\n"
+        "6. Which specialized chart/component types the response will likely need\n"
+        "7. The task complexity level for model routing\n"
+        "Respond with ONLY a valid JSON object. No markdown, no explanation."
+    )
 
 _ANALYZER_PROMPT_TEMPLATE = (
     "Content styles:\n{descriptions}\n\n"
@@ -1385,7 +1388,7 @@ class LLMService:
                     resp = await provider.client.chat.completions.create(
                         model=model_id,
                         messages=[
-                            {"role": "system", "content": _ANALYZER_SYSTEM},
+                            {"role": "system", "content": _make_analyzer_system()},
                             {"role": "user", "content": prompt},
                         ],
                         max_tokens=300,
@@ -1397,7 +1400,7 @@ class LLMService:
                     resp = await provider.client.messages.create(
                         model=model_id,
                         max_tokens=300,
-                        system=_ANALYZER_SYSTEM,
+                        system=_make_analyzer_system(),
                         messages=[{"role": "user", "content": prompt}],
                     )
                     text = resp.content[0].text.strip()
@@ -1407,7 +1410,7 @@ class LLMService:
                     genai.configure(api_key=provider._api_key)
                     gen_model = genai.GenerativeModel(
                         model_name=model_id,
-                        system_instruction=_ANALYZER_SYSTEM,
+                        system_instruction=_make_analyzer_system(),
                     )
                     resp = gen_model.generate_content(prompt)
                     text = resp.text.strip()
@@ -1669,10 +1672,36 @@ class LLMService:
                             style_id = fallback
                             break
 
+        # Build reasoning prose for chain-of-thought display
+        _style_names = {
+            "analytical": "Analytical (data dashboards)",
+            "content": "Content (narrative)",
+            "comparison": "Comparison (side-by-side)",
+            "howto": "How-To (step-by-step)",
+            "quick": "Quick Answer (concise)",
+        }
+        _reasoning_parts = [
+            f"Presentation: {_style_names.get(style_id, style_id)}",
+        ]
+        if ai_complexity != "standard":
+            _reasoning_parts.append(f"Complexity: {ai_complexity}")
+        if ai_component_hints:
+            _reasoning_parts.append(f"Components: {', '.join(ai_component_hints)}")
+        if do_search:
+            _reasoning_parts.append(f"Web search needed — query: \"{ai_search_query[:80]}\"")
+        else:
+            _reasoning_parts.append("No web search required")
+        if do_location:
+            _reasoning_parts.append("Location context will be included")
+        if ai_data_queries:
+            _ds_names = [q.get("source", "?") for q in ai_data_queries]
+            _reasoning_parts.append(f"Data sources: {', '.join(_ds_names)}")
+
         yield {"event": "step", "data": {
             "id": "analyzer", "status": "done",
             "label": "Intent analyzed",
             "detail": f"style={style_id} search={do_search} location={do_location}",
+            "reasoning": " · ".join(_reasoning_parts),
             "result": {
                 "style": style_id,
                 "search": do_search,
@@ -1708,6 +1737,10 @@ class LLMService:
             search_query = ai_search_query or rewrite_search_query(
                 message, location=location_label,
             )
+            # Ensure location is in the search query even when AI analyzer
+            # provided one (the analyzer doesn't know the user's location).
+            if ai_search_query and location_label and location_label.lower() not in search_query.lower():
+                search_query = f"{search_query} {location_label}"
             yield {"event": "step", "data": {
                 "id": "search", "status": "start",
                 "label": "Searching the web",
@@ -1933,6 +1966,7 @@ class LLMService:
                             "id": "model_upgrade", "status": "done",
                             "label": f"Model routed for {effective_complexity} task",
                             "detail": f"{new_pid}/{new_mid}",
+                            "reasoning": f"Task complexity is {effective_complexity} — {provider_id}/{model} was upgraded to {new_pid}/{new_mid} for better results{cross}",
                         }}
                 else:
                     logger.info(
@@ -1964,6 +1998,7 @@ class LLMService:
                             "id": "model_upgrade", "status": "done",
                             "label": "Using faster model for simple task",
                             "detail": f"{new_pid}/{new_mid}",
+                            "reasoning": f"This is a standard-complexity task — switching from {provider_id}/{model} to the faster {new_pid}/{new_mid}{cross}",
                         }}
         elif not smart_routing:
             logger.info(
@@ -1981,10 +2016,16 @@ class LLMService:
         }
         thinking_effort = _COMPLEXITY_TO_EFFORT.get(effective_complexity) if smart_routing and performance_mode in ("auto", "comprehensive") else None
 
+        _llm_reasoning_parts = [f"Model: {effective_provider_id}/{effective_model}"]
+        if thinking_effort:
+            _llm_reasoning_parts.append(f"Thinking effort: {thinking_effort}")
+        if effective_provider_id != provider_id or effective_model != model:
+            _llm_reasoning_parts.append(f"Original selection: {provider_id}/{model}")
         yield {"event": "step", "data": {
             "id": "llm", "status": "start",
             "label": "Generating response",
             "detail": f"{effective_provider_id}/{effective_model}" + (f" (thinking: {thinking_effort})" if thinking_effort else ""),
+            "reasoning": " · ".join(_llm_reasoning_parts),
         }}
         logger.info(
             "── GENERATE ──  sending to %s/%s  (%d chars)  effort=%s",

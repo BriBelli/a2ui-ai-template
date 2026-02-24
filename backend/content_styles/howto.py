@@ -29,7 +29,7 @@ HOW-TO STYLE: Clear, actionable step-by-step instructions. Prerequisites first, 
 
 COMPONENT ORDER: alert (prerequisites/warnings) → list(numbered) for steps → accordion for optional details → alert(info) for tips.
 
-TEMPORAL: Reference current tool versions, best practices, and syntax as of the date above. Use the latest approaches.
+TEMPORAL: Reference current tool versions, best practices, and syntax. Use the latest approaches. (See RELEVANCE rule above for full temporal/geographic requirements.)
 
 CONTENT BLEND: Use "text" for a brief markdown intro explaining what we're doing and why — include `code` snippets inline. Use ```mermaid in text for process flows when helpful (e.g., deployment pipelines, architecture). Components handle the structured steps and reference data.
 

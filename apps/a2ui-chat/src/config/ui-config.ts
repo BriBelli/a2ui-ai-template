@@ -5,16 +5,7 @@
  * Settings are persisted to localStorage so they survive page reloads.
  */
 
-export type LoadingStyle = 'chat' | 'subtle';
-
 export interface UIConfig {
-  /**
-   * Loading indicator style
-   * - 'chat': Full message-style with AI avatar and bubble
-   * - 'subtle': Minimal dots with text
-   */
-  loadingStyle: LoadingStyle;
-
   /**
    * Enable message entrance animations
    */
@@ -61,7 +52,8 @@ export type SourcesPosition = 'auto' | 'right' | 'bottom';
 
 export type ContentStyle = 'auto' | 'analytical' | 'content' | 'comparison' | 'howto' | 'quick';
 export type PerformanceMode = 'auto' | 'comprehensive' | 'optimized';
-export type LoadingDisplay = 'comprehensive' | 'moderate' | 'basic';
+export type LoadingDetail = 'basic' | 'moderate' | 'comprehensive' | 'thought';
+export type LoadingStyle = 'basic' | 'focus' | 'stack';
 
 export interface AIConfig {
   /**
@@ -109,12 +101,21 @@ export interface AIConfig {
   performanceMode: PerformanceMode;
 
   /**
-   * Loading indicator detail level.
-   * - 'comprehensive': All tools, timing, search queries, model info
-   * - 'moderate': Active tools and key outcomes (default)
+   * Loading indicator detail level — controls what information is shown.
    * - 'basic': Just "Thinking..." with elapsed time
+   * - 'moderate': Key pipeline steps (search, analyze, generate)
+   * - 'comprehensive': All steps with timing and detail text
+   * - 'thought': Chain-of-thought — all steps + reasoning in a collapsible panel
    */
-  loadingDisplay: LoadingDisplay;
+  loadingDetail: LoadingDetail;
+
+  /**
+   * Loading indicator presentation style — controls how steps are animated.
+   * - 'basic': Simple list, steps fade in and stay visible
+   * - 'focus': Slot-machine — one step visible at a time, scrolls up on transition
+   * - 'stack': All steps appended, scrollable with max-height
+   */
+  loadingStyle: LoadingStyle;
 
   /**
    * Allow the AI pipeline to dynamically route to a stronger or faster model
@@ -130,7 +131,6 @@ const SETTINGS_KEY = 'a2ui_settings';
  * Default UI configuration
  */
 export const uiConfig: UIConfig = {
-  loadingStyle: 'chat',
   animateMessages: true,
   animateWelcome: true,
   maxSuggestions: 3,
@@ -151,7 +151,8 @@ export const aiConfig: AIConfig = {
   dataSources: true,
   contentStyle: 'auto',
   performanceMode: 'auto',
-  loadingDisplay: 'moderate',
+  loadingDetail: 'moderate',
+  loadingStyle: 'focus',
   smartRouting: true,
 };
 
@@ -161,8 +162,11 @@ const VALID_CONTENT_STYLES: ReadonlySet<ContentStyle> = new Set([
 const VALID_PERFORMANCE_MODES: ReadonlySet<PerformanceMode> = new Set([
   'auto', 'comprehensive', 'optimized',
 ]);
-const VALID_LOADING_DISPLAYS: ReadonlySet<LoadingDisplay> = new Set([
-  'comprehensive', 'moderate', 'basic',
+const VALID_LOADING_DETAILS: ReadonlySet<LoadingDetail> = new Set([
+  'basic', 'moderate', 'comprehensive', 'thought',
+]);
+const VALID_LOADING_STYLES: ReadonlySet<LoadingStyle> = new Set([
+  'basic', 'focus', 'stack',
 ]);
 const VALID_SOURCES_POSITIONS: ReadonlySet<SourcesPosition> = new Set([
   'auto', 'right', 'bottom',
@@ -185,8 +189,11 @@ export function loadSettings(): void {
       if (!VALID_PERFORMANCE_MODES.has(aiConfig.performanceMode)) {
         aiConfig.performanceMode = 'auto';
       }
-      if (!VALID_LOADING_DISPLAYS.has(aiConfig.loadingDisplay)) {
-        aiConfig.loadingDisplay = 'moderate';
+      if (!VALID_LOADING_DETAILS.has(aiConfig.loadingDetail)) {
+        aiConfig.loadingDetail = 'moderate';
+      }
+      if (!VALID_LOADING_STYLES.has(aiConfig.loadingStyle)) {
+        aiConfig.loadingStyle = 'focus';
       }
     }
     if (saved.ui) {

@@ -794,19 +794,20 @@ export class A2UIApp extends LitElement {
     const locationCached = isLocationCached();
     const stepIndexByTool = new Map<string, number>();
 
-    const push = (label: string, detail?: string, tool?: string) => {
+    const push = (label: string, detail?: string, tool?: string, reasoning?: string) => {
       const idx = steps.length;
-      steps.push({ label, done: false, detail, tool });
+      steps.push({ label, done: false, detail, tool, reasoning });
       if (tool) stepIndexByTool.set(tool, idx);
       this.thinkingSteps = [...steps];
       return idx;
     };
-    const done = (index: number, label?: string, detail?: string) => {
+    const done = (index: number, label?: string, detail?: string, reasoning?: string) => {
       steps[index] = {
         ...steps[index],
         done: true,
         ...(label && { label }),
         ...(detail && { detail }),
+        ...(reasoning && { reasoning }),
       };
       this.thinkingSteps = [...steps];
     };
@@ -816,19 +817,19 @@ export class A2UIApp extends LitElement {
 
       if (evt.status === "start") {
         if (existing !== undefined) {
-          // Update existing step (shouldn't happen, but defensive)
           steps[existing] = {
             ...steps[existing],
             label: evt.label,
             detail: evt.detail,
+            ...(evt.reasoning && { reasoning: evt.reasoning }),
           };
           this.thinkingSteps = [...steps];
         } else {
-          push(evt.label, evt.detail, evt.id);
+          push(evt.label, evt.detail, evt.id, evt.reasoning);
         }
       } else if (evt.status === "done") {
         if (existing !== undefined) {
-          done(existing, evt.label, evt.detail);
+          done(existing, evt.label, evt.detail, evt.reasoning);
         }
       }
     };
@@ -1196,7 +1197,8 @@ export class A2UIApp extends LitElement {
           .isLoading=${this.isLoading}
           .suggestions=${this.suggestions}
           .thinkingSteps=${this.thinkingSteps}
-          .loadingDisplay=${aiConfig.loadingDisplay}
+          .loadingDetail=${aiConfig.loadingDetail}
+          .loadingStyle=${aiConfig.loadingStyle}
           @send-message=${this.handleSendMessage}
           @edit-message=${this.handleEditMessage}
           @delete-message=${this.handleDeleteMessage}
