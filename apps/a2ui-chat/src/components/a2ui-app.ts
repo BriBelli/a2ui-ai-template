@@ -652,6 +652,15 @@ export class A2UIApp extends LitElement {
     return this.selectedModel;
   }
 
+  /** Human-readable model name for the header badge. */
+  private get modelDisplayLabel(): string {
+    if (this.isAutoModel) return 'Auto';
+    const provider = this.providers.find(p => p.id === this.selectedProvider);
+    if (!provider) return this.selectedModel;
+    const model = provider.models.find(m => m.id === this.selectedModel);
+    return model?.name || this.selectedModel;
+  }
+
   // ── Persistence helpers ──────────────────────────────────
 
   private static readonly ACTIVE_KEY = "a2ui_active_thread";
@@ -993,6 +1002,10 @@ export class A2UIApp extends LitElement {
     this.showUserMenu = !this.showUserMenu;
   }
 
+  private _handleSettingChange() {
+    this.requestUpdate();
+  }
+
   private closeUserMenu() {
     this.showUserMenu = false;
   }
@@ -1052,13 +1065,6 @@ export class A2UIApp extends LitElement {
             <div class="logo-icon" aria-hidden="true"></div>
             <span>A2UI Chat</span>
           </div>
-          <div class="divider"></div>
-          <a2ui-model-selector
-            .groups=${this.modelGroups}
-            .value=${this.modelSelectorValue}
-            .showStatus=${true}
-            @change=${this.handleModelChange}
-          ></a2ui-model-selector>
         </div>
 
         <div class="header-right">
@@ -1199,10 +1205,17 @@ export class A2UIApp extends LitElement {
           .thinkingSteps=${this.thinkingSteps}
           .loadingDetail=${aiConfig.loadingDetail}
           .loadingStyle=${aiConfig.loadingStyle}
+          .modelLabel=${this.modelDisplayLabel}
+          .modelValue=${this.modelSelectorValue}
+          .modelGroups=${this.modelGroups}
+          .contentStyle=${aiConfig.contentStyle}
+          .webSearch=${aiConfig.webSearch}
           @send-message=${this.handleSendMessage}
           @edit-message=${this.handleEditMessage}
           @delete-message=${this.handleDeleteMessage}
           @regenerate-message=${this.handleRegenerateMessage}
+          @model-change=${this.handleModelChange}
+          @setting-change=${this._handleSettingChange}
         ></a2ui-chat-container>
       </main>
 
@@ -1210,9 +1223,12 @@ export class A2UIApp extends LitElement {
 
       <a2ui-settings-panel
         .open=${this.showSettings}
+        .modelGroups=${this.modelGroups}
+        .modelValue=${this.modelSelectorValue}
         @close=${() => {
           this.showSettings = false;
         }}
+        @model-change=${this.handleModelChange}
       ></a2ui-settings-panel>
     `;
   }

@@ -11,6 +11,7 @@ import {
   type PerformanceMode,
   type SourcesPosition,
 } from "../config/ui-config";
+import type { SelectGroup } from "./a2ui-model-selector";
 
 interface StyleOption {
   id: string;
@@ -350,6 +351,8 @@ export class A2UISettingsPanel extends LitElement {
   `;
 
   @property({ type: Boolean }) open = false;
+  @property({ type: Array }) modelGroups: SelectGroup[] = [];
+  @property({ type: String }) modelValue = '';
 
   @state() private contentStyle: ContentStyle = aiConfig.contentStyle;
   @state() private performanceMode: PerformanceMode = aiConfig.performanceMode;
@@ -464,6 +467,17 @@ export class A2UISettingsPanel extends LitElement {
     );
   }
 
+  private handleModelChange(e: Event) {
+    const value = (e.target as HTMLSelectElement).value;
+    this.dispatchEvent(
+      new CustomEvent("model-change", {
+        detail: { value },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
   private handleContentStyle(e: Event) {
     this.contentStyle = (e.target as HTMLSelectElement).value as ContentStyle;
     setAIConfig({ contentStyle: this.contentStyle });
@@ -562,6 +576,54 @@ export class A2UISettingsPanel extends LitElement {
         </div>
 
         <div class="panel-body">
+          <!-- ── Model ──────────────────────────────── -->
+          ${this.modelGroups.length > 0
+            ? html`
+              <div class="section">
+                <p class="section-label">Model</p>
+                <div class="field">
+                  <div class="field-row">
+                    <div class="field-info">
+                      <p class="field-label">Active Model</p>
+                      <p class="field-desc">
+                        Model used for generating responses
+                      </p>
+                    </div>
+                    <select
+                      class="field-select"
+                      @change=${this.handleModelChange}
+                      aria-label="Model"
+                    >
+                      ${this.modelGroups.map((group) =>
+                        group.label
+                          ? html`<optgroup label=${group.label}>
+                              ${group.items.map(
+                                (item) =>
+                                  html`<option
+                                    value=${item.value}
+                                    ?selected=${item.value === this.modelValue}
+                                  >
+                                    ${item.label}
+                                  </option>`,
+                              )}
+                            </optgroup>`
+                          : group.items.map(
+                              (item) =>
+                                html`<option
+                                  value=${item.value}
+                                  ?selected=${item.value === this.modelValue}
+                                >
+                                  ${item.label}
+                                </option>`,
+                            ),
+                      )}
+                    </select>
+                  </div>
+                </div>
+              </div>
+            `
+            : nothing}
+
           <!-- ── Tools ──────────────────────────────── -->
           <div class="section">
             <p class="section-label">Tools</p>
