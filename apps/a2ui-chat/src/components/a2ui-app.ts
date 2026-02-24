@@ -5,6 +5,7 @@ import {
   ChatService,
   type ChatMessage,
   type LLMProvider,
+  type StreamEvent,
 } from "../services/chat-service";
 import type { SelectGroup } from "./a2ui-model-selector";
 import { authService, type AuthUser } from "../services/auth-service";
@@ -13,7 +14,7 @@ import {
   ChatHistoryService,
   type ChatThread,
 } from "../services/chat-history-service";
-import { uiConfig, loadSettings } from "../config/ui-config";
+import { uiConfig, aiConfig, loadSettings } from "../config/ui-config";
 import {
   initTheme,
   toggleTheme,
@@ -594,36 +595,70 @@ export class A2UIApp extends LitElement {
 
   private async loadProviders() {
     this.providers = await this.chatService.getProviders();
-    if (this.providers.length > 0) {
-      this.selectedProvider = this.providers[0].id;
-      this.selectedModel = this.providers[0].models[0]?.id || "";
+    if (this.providers.length > 0 && !this.selectedProvider) {
+      this.selectedProvider = 'auto';
+      this.selectedModel = 'auto';
     }
   }
 
   /** Build grouped options for the model selector from providers. */
   private get modelGroups(): SelectGroup[] {
-    return this.providers.map(p => ({
+    const autoGroup: SelectGroup = {
+      label: '',
+      items: [{ value: 'auto::auto', label: 'Auto' }],
+    };
+    const providerGroups = this.providers.map((p) => ({
       label: p.name,
-      items: p.models.map(m => ({
+      items: p.models.map((m) => ({
         value: `${p.id}::${m.id}`,
         label: m.name,
       })),
     }));
+    return [autoGroup, ...providerGroups];
   }
 
   /** Composite value for the model selector (provider::model). */
   private get modelSelectorValue(): string {
     return this.selectedProvider && this.selectedModel
       ? `${this.selectedProvider}::${this.selectedModel}`
-      : '';
+      : "";
   }
 
   private handleModelChange(e: CustomEvent<{ value: string }>) {
     const val = e.detail.value;
-    const sep = val.indexOf('::');
+    const sep = val.indexOf("::");
     if (sep === -1) return;
     this.selectedProvider = val.slice(0, sep);
     this.selectedModel = val.slice(sep + 2);
+  }
+
+  /** True when user has selected "Auto" model (pipeline picks the model). */
+  private get isAutoModel(): boolean {
+    return this.selectedProvider === 'auto' && this.selectedModel === 'auto';
+  }
+
+  /** Resolve actual provider/model for API calls (defaults for "Auto" mode). */
+  private get resolvedProvider(): string {
+    if (this.isAutoModel && this.providers.length > 0) {
+      return this.providers[0].id;
+    }
+    return this.selectedProvider;
+  }
+
+  private get resolvedModel(): string {
+    if (this.isAutoModel && this.providers.length > 0) {
+      return this.providers[0].models[0]?.id || '';
+    }
+    return this.selectedModel;
+  }
+
+  /** Human-readable model name for the header badge. */
+  private get modelDisplayLabel(): string {
+    if (this.isAutoModel) return 'Auto';
+    const provider = this.providers.find(p => p.id === this.selectedProvider);
+    if (!provider) return this.selectedModel;
+    const model = provider.models.find(m => m.id === this.selectedModel);
+    return model?.name || this.selectedModel;
   }
 
   // ── Persistence helpers ──────────────────────────────────
@@ -648,8 +683,8 @@ export class A2UIApp extends LitElement {
       messages: this.messages,
       createdAt: existing?.createdAt ?? this.messages[0].timestamp,
       updatedAt: Date.now(),
-      provider: this.selectedProvider || undefined,
-      model: this.selectedModel || undefined,
+      provider: this.resolvedProvider || undefined,
+      model: this.resolvedModel || undefined,
     };
     chatHistoryService.saveThread(thread);
     sessionStorage.setItem(A2UIApp.ACTIVE_KEY, this.activeThreadId);
@@ -670,6 +705,65 @@ export class A2UIApp extends LitElement {
   }
 
   // ── Chat actions ───────────────────────────────────────
+
+  private handleEditMessage(
+    e: CustomEvent<{ messageId: string; newContent: string }>,
+  ) {
+    const { messageId, newContent } = e.detail;
+    if (this.isLoading) return;
+
+    const idx = this.messages.findIndex((m) => m.id === messageId);
+    if (idx === -1) return;
+
+    this.messages = this.messages.slice(0, idx);
+    this.persistThread();
+
+    this.handleSendMessage(
+      new CustomEvent("send-message", {
+        detail: { message: newContent },
+      }),
+    );
+  }
+
+  private handleDeleteMessage(e: CustomEvent<{ messageId: string }>) {
+    if (this.isLoading) return;
+    const idx = this.messages.findIndex((m) => m.id === e.detail.messageId);
+    if (idx === -1) return;
+    let cutAt = idx;
+    if (
+      this.messages[idx].role === "assistant" &&
+      idx > 0 &&
+      this.messages[idx - 1].role === "user"
+    ) {
+      cutAt = idx - 1;
+    }
+    this.messages = this.messages.slice(0, cutAt);
+    this.persistThread();
+  }
+
+  private handleRegenerateMessage(e: CustomEvent<{ messageId: string }>) {
+    if (this.isLoading) return;
+    const idx = this.messages.findIndex((m) => m.id === e.detail.messageId);
+    if (idx === -1) return;
+
+    let prevUserIdx = -1;
+    for (let i = idx - 1; i >= 0; i--) {
+      if (this.messages[i].role === "user") {
+        prevUserIdx = i;
+        break;
+      }
+    }
+    if (prevUserIdx === -1) return;
+
+    const prevUserContent = this.messages[prevUserIdx].content;
+    this.messages = this.messages.slice(0, prevUserIdx);
+    this.persistThread();
+    this.handleSendMessage(
+      new CustomEvent("send-message", {
+        detail: { message: prevUserContent },
+      }),
+    );
+  }
 
   private async handleSendMessage(e: CustomEvent<{ message: string }>) {
     const { message } = e.detail;
@@ -704,76 +798,94 @@ export class A2UIApp extends LitElement {
     this.isLoading = true;
     const startTime = performance.now();
 
-    // Build dynamic steps array that reflects real operations
+    // Thinking steps built from SSE stream events + client-side geolocation.
     const steps: ThinkingStep[] = [];
-    const willSearch = this.chatService.willSearch(message);
-    const needsLocation = this.chatService.needsLocation(message);
     const locationCached = isLocationCached();
+    const stepIndexByTool = new Map<string, number>();
 
-    // Helper to update the reactive property
-    const push = (label: string, detail?: string) => {
-      steps.push({ label, done: false, detail });
+    const push = (label: string, detail?: string, tool?: string, reasoning?: string) => {
+      const idx = steps.length;
+      steps.push({ label, done: false, detail, tool, reasoning });
+      if (tool) stepIndexByTool.set(tool, idx);
+      this.thinkingSteps = [...steps];
+      return idx;
+    };
+    const done = (index: number, label?: string, detail?: string, reasoning?: string) => {
+      steps[index] = {
+        ...steps[index],
+        done: true,
+        ...(label && { label }),
+        ...(detail && { detail }),
+        ...(reasoning && { reasoning }),
+      };
       this.thinkingSteps = [...steps];
     };
-    const done = (index: number) => {
-      steps[index] = { ...steps[index], done: true };
-      this.thinkingSteps = [...steps];
+
+    const handleStreamEvent = (evt: StreamEvent) => {
+      const existing = stepIndexByTool.get(evt.id);
+
+      if (evt.status === "start") {
+        if (existing !== undefined) {
+          steps[existing] = {
+            ...steps[existing],
+            label: evt.label,
+            detail: evt.detail,
+            ...(evt.reasoning && { reasoning: evt.reasoning }),
+          };
+          this.thinkingSteps = [...steps];
+        } else {
+          push(evt.label, evt.detail, evt.id, evt.reasoning);
+        }
+      } else if (evt.status === "done") {
+        if (existing !== undefined) {
+          done(existing, evt.label, evt.detail, evt.reasoning);
+        }
+      }
     };
 
     try {
+      const smartRouting = this.isAutoModel || aiConfig.smartRouting;
       const response = await this.chatService.sendMessage(
         message,
-        this.selectedProvider,
-        this.selectedModel,
+        this.resolvedProvider,
+        this.resolvedModel,
         this.messages,
-        // Progress callback — driven by real lifecycle events
-        (phase, detail) => {
+        smartRouting,
+        (phase, _detail, streamEvent?) => {
           switch (phase) {
             case "location":
-              if (needsLocation && !locationCached) {
-                push("Getting your location");
-              }
+              if (!locationCached)
+                push("Getting your location", undefined, "client-location");
               break;
             case "location-done": {
-              const locIdx = steps.findIndex((s) =>
-                s.label.startsWith("Getting"),
-              );
-              if (locIdx >= 0) done(locIdx);
+              const locIdx = stepIndexByTool.get("client-location");
+              if (locIdx !== undefined) done(locIdx);
               break;
             }
-            case "searching":
-              push("Searching the web");
-              break;
-            case "search-done": {
-              const searchIdx = steps.findIndex((s) =>
-                s.label.startsWith("Searching"),
-              );
-              if (searchIdx >= 0) {
-                // Update the step with the rewritten query from the backend
-                if (detail) {
-                  steps[searchIdx] = {
-                    ...steps[searchIdx],
-                    detail: `"${detail}"`,
-                  };
-                }
-                done(searchIdx);
-              }
-              break;
-            }
-            case "generating":
-              push("Generating response");
+            case "stream-event":
+              if (streamEvent) handleStreamEvent(streamEvent);
               break;
           }
         },
       );
 
-      // Mark all steps done
       steps.forEach((_, i) => done(i));
 
-      const provider = this.providers.find(
+      // If the server routed to a different model/provider, reflect that
+      const actualProviderId = response._provider || this.selectedProvider;
+      const actualModelId = response._model || this.selectedModel;
+      const actualProvider = this.providers.find(
+        (p) => p.id === actualProviderId,
+      );
+      const fallbackProvider = this.providers.find(
         (p) => p.id === this.selectedProvider,
       );
-      const model = provider?.models.find((m) => m.id === this.selectedModel);
+      const actualModel =
+        actualProvider?.models.find((m) => m.id === actualModelId) ||
+        fallbackProvider?.models.find((m) => m.id === actualModelId);
+
+      const modelLabel = actualModel?.name || actualModelId;
+      const wasUpgraded = !!response._model_upgraded_from;
 
       const elapsed = (performance.now() - startTime) / 1000;
 
@@ -785,11 +897,14 @@ export class A2UIApp extends LitElement {
           content: response.text || "",
           a2ui: response.a2ui,
           timestamp: Date.now(),
-          model: model?.name || this.selectedModel,
+          model: modelLabel,
+          provider: actualProviderId,
+          modelUpgraded: wasUpgraded,
           suggestions: response.suggestions,
           duration: Math.round(elapsed * 10) / 10,
           images: response._images,
           style: response._style,
+          sources: response._sources,
         },
       ];
 
@@ -887,6 +1002,10 @@ export class A2UIApp extends LitElement {
     this.showUserMenu = !this.showUserMenu;
   }
 
+  private _handleSettingChange() {
+    this.requestUpdate();
+  }
+
   private closeUserMenu() {
     this.showUserMenu = false;
   }
@@ -946,13 +1065,6 @@ export class A2UIApp extends LitElement {
             <div class="logo-icon" aria-hidden="true"></div>
             <span>A2UI Chat</span>
           </div>
-          <div class="divider"></div>
-          <a2ui-model-selector
-            .groups=${this.modelGroups}
-            .value=${this.modelSelectorValue}
-            .showStatus=${true}
-            @change=${this.handleModelChange}
-          ></a2ui-model-selector>
         </div>
 
         <div class="header-right">
@@ -978,7 +1090,11 @@ export class A2UIApp extends LitElement {
                           class="user-menu-backdrop"
                           @click=${this.closeUserMenu}
                         ></div>
-                        <div class="user-menu" role="menu" aria-label="User menu">
+                        <div
+                          class="user-menu"
+                          role="menu"
+                          aria-label="User menu"
+                        >
                           <div class="user-menu-header">
                             <div class="user-menu-avatar">
                               ${this.user.picture
@@ -1030,7 +1146,6 @@ export class A2UIApp extends LitElement {
                                     <span class="theme-label">Dark mode</span>
                                   `}
                             </button>
-
                             <!-- Settings -->
                             <button
                               class="menu-item"
@@ -1088,7 +1203,19 @@ export class A2UIApp extends LitElement {
           .isLoading=${this.isLoading}
           .suggestions=${this.suggestions}
           .thinkingSteps=${this.thinkingSteps}
+          .loadingDetail=${aiConfig.loadingDetail}
+          .loadingStyle=${aiConfig.loadingStyle}
+          .modelLabel=${this.modelDisplayLabel}
+          .modelValue=${this.modelSelectorValue}
+          .modelGroups=${this.modelGroups}
+          .contentStyle=${aiConfig.contentStyle}
+          .webSearch=${aiConfig.webSearch}
           @send-message=${this.handleSendMessage}
+          @edit-message=${this.handleEditMessage}
+          @delete-message=${this.handleDeleteMessage}
+          @regenerate-message=${this.handleRegenerateMessage}
+          @model-change=${this.handleModelChange}
+          @setting-change=${this._handleSettingChange}
         ></a2ui-chat-container>
       </main>
 
@@ -1096,7 +1223,12 @@ export class A2UIApp extends LitElement {
 
       <a2ui-settings-panel
         .open=${this.showSettings}
-        @close=${() => { this.showSettings = false; }}
+        .modelGroups=${this.modelGroups}
+        .modelValue=${this.modelSelectorValue}
+        @close=${() => {
+          this.showSettings = false;
+        }}
+        @model-change=${this.handleModelChange}
       ></a2ui-settings-panel>
     `;
   }

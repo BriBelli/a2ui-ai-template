@@ -27,7 +27,7 @@ export class A2UIList extends LitElement {
       display: flex;
       align-items: flex-start;
       gap: var(--a2ui-space-3);
-      padding: var(--a2ui-space-3) 0;
+      padding: var(--a2ui-space-2) 0;
       border-bottom: 1px solid var(--a2ui-border-subtle);
     }
 
@@ -151,7 +151,7 @@ export class A2UIList extends LitElement {
             ${this.variant === 'checklist' ? this.renderCheckbox(item.status) : ''}
             <div class="item-content">
               <span class="item-text ${item.status === 'completed' ? 'completed' : ''}">
-                ${item.text}
+                ${md(item.text)}
               </span>
               ${item.subtitle ? html`
                 <div class="item-subtitle">${md(item.subtitle)}</div>

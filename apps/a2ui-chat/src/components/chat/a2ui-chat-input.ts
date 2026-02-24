@@ -16,14 +16,14 @@ export class A2UIChatInput extends LitElement {
       background: var(--a2ui-bg-input);
       border: 1px solid var(--a2ui-border-default);
       border-radius: var(--a2ui-radius-2xl);
-      transition: border-color var(--a2ui-transition-fast), box-shadow var(--a2ui-transition-fast);
+      transition: border-color var(--a2ui-transition-fast);
       position: relative;
     }
 
     .input-container:focus-within {
       background: var(--a2ui-bg-input-focus);
       border-color: var(--a2ui-accent);
-      box-shadow: 0 0 0 2px var(--a2ui-accent-subtle);
+      box-shadow: inset 0 0 0 1px var(--a2ui-accent-subtle);
     }
 
     .input-container.disabled {
@@ -43,6 +43,7 @@ export class A2UIChatInput extends LitElement {
       resize: none;
       max-height: 200px;
       padding: var(--a2ui-space-1) 0;
+      overflow-y: hidden;
     }
 
     textarea::placeholder {
@@ -128,9 +129,16 @@ export class A2UIChatInput extends LitElement {
   `;
 
   @property({ type: Boolean }) disabled = false;
+  @property({ type: Boolean }) autofocus = false;
   @state() private value = '';
 
   @query('textarea') private textarea!: HTMLTextAreaElement;
+
+  protected firstUpdated() {
+    if (this.autofocus) {
+      requestAnimationFrame(() => this.textarea?.focus());
+    }
+  }
 
   private handleInput(e: Event) {
     const target = e.target as HTMLTextAreaElement;
@@ -139,8 +147,10 @@ export class A2UIChatInput extends LitElement {
   }
 
   private autoResize(textarea: HTMLTextAreaElement) {
-    textarea.style.height = 'auto';
-    textarea.style.height = Math.min(textarea.scrollHeight, 200) + 'px';
+    textarea.style.height = '';
+    if (textarea.scrollHeight > textarea.clientHeight) {
+      textarea.style.height = Math.min(textarea.scrollHeight, 200) + 'px';
+    }
   }
 
   private handleKeyDown(e: KeyboardEvent) {
@@ -161,7 +171,7 @@ export class A2UIChatInput extends LitElement {
 
     this.value = '';
     if (this.textarea) {
-      this.textarea.style.height = 'auto';
+      this.textarea.style.height = '';
     }
   }
 

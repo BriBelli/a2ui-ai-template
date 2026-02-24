@@ -16,7 +16,8 @@ import logging
 import os
 import re
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional
+import time
+from typing import Any, AsyncGenerator, Dict, List, Optional
 
 import httpx
 import openai
@@ -31,6 +32,47 @@ from content_styles import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+# ── Security: Input Sanitization ──────────────────────────────
+
+_INJECTION_PATTERNS = [
+    re.compile(r"ignore\s+(all\s+)?(previous|above|prior)\s+(instructions?|prompts?|rules?)", re.I),
+    re.compile(r"disregard\s+(all\s+)?(previous|above|prior|system)\s+(instructions?|prompts?|rules?)", re.I),
+    re.compile(r"you\s+are\s+now\s+(a|an|my)\s+", re.I),
+    re.compile(r"(system|assistant)\s*:\s*", re.I),
+    re.compile(r"<<<\s*(SYSTEM|END_SYSTEM|SYSTEM_INSTRUCTIONS|END_SYSTEM_INSTRUCTIONS)\s*>>>", re.I),
+    re.compile(r"\[INST\]|\[/INST\]|<\|im_start\|>|<\|im_end\|>", re.I),
+    re.compile(r"repeat\s+(the\s+)?(system\s+)?(prompt|instructions?|rules?)\s+(back|above|verbatim|exactly)", re.I),
+    re.compile(r"(print|output|show|reveal|display)\s+(your|the|system)\s+(prompt|instructions?|rules?|context)", re.I),
+    re.compile(r"act\s+as\s+(if\s+)?(you\s+are|a|an)\s+", re.I),
+    re.compile(r"pretend\s+(you\s+are|to\s+be|you're)\s+", re.I),
+    re.compile(r"jailbreak|DAN\s+mode|developer\s+mode|do\s+anything\s+now", re.I),
+]
+
+
+def _detect_injection(text: str) -> List[str]:
+    """Return list of matched injection pattern names (empty = clean)."""
+    hits: List[str] = []
+    for pattern in _INJECTION_PATTERNS:
+        if pattern.search(text):
+            hits.append(pattern.pattern[:60])
+    return hits
+
+
+def _sanitize_for_prompt(text: str) -> str:
+    """Strip characters that could break prompt delimiters."""
+    text = re.sub(r"<<<\s*\w+\s*>>>", "", text)
+    return text
+
+
+def _sanitize_label(text: Any, max_len: int = 200) -> str:
+    """Sanitize a label/tag before embedding in a prompt context block."""
+    if not isinstance(text, str):
+        text = str(text) if text is not None else ""
+    text = re.sub(r"<<<\s*\w+\s*>>>", "", text)
+    text = re.sub(r"[\n\r\x00]", " ", text)
+    return text[:max_len].strip()
 
 
 # ── Utilities ──────────────────────────────────────────────────
@@ -62,7 +104,7 @@ def _build_messages(
 
     messages: List[Dict[str, str]] = [{"role": "system", "content": system_prompt}]
     messages.extend(trimmed)
-    messages.append({"role": "user", "content": message})
+    messages.append({"role": "user", "content": f"<<<USER_MESSAGE>>>\n{message}\n<<<END_USER_MESSAGE>>>"})
     return messages
 
 
@@ -354,8 +396,14 @@ class LLMProvider(ABC):
         model: str,
         history: Optional[List[Dict[str, str]]] = None,
         system_prompt: Optional[str] = None,
+        effort: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Generate a response for the given message with optional history."""
+        """Generate a response for the given message with optional history.
+
+        Args:
+            effort: Thinking effort level for models that support adaptive
+                    thinking ("low", "medium", "high", "max"). None = provider default.
+        """
 
 
 # ── Provider Implementations ──────────────────────────────────
@@ -384,7 +432,7 @@ class OpenAIProvider(LLMProvider):
         """Lazily create and reuse a single async client."""
         if self._client is None:
             self._client = openai.AsyncOpenAI(
-                api_key=self._api_key, timeout=60.0, max_retries=0,
+                api_key=self._api_key, timeout=120.0, max_retries=0,
             )
         return self._client
 
@@ -402,7 +450,7 @@ class OpenAIProvider(LLMProvider):
 
         total_chars = sum(len(m.get("content", "")) for m in messages)
         logger.info(
-            "  [OpenAI] %s  |  %d messages  |  %d chars (~%d tokens)  |  timeout=60s",
+            "  [OpenAI] %s  |  %d messages  |  %d chars (~%d tokens)  |  timeout=120s",
             model, len(messages), total_chars, total_chars // 4,
         )
 
@@ -474,6 +522,7 @@ class OpenAIProvider(LLMProvider):
         model: str = "gpt-4.1",
         history: Optional[List[Dict[str, str]]] = None,
         system_prompt: Optional[str] = None,
+        effort: Optional[str] = None,
     ) -> Dict[str, Any]:
         result = await self._call_llm(message, model, history, system_prompt)
 
@@ -490,8 +539,8 @@ class AnthropicProvider(LLMProvider):
     name = "Anthropic"
     models = [
         {"id": "claude-opus-4-6", "name": "Claude Opus 4.6"},
+        {"id": "claude-sonnet-4-6", "name": "Claude Sonnet 4.6"},
         {"id": "claude-sonnet-4-5-20250929", "name": "Claude Sonnet 4.5"},
-        {"id": "claude-sonnet-4-20250514", "name": "Claude Sonnet 4"},
         {"id": "claude-haiku-4-5-20251001", "name": "Claude Haiku 4.5 (Fast)"},
     ]
 
@@ -508,10 +557,15 @@ class AnthropicProvider(LLMProvider):
         if self._client is None:
             self._client = anthropic.AsyncAnthropic(
                 api_key=self._api_key,
-                timeout=60.0,
+                timeout=120.0,
                 max_retries=0,
             )
         return self._client
+
+    # Models that support adaptive thinking (type: "adaptive" + effort)
+    _ADAPTIVE_MODELS = frozenset({"claude-opus-4-6", "claude-sonnet-4-6"})
+    # Sonnet 4.6 also supports manual extended thinking; adaptive is preferred
+    _THINKING_MODELS = _ADAPTIVE_MODELS
 
     async def _call_llm(
         self,
@@ -519,6 +573,7 @@ class AnthropicProvider(LLMProvider):
         model: str,
         history: Optional[List[Dict[str, str]]] = None,
         system_prompt: Optional[str] = None,
+        effort: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Make a single Anthropic call and return parsed JSON or error dict."""
         if system_prompt is None:
@@ -534,13 +589,26 @@ class AnthropicProvider(LLMProvider):
             messages.append({"role": msg["role"], "content": msg["content"]})
         messages.append({"role": "user", "content": message})
 
+        # Build kwargs — add adaptive thinking for 4.6 models
+        kwargs: Dict[str, Any] = dict(
+            model=model,
+            max_tokens=16000 if model in self._THINKING_MODELS and effort else 4000,
+            system=system_prompt,
+            messages=messages,
+        )
+
+        if model in self._ADAPTIVE_MODELS and effort:
+            valid_efforts = ("low", "medium", "high", "max")
+            effort_val = effort if effort in valid_efforts else "high"
+            # "max" effort only supported on Opus 4.6
+            if effort_val == "max" and model != "claude-opus-4-6":
+                effort_val = "high"
+            kwargs["thinking"] = {"type": "adaptive"}
+            kwargs["output_config"] = {"effort": effort_val}
+            logger.info("  [Anthropic] %s  adaptive thinking  effort=%s", model, effort_val)
+
         try:
-            response = await self.client.messages.create(
-                model=model,
-                max_tokens=4000,
-                system=system_prompt,
-                messages=messages,
-            )
+            response = await self.client.messages.create(**kwargs)
         except anthropic.APITimeoutError:
             logger.error("Anthropic timeout (%s)", model)
             return _error_response(
@@ -555,7 +623,13 @@ class AnthropicProvider(LLMProvider):
                 "The AI service returned an error. Please try again in a moment.",
             )
 
-        content = response.content[0].text.strip()
+        # Extract text from response — skip thinking blocks
+        text_parts = []
+        for block in response.content:
+            if hasattr(block, "text") and block.type == "text":
+                text_parts.append(block.text)
+        content = " ".join(text_parts).strip()
+
         if not content:
             logger.warning("%s returned empty content", model)
             return _error_response(
@@ -571,13 +645,14 @@ class AnthropicProvider(LLMProvider):
         model: str = "claude-opus-4-6",
         history: Optional[List[Dict[str, str]]] = None,
         system_prompt: Optional[str] = None,
+        effort: Optional[str] = None,
     ) -> Dict[str, Any]:
-        result = await self._call_llm(message, model, history, system_prompt)
+        result = await self._call_llm(message, model, history, system_prompt, effort)
 
         # Refusal guard — retry with stronger nudge
         return await _retry_on_refusal(
             result, message,
-            lambda msg, hist: self._call_llm(msg, model, hist, system_prompt),
+            lambda msg, hist: self._call_llm(msg, model, hist, system_prompt, effort),
         )
 
 
@@ -592,6 +667,7 @@ class LiteLLMProvider(LLMProvider):
         {"id": "gpt-5", "name": "GPT-5"},
         {"id": "gpt-5-nano", "name": "GPT-5 Nano (Fast)"},
         {"id": "o4-mini", "name": "o4 Mini (Reasoning)"},
+        {"id": "claude-sonnet-4-6", "name": "Claude Sonnet 4.6"},
         {"id": "claude-sonnet-4-5-20250929", "name": "Claude Sonnet 4.5"},
         {"id": "gpt-4o", "name": "GPT-4o"},
     ]
@@ -616,9 +692,9 @@ class LiteLLMProvider(LLMProvider):
             self._client = openai.AsyncOpenAI(
                 api_key=self._api_key,
                 base_url=self.BASE_URL,
-                timeout=60.0,
+                timeout=120.0,
                 max_retries=0,
-                http_client=httpx.AsyncClient(verify=False, timeout=60.0),
+                http_client=httpx.AsyncClient(verify=False, timeout=120.0),
             )
         return self._client
 
@@ -754,6 +830,7 @@ class LiteLLMProvider(LLMProvider):
         model: str = "gpt-4o-mini",
         history: Optional[List[Dict[str, str]]] = None,
         system_prompt: Optional[str] = None,
+        effort: Optional[str] = None,
     ) -> Dict[str, Any]:
         messages = _build_messages(message, history, system_prompt=system_prompt)
         result = await self._call_llm(messages, model)
@@ -840,6 +917,7 @@ class GeminiProvider(LLMProvider):
         model: str = "gemini-3-flash-preview",
         history: Optional[List[Dict[str, str]]] = None,
         system_prompt: Optional[str] = None,
+        effort: Optional[str] = None,
     ) -> Dict[str, Any]:
         result = await self._call_llm(message, model, history, system_prompt)
 
@@ -882,26 +960,83 @@ def _wants_images(message: str) -> bool:
 
 # ── LLM Classifier ─────────────────────────────────────────────
 
-_CLASSIFIER_SYSTEM = (
-    "You are a content-style classifier for a UI system. "
-    "You analyze the user's intent, conversation context, and available data "
-    "to decide the best presentation style. Reply with exactly one word."
-)
+def _make_analyzer_system() -> str:
+    from datetime import date
+    today = date.today().strftime("%B %d, %Y")
+    return (
+        f"You are an intent analyzer for an AI UI system. Today is {today}.\n"
+        "Given a user query, decide:\n"
+        "1. The best content presentation style\n"
+        "2. Whether real-time web search is needed (current events, prices, weather, live data)\n"
+        "3. Whether the user's geographic location is relevant\n"
+        "4. If search is needed, an optimized search query (MUST include the current year for time-sensitive topics)\n"
+        "5. Whether any available data sources should be queried, and if so which endpoints/questions to use\n"
+        "6. Which specialized chart/component types the response will likely need\n"
+        "7. The task complexity level for model routing\n"
+        "Respond with ONLY a valid JSON object. No markdown, no explanation."
+    )
 
-_CLASSIFIER_PROMPT_TEMPLATE = (
-    "Based on the user's intent and the data context, classify into ONE style.\n\n"
-    "Available styles:\n{descriptions}\n\n"
+_ANALYZER_PROMPT_TEMPLATE = (
+    "Content styles:\n{descriptions}\n\n"
+    "Component hints (include when the query likely needs these specific visualizations):\n"
+    "  chart_matrix — heatmaps, 2D grids, correlation matrices, temperature/schedule grids\n"
+    "  chart_treemap — hierarchical data, market share breakdowns, proportional area displays\n"
+    "  chart_sankey — flow/allocation diagrams, budget flows, process pipelines, conversions\n"
+    "  chart_funnel — conversion funnels, sales pipelines, progressive filtering\n"
+    "  chart_radar — multi-axis comparisons, scoring/rating profiles, feature comparisons\n"
+    "  chart_scatter — correlation analysis, distribution plots, x-y relationship data\n\n"
+    "{data_sources_section}"
     "{context_section}"
     "User query: {query}\n\n"
-    "Reply with ONLY the style ID, nothing else."
+    'Reply with JSON: {{"style":"<style_id>","search":<true|false>,"location":<true|false>,'
+    '"search_query":"<optimized query or empty>",'
+    '"data_sources":[{{"source":"<source_id>","endpoint":"<path or question>","params":{{}}}}],'
+    '"components":["<component_key>"],'
+    '"complexity":"<standard|moderate|high|reasoning>"}}\n'
+    "components: array of component hint keys from the list above. Empty array if none are needed (standard bar/line/pie are always available).\n"
+    "complexity: how hard this task is for the generation model.\n"
+    '  "standard" — simple Q&A, basic text, simple charts (bar/line/pie)\n'
+    '  "moderate" — multi-dataset charts, comparisons, structured tables, radar/scatter\n'
+    '  "high" — complex visualizations (heatmap/matrix, treemap, sankey, funnel), precise JSON structures, multi-component layouts\n'
+    '  "reasoning" — multi-step math, statistical analysis, logic chains, calculations\n'
+    "If no data sources are relevant, return an empty array for data_sources."
 )
 
-_CLASSIFIER_MODELS: List[tuple] = [
+_ANALYZER_MODELS: List[tuple] = [
     ("openai", "gpt-4.1-mini"),
     ("litellm", "gpt-4o-mini"),
     ("anthropic", "claude-haiku-4-5-20251001"),
     ("gemini", "gemini-2.5-flash-preview-05-20"),
 ]
+
+# ── Tool Configuration (env-level overrides) ──────────────────
+#
+# Each tool can be globally locked via an environment variable.
+# True  = enabled (default for most tools)
+# False = globally disabled — user settings are ignored
+#
+# Resolution order: Env (locked) > User setting > Default
+
+def _env_bool(key: str, default: bool = True) -> Optional[bool]:
+    """Read an env var as a tri-state: True, False, or None (unset)."""
+    val = os.getenv(key)
+    if val is None:
+        return None
+    return val.lower() in ("1", "true", "yes", "on")
+
+TOOL_WEB_SEARCH_ENV: Optional[bool] = _env_bool("A2UI_TOOL_WEB_SEARCH")
+TOOL_GEOLOCATION_ENV: Optional[bool] = _env_bool("A2UI_TOOL_GEOLOCATION")
+TOOL_HISTORY_ENV: Optional[bool] = _env_bool("A2UI_TOOL_HISTORY")
+TOOL_AI_CLASSIFIER_ENV: Optional[bool] = _env_bool("A2UI_TOOL_AI_CLASSIFIER")
+TOOL_DATA_SOURCES_ENV: Optional[bool] = _env_bool("A2UI_TOOL_DATA_SOURCES")
+
+
+def resolve_tool(env_override: Optional[bool], user_setting: bool, default: bool = True) -> bool:
+    """Resolve a tool's effective state: env override > user setting > default."""
+    if env_override is not None:
+        return env_override
+    return user_setting
+
 
 # ── Performance Mode Constants ─────────────────────────────────
 
@@ -917,6 +1052,195 @@ PERFORMANCE_MODES = {
 }
 
 _AUTO_DEGRADE_THRESHOLD = 0.75
+
+# ── Adaptive Model Routing ─────────────────────────────────────
+#
+# Task-based model selection: the analyzer classifies complexity
+# and the pipeline routes to the BEST + FASTEST model available.
+# Speed is king — a slow model is a broken model. Cross-provider
+# routing via LiteLLM is preferred over slow same-provider models.
+#
+# Complexity tiers:
+#   "standard"  — no upgrade needed (text, simple charts)
+#   "moderate"  — structured data, multi-dataset charts
+#   "high"      — complex viz (matrix, sankey, treemap), deep analysis
+#   "reasoning" — multi-step math, logic chains, statistical analysis
+
+# Speed scores: lower = faster = better
+_SPEED_SCORE = {"fast": 0, "medium": 1, "slow": 2}
+
+_MODEL_ROSTER: List[Dict[str, Any]] = [
+    # Anthropic — best structured JSON precision, fast response times
+    {"provider": "anthropic", "model": "claude-sonnet-4-6",   "tier": 4, "tags": {"structured", "reasoning", "creative"}, "speed": "medium"},
+    {"provider": "anthropic", "model": "claude-opus-4-6",              "tier": 4, "tags": {"structured", "reasoning", "creative"}, "speed": "medium"},
+    {"provider": "anthropic", "model": "claude-sonnet-4-5-20250929",   "tier": 3, "tags": {"structured", "creative"},              "speed": "medium"},
+    {"provider": "anthropic", "model": "claude-haiku-4-5-20251001",    "tier": 1, "tags": set(),                                   "speed": "fast"},
+    # OpenAI
+    {"provider": "openai",   "model": "gpt-4.1",                      "tier": 2, "tags": set(),                                    "speed": "fast"},
+    {"provider": "openai",   "model": "gpt-5-mini",                   "tier": 2, "tags": {"structured"},                           "speed": "medium"},
+    {"provider": "openai",   "model": "gpt-4.1-mini",                 "tier": 1, "tags": set(),                                    "speed": "fast"},
+    {"provider": "openai",   "model": "gpt-5",                        "tier": 3, "tags": {"structured", "reasoning"},              "speed": "slow"},
+    # LiteLLM gateway — cross-provider access (primary upgrade path)
+    {"provider": "litellm",  "model": "claude-sonnet-4-6",   "tier": 4, "tags": {"structured", "reasoning", "creative"}, "speed": "medium"},
+    {"provider": "litellm",  "model": "claude-sonnet-4-5-20250929",   "tier": 3, "tags": {"structured", "creative"},              "speed": "medium"},
+    {"provider": "litellm",  "model": "o4-mini",                      "tier": 3, "tags": {"reasoning"},                            "speed": "medium"},
+    {"provider": "litellm",  "model": "gpt-4.1",                      "tier": 2, "tags": set(),                                    "speed": "fast"},
+    {"provider": "litellm",  "model": "gpt-4o",                       "tier": 2, "tags": set(),                                    "speed": "medium"},
+    {"provider": "litellm",  "model": "gpt-4.1-mini",                 "tier": 1, "tags": set(),                                    "speed": "fast"},
+    {"provider": "litellm",  "model": "gpt-4o-mini",                  "tier": 1, "tags": set(),                                    "speed": "fast"},
+    {"provider": "litellm",  "model": "gpt-5-nano",                   "tier": 1, "tags": set(),                                    "speed": "fast"},
+    {"provider": "litellm",  "model": "gpt-5",                        "tier": 3, "tags": {"structured", "reasoning"},              "speed": "slow"},
+    # Gemini — strong multimodal + structured data, large context
+    {"provider": "gemini",   "model": "gemini-3-pro-preview",         "tier": 3, "tags": {"structured", "reasoning"},              "speed": "medium"},
+    {"provider": "gemini",   "model": "gemini-2.5-flash-preview-05-20", "tier": 1, "tags": set(),                                  "speed": "fast"},
+]
+
+# Build fast lookups
+_ROSTER_BY_PROVIDER: Dict[str, List[Dict[str, Any]]] = {}
+for _entry in _MODEL_ROSTER:
+    _ROSTER_BY_PROVIDER.setdefault(_entry["provider"], []).append(_entry)
+
+def _get_model_entry(provider_id: str, model_id: str) -> Optional[Dict[str, Any]]:
+    """Return the roster entry for a model, or None."""
+    for entry in _ROSTER_BY_PROVIDER.get(provider_id, []):
+        if entry["model"] == model_id:
+            return entry
+    return None
+
+def _get_model_tier(provider_id: str, model_id: str) -> int:
+    """Return the tier (1-4) of a model, or 1 if unknown."""
+    entry = _get_model_entry(provider_id, model_id)
+    return entry["tier"] if entry else 1
+
+# Complexity → minimum tier required, plus any tag requirements
+_COMPLEXITY_REQUIREMENTS: Dict[str, Dict[str, Any]] = {
+    "standard":  {"min_tier": 1, "tags": set()},
+    "moderate":  {"min_tier": 2, "tags": set()},
+    "high":      {"min_tier": 3, "tags": {"structured"}},
+    "reasoning": {"min_tier": 3, "tags": {"reasoning"}},
+}
+
+_COMPLEX_COMPONENTS = frozenset({
+    "chart_matrix", "chart_treemap", "chart_sankey",
+    "chart_funnel",
+})
+
+_MODERATE_COMPONENTS = frozenset({
+    "chart_scatter", "chart_radar",
+})
+
+
+def _derive_complexity(
+    analyzer_complexity: str,
+    component_hints: List[str],
+) -> str:
+    """Derive effective complexity from analyzer output + component hints."""
+    hint_set = set(component_hints)
+
+    if hint_set & _COMPLEX_COMPONENTS:
+        return "high"
+    if hint_set & _MODERATE_COMPONENTS and analyzer_complexity in ("standard",):
+        return "moderate"
+
+    return analyzer_complexity if analyzer_complexity in _COMPLEXITY_REQUIREMENTS else "standard"
+
+
+def _find_best_model(
+    current_provider_id: str,
+    current_model: str,
+    complexity: str,
+    providers: Dict[str, "LLMProvider"],
+) -> Optional[tuple]:
+    """Find the best available model for the given complexity.
+
+    Collects ALL candidates across ALL available providers, then picks
+    the fastest one that meets the tier+tag requirement. Speed is the
+    primary sort key — a slow same-provider model loses to a fast
+    cross-provider model every time.
+
+    Returns (provider_id, model_id) or None if current model is sufficient.
+    """
+    req = _COMPLEXITY_REQUIREMENTS.get(complexity)
+    if not req:
+        return None
+
+    min_tier = req["min_tier"]
+    required_tags = req["tags"]
+
+    current_entry = _get_model_entry(current_provider_id, current_model)
+    if current_entry:
+        if (current_entry["tier"] >= min_tier
+                and required_tags.issubset(current_entry["tags"])):
+            return None  # Already sufficient
+
+    # Collect candidates from ALL available providers
+    candidates: List[Dict[str, Any]] = []
+    for pid, prov in providers.items():
+        if not prov.is_available():
+            continue
+        for entry in _ROSTER_BY_PROVIDER.get(pid, []):
+            if (entry["tier"] >= min_tier
+                    and required_tags.issubset(entry["tags"])
+                    and not (entry["provider"] == current_provider_id
+                             and entry["model"] == current_model)):
+                candidates.append(entry)
+
+    if not candidates:
+        return None
+
+    # Sort: fastest first, then lowest sufficient tier, then prefer same provider
+    candidates.sort(key=lambda e: (
+        _SPEED_SCORE.get(e["speed"], 2),     # speed first (fast=0, medium=1, slow=2)
+        e["tier"],                            # lowest tier that still qualifies
+        0 if e["provider"] == current_provider_id else 1,  # same-provider tiebreaker
+    ))
+
+    best = candidates[0]
+    return (best["provider"], best["model"])
+
+
+def _find_faster_model(
+    current_provider_id: str,
+    current_model: str,
+    providers: Dict[str, "LLMProvider"],
+) -> Optional[tuple]:
+    """For standard-complexity tasks, find a faster model if the current one is slow.
+
+    Only downgrades if the current model is medium or slow speed.
+    Returns (provider_id, model_id) or None if already fast.
+    """
+    current_entry = _get_model_entry(current_provider_id, current_model)
+    if not current_entry:
+        return None
+
+    current_speed = _SPEED_SCORE.get(current_entry["speed"], 0)
+    if current_speed == 0:
+        return None  # Already fast
+
+    # Find the fastest tier-1+ model available (standard tasks need tier 1 minimum)
+    candidates: List[Dict[str, Any]] = []
+    for pid, prov in providers.items():
+        if not prov.is_available():
+            continue
+        for entry in _ROSTER_BY_PROVIDER.get(pid, []):
+            entry_speed = _SPEED_SCORE.get(entry["speed"], 2)
+            if entry_speed < current_speed and entry["tier"] >= 1:
+                candidates.append(entry)
+
+    if not candidates:
+        return None
+
+    # Fastest first, then highest tier (prefer capable fast models), then same provider
+    candidates.sort(key=lambda e: (
+        _SPEED_SCORE.get(e["speed"], 2),
+        -e["tier"],
+        0 if e["provider"] == current_provider_id else 1,
+    ))
+
+    best = candidates[0]
+    if best["provider"] == current_provider_id and best["model"] == current_model:
+        return None
+    return (best["provider"], best["model"])
 
 
 # ── Service Layer ──────────────────────────────────────────────
@@ -948,64 +1272,113 @@ class LLMService:
             return provider
         return None
 
-    async def _classify_intent(
+    @staticmethod
+    def get_tool_states() -> List[Dict[str, Any]]:
+        """Return the current state of all configurable tools.
+
+        Each tool reports:
+        - id: machine identifier
+        - name: human-readable label
+        - description: what the tool does
+        - default: default enabled state
+        - env_override: value from environment (None if unset)
+        - locked: True if the env variable forces a specific state
+        """
+        from tools import web_search as _ws
+        from data_sources import get_all_sources as _get_ds
+
+        ds_available = any(s.is_available() for s in _get_ds())
+        tools = [
+            {
+                "id": "web_search",
+                "name": "Web Search",
+                "description": "Search the web for current information",
+                "default": True,
+                "env_override": TOOL_WEB_SEARCH_ENV,
+                "locked": TOOL_WEB_SEARCH_ENV is not None,
+                "available": _ws.is_available(),
+            },
+            {
+                "id": "geolocation",
+                "name": "Geolocation",
+                "description": "Use device location for local context",
+                "default": True,
+                "env_override": TOOL_GEOLOCATION_ENV,
+                "locked": TOOL_GEOLOCATION_ENV is not None,
+            },
+            {
+                "id": "history",
+                "name": "Conversation History",
+                "description": "Include previous messages for context",
+                "default": True,
+                "env_override": TOOL_HISTORY_ENV,
+                "locked": TOOL_HISTORY_ENV is not None,
+            },
+            {
+                "id": "ai_classifier",
+                "name": "AI Style Classifier",
+                "description": "Use AI to auto-detect the best content style",
+                "default": True,
+                "env_override": TOOL_AI_CLASSIFIER_ENV,
+                "locked": TOOL_AI_CLASSIFIER_ENV is not None,
+            },
+            {
+                "id": "data_sources",
+                "name": "Data Sources",
+                "description": "Query configured external APIs and databases",
+                "default": True,
+                "env_override": TOOL_DATA_SOURCES_ENV,
+                "locked": TOOL_DATA_SOURCES_ENV is not None,
+                "available": ds_available,
+            },
+        ]
+        return tools
+
+    async def _analyze_intent(
         self,
         message: str,
         history: Optional[List[Dict[str, str]]] = None,
-        search_data: Optional[Dict[str, Any]] = None,
-    ) -> Optional[str]:
-        """Classify user intent using a lightweight LLM call with full context.
+    ) -> Optional[Dict[str, Any]]:
+        """Analyze user intent with a fast LLM to decide tools and style.
 
-        The classifier sees:
-        - The user's current query
-        - Recent conversation history (summarised)
-        - A summary of the search response data shape (field types,
-          result count, whether images/numbers/tables are present)
+        This is the FIRST step in the pipeline — it decides everything:
+        - Content style
+        - Whether web search is needed
+        - Whether geolocation is relevant
+        - Optimized search query (if search needed)
 
-        Returns a valid style ID or ``None`` on failure.
+        Returns a dict like:
+            {"style": "content", "search": True, "location": False, "search_query": "..."}
+        or ``None`` on failure (caller falls back to regex).
         """
-        # Build context section from history + search data
+        from data_sources import get_analyzer_context
+
         context_parts: List[str] = []
 
         if history:
-            recent = history[-4:]  # last 2 exchanges max
+            recent = history[-4:]
             history_summary = " | ".join(
                 f"{m['role']}: {m['content'][:80]}" for m in recent
             )
-            context_parts.append(f"Conversation history: {history_summary}")
-
-        if search_data and search_data.get("success"):
-            results = search_data.get("results", [])
-            result_count = len(results)
-            has_answer = bool(search_data.get("answer"))
-            image_count = len(search_data.get("images", []))
-
-            data_summary = (
-                f"Search returned {result_count} results"
-                f"{', with a direct answer' if has_answer else ''}"
-                f"{f', {image_count} images' if image_count else ''}"
-            )
-
-            # Summarise the data shape — types of content in the results
-            if results:
-                snippets = [r.get("content", "")[:100] for r in results[:3]]
-                data_summary += f". Sample snippets: {' // '.join(snippets)}"
-
-            context_parts.append(f"Data context: {data_summary}")
+            context_parts.append(f"Conversation context: {history_summary}")
 
         context_section = ""
         if context_parts:
             context_section = "\n".join(context_parts) + "\n\n"
 
-        prompt = _CLASSIFIER_PROMPT_TEMPLATE.format(
+        ds_context = get_analyzer_context()
+        data_sources_section = f"{ds_context}\n\n" if ds_context else ""
+
+        prompt = _ANALYZER_PROMPT_TEMPLATE.format(
             descriptions=STYLE_DESCRIPTIONS,
+            data_sources_section=data_sources_section,
             context_section=context_section,
             query=message[:500],
         )
 
-        logger.info("── Classifier prompt ──\n%s", prompt)
+        logger.info("── ANALYZE ──  prompt:\n%s", prompt)
 
-        for provider_id, model_id in _CLASSIFIER_MODELS:
+        for provider_id, model_id in _ANALYZER_MODELS:
             provider = self.providers.get(provider_id)
             if not provider or not provider.is_available():
                 continue
@@ -1015,60 +1388,96 @@ class LLMService:
                     resp = await provider.client.chat.completions.create(
                         model=model_id,
                         messages=[
-                            {"role": "system", "content": _CLASSIFIER_SYSTEM},
+                            {"role": "system", "content": _make_analyzer_system()},
                             {"role": "user", "content": prompt},
                         ],
-                        max_tokens=10,
+                        max_tokens=300,
                         temperature=0,
                     )
-                    text = (resp.choices[0].message.content or "").strip().lower()
+                    text = (resp.choices[0].message.content or "").strip()
 
                 elif provider_id == "anthropic":
                     resp = await provider.client.messages.create(
                         model=model_id,
-                        max_tokens=10,
-                        system=_CLASSIFIER_SYSTEM,
+                        max_tokens=300,
+                        system=_make_analyzer_system(),
                         messages=[{"role": "user", "content": prompt}],
                     )
-                    text = resp.content[0].text.strip().lower()
+                    text = resp.content[0].text.strip()
 
                 elif provider_id == "gemini":
                     import google.generativeai as genai
                     genai.configure(api_key=provider._api_key)
                     gen_model = genai.GenerativeModel(
                         model_name=model_id,
-                        system_instruction=_CLASSIFIER_SYSTEM,
+                        system_instruction=_make_analyzer_system(),
                     )
                     resp = gen_model.generate_content(prompt)
-                    text = resp.text.strip().lower()
+                    text = resp.text.strip()
                 else:
                     continue
 
-                # Strip surrounding quotes or punctuation the LLM may add
-                text = text.strip('"\'.,!; ')
+                # Strip markdown fences if the LLM wraps JSON in ```
+                if text.startswith("```"):
+                    text = re.sub(r"^```(?:json)?\s*", "", text)
+                    text = re.sub(r"\s*```$", "", text)
 
-                if text in VALID_STYLE_IDS:
-                    logger.info(
-                        "LLM classified → '%s' via %s/%s for: %.50s",
-                        text, provider_id, model_id, message,
+                result = json.loads(text)
+
+                style = result.get("style", "").lower().strip()
+                if style not in VALID_STYLE_IDS:
+                    logger.warning(
+                        "Analyzer returned invalid style '%s' via %s/%s",
+                        style, provider_id, model_id,
                     )
-                    return text
+                    continue
 
-                logger.debug(
-                    "LLM classifier returned unexpected '%s' via %s/%s",
-                    text, provider_id, model_id,
+                ds_queries = result.get("data_sources") or []
+                if not isinstance(ds_queries, list):
+                    ds_queries = []
+
+                components = result.get("components") or []
+                if not isinstance(components, list):
+                    components = []
+                components = [str(c) for c in components if isinstance(c, str)]
+
+                raw_complexity = str(result.get("complexity", "standard")).lower().strip()
+
+                analysis = {
+                    "style": style,
+                    "search": bool(result.get("search", False)),
+                    "location": bool(result.get("location", False)),
+                    "search_query": str(result.get("search_query", "")),
+                    "data_sources": ds_queries,
+                    "components": components,
+                    "complexity": raw_complexity,
+                }
+
+                logger.info(
+                    "── ANALYZE OK ──  %s via %s/%s  |  style=%s  complexity=%s  search=%s  location=%s  query='%s'  data_sources=%d  components=%s",
+                    message[:50], provider_id, model_id,
+                    analysis["style"], raw_complexity, analysis["search"],
+                    analysis["location"], analysis["search_query"][:60],
+                    len(ds_queries), components,
                 )
+                return analysis
 
+            except (json.JSONDecodeError, KeyError, TypeError) as exc:
+                logger.warning(
+                    "Analyzer JSON parse failed (%s/%s): %s — raw: %.100s",
+                    provider_id, model_id, exc, locals().get("text", "?"),
+                )
+                continue
             except Exception as exc:
                 logger.warning(
-                    "LLM classifier failed (%s/%s): %s",
+                    "Analyzer failed (%s/%s): %s",
                     provider_id, model_id, exc,
                 )
                 continue
 
         return None
 
-    async def generate(
+    async def generate_stream(
         self,
         message: str,
         provider_id: str,
@@ -1077,61 +1486,272 @@ class LLMService:
         user_location: Optional[Dict[str, Any]] = None,
         content_style: str = "auto",
         performance_mode: str = "auto",
-    ) -> Dict[str, Any]:
-        """Generate a response using the specified provider and model.
+        smart_routing: bool = True,
+        enable_web_search: bool = True,
+        enable_geolocation: bool = True,
+        enable_data_sources: bool = True,
+        data_context: Optional[List[Dict[str, Any]]] = None,
+    ) -> AsyncGenerator[Dict[str, Any], None]:
+        """Async generator that yields SSE events during response generation.
 
-        Pipeline order:
-        1. Web search (get real data first)
-        2. AI classification (uses query + history + search data shape)
-        3. LLM generation (with style-specific system prompt)
-        4. Post-processing (hierarchy, metadata, images)
+        Events emitted:
+        - step  (id, status:start|done, label, detail?)  — pipeline progress
+        - complete  (full response dict)                  — final result
+        - error  (message)                                — failure
+
+        Pipeline order (AI-first):
+        0. Resolve tool states (env override > user setting)
+        1. AI intent analysis (decides style + which tools to activate)
+        2. Location context (only if AI said yes AND tool enabled)
+        3. Web search (only if AI said yes AND tool enabled)
+        4. LLM generation (with style-specific system prompt)
+        5. Post-processing (hierarchy, metadata, images)
+
+        When AI analyzer is unavailable, regex fallbacks decide tools.
         """
-        from tools import web_search, should_search, rewrite_search_query, llm_rewrite_query
+        from tools import web_search, should_search, rewrite_search_query
 
         provider = self.get_provider(provider_id)
         if not provider:
-            raise ValueError(f"Provider '{provider_id}' is not available")
+            yield {"event": "error", "data": {"message": f"Provider '{provider_id}' is not available"}}
+            return
+
+        # ── Step 0: Resolve tool states (env > user) ──────────
+        web_search_allowed = resolve_tool(TOOL_WEB_SEARCH_ENV, enable_web_search)
+        geolocation_allowed = resolve_tool(TOOL_GEOLOCATION_ENV, enable_geolocation)
+        history_active = resolve_tool(TOOL_HISTORY_ENV, history is not None and len(history) > 0)
+        classifier_active = resolve_tool(TOOL_AI_CLASSIFIER_ENV, True)
+        data_sources_allowed = resolve_tool(TOOL_DATA_SOURCES_ENV, enable_data_sources)
+
+        effective_history = history if history_active else None
+
+        # ── Security: sanitize input ──────────────────────────
+        injection_hits = _detect_injection(message)
+        if injection_hits:
+            logger.warning(
+                "⚠ INJECTION DETECTED ⚠  patterns=%s  message=%.200s",
+                injection_hits, message,
+            )
+        message = _sanitize_for_prompt(message)
+
+        if effective_history:
+            for msg in effective_history:
+                msg["content"] = _sanitize_for_prompt(msg["content"])
 
         logger.info(
             "══ GENERATE START ══  provider=%s  model=%s  style=%s  perf=%s",
             provider_id, model, content_style, performance_mode,
         )
         logger.info("User message: %s", message[:200])
-        if history:
-            logger.info("History: %d messages", len(history))
+        logger.info(
+            "Tool gates: web_search=%s  geolocation=%s  history=%s  ai_analyzer=%s  data_sources=%s",
+            web_search_allowed, geolocation_allowed, history_active, classifier_active, data_sources_allowed,
+        )
+        if effective_history:
+            logger.info("History: %d messages", len(effective_history))
 
         perf = PERFORMANCE_MODES.get(performance_mode, PERFORMANCE_MODES["auto"])
         max_body_bytes: Optional[int] = WAF_MAX_BODY_BYTES
 
-        # ── Step 1: Location context ─────────────────────────
+        yield {"event": "step", "data": {
+            "id": "tools", "status": "done",
+            "label": "Tools configured",
+            "detail": f"search={web_search_allowed} geo={geolocation_allowed} history={history_active} ai={classifier_active} data={data_sources_allowed}",
+        }}
+
+        # ── Step 1: AI Intent Analysis (FIRST) ────────────────
+        #
+        # The AI analyzer decides EVERYTHING in one fast call:
+        #   - Content style
+        #   - Whether web search is needed
+        #   - Whether geolocation is relevant
+        #   - Optimized search query
+        #
+        # Tool gates (env/user) are applied AFTER AI decides.
+        # If user disabled search, AI's "search=true" is overridden.
+        #
+        # Regex fallback only fires if AI is unavailable or fails.
+
+        ai_wants_search = False
+        ai_wants_location = False
+        ai_search_query = ""
+        ai_data_queries: List[Dict[str, Any]] = []
+        ai_component_hints: List[str] = []
+        ai_complexity: str = "standard"
+        style_id = DEFAULT_STYLE
+
+        yield {"event": "step", "data": {"id": "analyzer", "status": "start", "label": "Analyzing intent"}}
+
+        if content_style != "auto":
+            style_id = content_style
+            logger.info("── ANALYZE ──  explicit style from user: '%s'", style_id)
+            if classifier_active:
+                analysis = await self._analyze_intent(message, history=effective_history)
+                if analysis:
+                    ai_wants_search = analysis["search"]
+                    ai_wants_location = analysis["location"]
+                    ai_search_query = analysis["search_query"]
+                    ai_data_queries = analysis.get("data_sources") or []
+                    ai_component_hints = analysis.get("components") or []
+                    ai_complexity = analysis.get("complexity", "standard")
+                    logger.info(
+                        "── ANALYZE ──  tools: search=%s  location=%s  query='%s'  data_sources=%d  components=%s  complexity=%s",
+                        ai_wants_search, ai_wants_location, ai_search_query[:60], len(ai_data_queries), ai_component_hints, ai_complexity,
+                    )
+                else:
+                    logger.warning("── ANALYZE ──  AI failed, falling back to regex for tool decisions")
+                    ai_wants_search = should_search(message)
+                    ai_wants_location = self._regex_needs_location(message)
+            else:
+                logger.info("── ANALYZE ──  AI disabled, using regex fallback for tools")
+                ai_wants_search = should_search(message)
+                ai_wants_location = self._regex_needs_location(message)
+
+        elif classifier_active:
+            analysis = await self._analyze_intent(message, history=effective_history)
+            if analysis:
+                style_id = analysis["style"]
+                ai_wants_search = analysis["search"]
+                ai_wants_location = analysis["location"]
+                ai_search_query = analysis["search_query"]
+                ai_data_queries = analysis.get("data_sources") or []
+                ai_component_hints = analysis.get("components") or []
+                ai_complexity = analysis.get("complexity", "standard")
+                logger.info(
+                    "── ANALYZE OK ──  style=%s  complexity=%s  search=%s  location=%s  query='%s'  data_sources=%d  components=%s",
+                    style_id, ai_complexity, ai_wants_search, ai_wants_location, ai_search_query[:60], len(ai_data_queries), ai_component_hints,
+                )
+            else:
+                style_id = DEFAULT_STYLE
+                ai_wants_search = should_search(message)
+                ai_wants_location = self._regex_needs_location(message)
+                logger.warning(
+                    "── ANALYZE ──  AI failed → regex fallback: style=%s  search=%s  location=%s",
+                    style_id, ai_wants_search, ai_wants_location,
+                )
+        else:
+            from content_styles import classify_style
+            style_id = classify_style(message)
+            ai_wants_search = should_search(message)
+            ai_wants_location = self._regex_needs_location(message)
+            logger.info(
+                "── ANALYZE ──  AI disabled → regex: style=%s  search=%s  location=%s",
+                style_id, ai_wants_search, ai_wants_location,
+            )
+
+        # Apply tool gates: AI decision AND user/env permission
+        do_search = ai_wants_search and web_search_allowed
+        do_location = ai_wants_location and geolocation_allowed
+
+        logger.info(
+            "── TOOLS ──  search: ai=%s gate=%s → %s  |  location: ai=%s gate=%s → %s",
+            ai_wants_search, web_search_allowed, do_search,
+            ai_wants_location, geolocation_allowed, do_location,
+        )
+
+        # ── Budget / performance style overrides ───────────────
+        # Only touch style when the user left it on "auto".
+        # Explicit user-chosen styles are NEVER overridden.
+        if content_style == "auto" and style_id != "quick":
+            if performance_mode == "optimized":
+                # Optimized → always quick for minimal tokens/cost
+                logger.info("Optimized mode → downgrading %s → quick", style_id)
+                style_id = "quick"
+
+            elif performance_mode == "auto" and max_body_bytes is not None:
+                # Auto + WAF budget → downgrade at 75% threshold
+                style_bytes = len(get_system_prompt(style_id).encode("utf-8"))
+                if style_bytes > max_body_bytes * 0.75:
+                    for fallback in ("content", "quick"):
+                        fb_bytes = len(get_system_prompt(fallback).encode("utf-8"))
+                        if fb_bytes <= max_body_bytes * 0.75:
+                            logger.info(
+                                "Budget-aware downgrade: %s(%dB) → %s(%dB), budget=%d @75%%",
+                                style_id, style_bytes, fallback, fb_bytes, max_body_bytes,
+                            )
+                            style_id = fallback
+                            break
+
+        # Build reasoning prose for chain-of-thought display
+        _style_names = {
+            "analytical": "Analytical (data dashboards)",
+            "content": "Content (narrative)",
+            "comparison": "Comparison (side-by-side)",
+            "howto": "How-To (step-by-step)",
+            "quick": "Quick Answer (concise)",
+        }
+        _reasoning_parts = [
+            f"Presentation: {_style_names.get(style_id, style_id)}",
+        ]
+        if ai_complexity != "standard":
+            _reasoning_parts.append(f"Complexity: {ai_complexity}")
+        if ai_component_hints:
+            _reasoning_parts.append(f"Components: {', '.join(ai_component_hints)}")
+        if do_search:
+            _reasoning_parts.append(f"Web search needed — query: \"{ai_search_query[:80]}\"")
+        else:
+            _reasoning_parts.append("No web search required")
+        if do_location:
+            _reasoning_parts.append("Location context will be included")
+        if ai_data_queries:
+            _ds_names = [q.get("source", "?") for q in ai_data_queries]
+            _reasoning_parts.append(f"Data sources: {', '.join(_ds_names)}")
+
+        yield {"event": "step", "data": {
+            "id": "analyzer", "status": "done",
+            "label": "Intent analyzed",
+            "detail": f"style={style_id} search={do_search} location={do_location}",
+            "reasoning": " · ".join(_reasoning_parts),
+            "result": {
+                "style": style_id,
+                "search": do_search,
+                "location": do_location,
+                "query": ai_search_query,
+            },
+        }}
+
+        # ── Step 2: Location context ──────────────────────────
         location_context = ""
         location_label = ""
-        if user_location:
-            location_label = user_location.get("label", "")
+        if do_location and user_location:
+            location_label = _sanitize_label(user_location.get("label", ""), max_len=100)
             lat = user_location.get("lat")
             lng = user_location.get("lng")
             if location_label:
                 location_context = f"[User Location: {location_label} ({lat}, {lng})]\n"
             elif lat and lng:
                 location_context = f"[User Location: {lat}, {lng}]\n"
-            logger.info("Location: %s", location_label or f"{lat},{lng}")
+            logger.info("── LOCATION ──  %s", location_label or f"{lat},{lng}")
+        elif ai_wants_location and not geolocation_allowed:
+            logger.info("── LOCATION ──  AI requested but tool disabled")
+        elif ai_wants_location and not user_location:
+            logger.info("── LOCATION ──  AI requested but no location data provided")
 
-        # ── Step 2: Web search (data first) ───────────────────
+        # ── Step 3: Web search ────────────────────────────────
         augmented_message = message
         search_metadata: Optional[Dict[str, Any]] = None
         search_results_raw: Optional[Dict[str, Any]] = None
         search_images: List[str] = []
 
-        if should_search(message):
-            search_query = await llm_rewrite_query(
-                message, location=location_label, history=history,
+        if do_search:
+            search_query = ai_search_query or rewrite_search_query(
+                message, location=location_label,
             )
-            if not search_query:
-                search_query = rewrite_search_query(message, location=location_label)
+            # Ensure location is in the search query even when AI analyzer
+            # provided one (the analyzer doesn't know the user's location).
+            if ai_search_query and location_label and location_label.lower() not in search_query.lower():
+                search_query = f"{search_query} {location_label}"
+            yield {"event": "step", "data": {
+                "id": "search", "status": "start",
+                "label": "Searching the web",
+                "detail": search_query[:80],
+            }}
 
             if web_search.is_available():
-                logger.info("── SEARCH ──  query: \"%s\"  (original: \"%s\")", search_query[:100], message[:60])
-
+                logger.info(
+                    "── SEARCH ──  query: \"%s\"  (original: \"%s\")",
+                    search_query[:100], message[:60],
+                )
                 try:
                     search_results_raw = await web_search.search(search_query)
                     context = web_search.format_for_context(search_results_raw)
@@ -1140,7 +1760,7 @@ class LLMService:
                         augmented_message = f"{context}\n\nUser question: {message}"
                         search_images = search_results_raw.get("images", [])[:6]
                         logger.info(
-                            "── SEARCH RESULTS ──  %d results, %d images, answer=%s",
+                            "── SEARCH OK ──  %d results, %d images, answer=%s",
                             len(search_results_raw.get("results", [])),
                             len(search_images),
                             bool(search_results_raw.get("answer")),
@@ -1157,6 +1777,11 @@ class LLMService:
                             "images_count": len(search_images),
                             "query": search_query,
                         }
+                        yield {"event": "step", "data": {
+                            "id": "search", "status": "done",
+                            "label": "Search complete",
+                            "detail": f"{search_metadata['results_count']} results",
+                        }}
                     else:
                         error_type = search_results_raw.get("error", "unknown")
                         logger.warning("── SEARCH FAILED ── (%s)", error_type)
@@ -1166,6 +1791,7 @@ class LLMService:
                             "error": error_type,
                             "query": search_query,
                         }
+                        yield {"event": "step", "data": {"id": "search", "status": "done", "label": "Search returned no results"}}
                 except Exception as exc:
                     logger.warning("── SEARCH ERROR ── %s", exc)
                     search_metadata = {
@@ -1174,50 +1800,119 @@ class LLMService:
                         "error": "exception",
                         "query": search_query,
                     }
+                    yield {"event": "step", "data": {"id": "search", "status": "done", "label": "Search failed"}}
             else:
-                logger.info("── SEARCH ──  not configured, using AI knowledge only")
+                logger.info("── SEARCH ──  not configured (no API key)")
                 search_metadata = {"searched": False, "reason": "not_configured"}
+                yield {"event": "step", "data": {"id": "search", "status": "done", "label": "Search unavailable"}}
+        elif ai_wants_search and not web_search_allowed:
+            logger.info("── SEARCH ──  AI requested but tool disabled by user/env")
         else:
-            logger.info("── SEARCH ──  skipped (no search triggers in message)")
+            logger.info("── SEARCH ──  not needed (AI decided)")
 
-        # ── Step 3: AI content style classification ───────────
-        #
-        # The AI classifier receives the full context: user query,
-        # conversation history, and the search data shape/content.
-        # This lets it reason about WHAT the data looks like, not
-        # just keyword-match the query.
-        #
-        # Regex classification is DISABLED — kept as dead code for
-        # future fallback scenarios (PII/PHI, LLM unavailable, etc.)
+        # ── Step 3.5: Data source queries ─────────────────────
+        from data_sources import (
+            query_sources,
+            format_results_for_context,
+            get_rules_context,
+        )
 
-        if content_style == "auto":
-            style_id = await self._classify_intent(
-                message,
-                history=history,
-                search_data=search_results_raw,
+        ds_context = ""
+        ds_metadata: Optional[Dict[str, Any]] = None
+        ds_active_results: List[Dict[str, Any]] = []
+
+        # Passive injection: data_context provided in request body
+        if data_context:
+            passive_blocks: List[str] = []
+            for dc in data_context:
+                label = _sanitize_label(dc.get("label") or dc.get("source") or "External Data")
+                import json as _json
+                serialized = _json.dumps(dc.get("data", {}), default=str, ensure_ascii=False)
+                if len(serialized) > 12_000:
+                    serialized = serialized[:12_000] + "\n... (truncated)"
+                passive_blocks.append(f"[Data Source: {label}]\n{serialized}")
+            ds_context = "\n".join(passive_blocks)
+            ds_metadata = {"passive": True, "sources": len(data_context)}
+            logger.info(
+                "── DATA SOURCES ──  passive injection: %d sources, %d chars",
+                len(data_context), len(ds_context),
             )
-            if style_id:
-                logger.info("── CLASSIFY ──  AI chose style: '%s'", style_id)
-            else:
-                style_id = DEFAULT_STYLE
-                logger.warning(
-                    "── CLASSIFY ──  AI classification failed, using default: '%s'",
-                    style_id,
-                )
-        else:
-            style_id = content_style
-            logger.info("── CLASSIFY ──  explicit style from user: '%s'", style_id)
 
+        # Active queries: AI-decided data source queries
+        elif ai_data_queries and data_sources_allowed:
+            yield {"event": "step", "data": {
+                "id": "data_sources", "status": "start",
+                "label": "Querying data sources",
+                "detail": f"{len(ai_data_queries)} queries",
+            }}
+
+            results = await query_sources(ai_data_queries)
+            ds_active_results = results
+            ds_context = format_results_for_context(results)
+            successful = [r for r in results if r.get("success")]
+            failed = [r for r in results if not r.get("success")]
+
+            ds_metadata = {
+                "active": True,
+                "queries": len(ai_data_queries),
+                "successful": len(successful),
+                "failed": len(failed),
+            }
+
+            logger.info(
+                "── DATA SOURCES OK ──  %d/%d queries succeeded, context=%d chars",
+                len(successful), len(ai_data_queries), len(ds_context),
+            )
+            for r in successful:
+                logger.info(
+                    "  source[%s]: %d records",
+                    r.get("_source_id", "?"), r.get("record_count", 0),
+                )
+
+            yield {"event": "step", "data": {
+                "id": "data_sources", "status": "done",
+                "label": f"Data received ({len(successful)} sources)",
+                "detail": f"{sum(r.get('record_count', 0) for r in successful)} records",
+            }}
+
+        elif ai_data_queries and not data_sources_allowed:
+            logger.info("── DATA SOURCES ──  AI requested but tool disabled by user/env")
+        else:
+            logger.info("── DATA SOURCES ──  not needed")
+
+        if ds_context:
+            augmented_message = f"{ds_context}\n\n{augmented_message}"
+
+        # Data source rules (injected into system prompt context)
+        ds_rules = get_rules_context()
+
+        # ── Step 3b: Style prompt setup ───────────────────────
         system_prompt = get_system_prompt(style_id)
         component_priority = get_component_priority(style_id)
         logger.info(
             "── STYLE ──  %s  |  prompt=%dB  |  priority=%s",
             style_id,
             len(system_prompt.encode("utf-8")),
-            [p for p in component_priority][:5],
+            list(component_priority)[:5],
         )
 
-        # ── Auto-degrade: expand WAF budget if prompt is tight ─
+        # ── Step 3c: Micro-context assembly ────────────────────
+        # Inject detailed component instructions based on analyzer hints.
+        # Only adds context for the specific components this request needs.
+        from micro_contexts import assemble as assemble_micro_contexts, AVAILABLE_KEYS
+
+        if ai_component_hints:
+            valid_hints = [k for k in ai_component_hints if k in AVAILABLE_KEYS]
+            if valid_hints:
+                micro_budget = 1500 if max_body_bytes else None
+                micro_block = assemble_micro_contexts(valid_hints, max_bytes=micro_budget)
+                if micro_block:
+                    system_prompt = f"{system_prompt}\n\n{micro_block}"
+                    logger.info(
+                        "── MICRO-CONTEXT ──  injected %d fragments (%dB): %s",
+                        len(valid_hints), len(micro_block.encode("utf-8")), valid_hints,
+                    )
+
         if max_body_bytes is not None and performance_mode == "auto":
             prompt_bytes = len(system_prompt.encode("utf-8"))
             if prompt_bytes > max_body_bytes * _AUTO_DEGRADE_THRESHOLD:
@@ -1227,45 +1922,229 @@ class LLMService:
                     prompt_bytes, int(_AUTO_DEGRADE_THRESHOLD * 100), max_body_bytes,
                 )
 
-        # Prepend location context
+        if ds_rules:
+            system_prompt = f"{system_prompt}\n\n{ds_rules}"
+
         if location_context:
             augmented_message = f"{location_context}{augmented_message}"
 
+        # ── Step 3d: Adaptive model routing ───────────────────
+        # Derive effective complexity from analyzer output + component hints,
+        # then find the best model that meets the requirement.
+        effective_provider_id = provider_id
+        effective_model = model
+        effective_provider = provider
+        effective_complexity = "standard"
+
+        if smart_routing and performance_mode in ("auto", "comprehensive"):
+            effective_complexity = _derive_complexity(ai_complexity, ai_component_hints)
+
+            if effective_complexity != "standard":
+                route = _find_best_model(
+                    provider_id, model, effective_complexity, self.providers,
+                )
+                if route:
+                    new_pid, new_mid = route
+                    new_provider = self.get_provider(new_pid)
+                    if new_provider:
+                        effective_provider_id = new_pid
+                        effective_model = new_mid
+                        effective_provider = new_provider
+
+                        cross = " (cross-provider)" if new_pid != provider_id else ""
+                        logger.info(
+                            "── MODEL ROUTE ──  %s/%s → %s/%s  complexity=%s  components=%s%s",
+                            provider_id, model, new_pid, new_mid,
+                            effective_complexity, ai_component_hints, cross,
+                        )
+                        yield {"event": "step", "data": {
+                            "id": "model_upgrade", "status": "start",
+                            "label": f"Routing to stronger model ({effective_complexity})",
+                            "detail": f"{provider_id}/{model} → {new_pid}/{new_mid}",
+                        }}
+                        yield {"event": "step", "data": {
+                            "id": "model_upgrade", "status": "done",
+                            "label": f"Model routed for {effective_complexity} task",
+                            "detail": f"{new_pid}/{new_mid}",
+                            "reasoning": f"Task complexity is {effective_complexity} — {provider_id}/{model} was upgraded to {new_pid}/{new_mid} for better results{cross}",
+                        }}
+                else:
+                    logger.info(
+                        "── MODEL ROUTE ──  %s/%s already meets %s requirements",
+                        provider_id, model, effective_complexity,
+                    )
+            else:
+                # Standard task — downgrade slow/expensive models to faster ones
+                downgrade = _find_faster_model(provider_id, model, self.providers)
+                if downgrade:
+                    new_pid, new_mid = downgrade
+                    new_provider = self.get_provider(new_pid)
+                    if new_provider:
+                        effective_provider_id = new_pid
+                        effective_model = new_mid
+                        effective_provider = new_provider
+
+                        cross = " (cross-provider)" if new_pid != provider_id else ""
+                        logger.info(
+                            "── MODEL ROUTE (fast) ──  %s/%s → %s/%s  standard task, using faster model%s",
+                            provider_id, model, new_pid, new_mid, cross,
+                        )
+                        yield {"event": "step", "data": {
+                            "id": "model_upgrade", "status": "start",
+                            "label": "Optimizing for speed",
+                            "detail": f"{provider_id}/{model} → {new_pid}/{new_mid}",
+                        }}
+                        yield {"event": "step", "data": {
+                            "id": "model_upgrade", "status": "done",
+                            "label": "Using faster model for simple task",
+                            "detail": f"{new_pid}/{new_mid}",
+                            "reasoning": f"This is a standard-complexity task — switching from {provider_id}/{model} to the faster {new_pid}/{new_mid}{cross}",
+                        }}
+        elif not smart_routing:
+            logger.info(
+                "── MODEL ROUTE ──  smart_routing=off, using selected %s/%s as-is",
+                provider_id, model,
+            )
+
         # ── Step 4: LLM generation ────────────────────────────
-        logger.info("── GENERATE ──  sending to %s/%s  (%d chars)", provider_id, model, len(augmented_message))
-        response = await provider.generate(
-            augmented_message, model, history, system_prompt=system_prompt,
-        )
+        # Map task complexity → adaptive thinking effort level
+        _COMPLEXITY_TO_EFFORT = {
+            "standard": None,       # No thinking needed
+            "moderate": "medium",   # Light reasoning
+            "high": "high",         # Deep structured data work
+            "reasoning": "high",    # Multi-step logic
+        }
+        thinking_effort = _COMPLEXITY_TO_EFFORT.get(effective_complexity) if smart_routing and performance_mode in ("auto", "comprehensive") else None
+
+        _llm_reasoning_parts = [f"Model: {effective_provider_id}/{effective_model}"]
+        if thinking_effort:
+            _llm_reasoning_parts.append(f"Thinking effort: {thinking_effort}")
+        if effective_provider_id != provider_id or effective_model != model:
+            _llm_reasoning_parts.append(f"Original selection: {provider_id}/{model}")
+        yield {"event": "step", "data": {
+            "id": "llm", "status": "start",
+            "label": "Generating response",
+            "detail": f"{effective_provider_id}/{effective_model}" + (f" (thinking: {thinking_effort})" if thinking_effort else ""),
+            "reasoning": " · ".join(_llm_reasoning_parts),
+        }}
         logger.info(
-            "── RESPONSE ──  text=%d chars  a2ui=%s  components=%d",
+            "── GENERATE ──  sending to %s/%s  (%d chars)  effort=%s",
+            effective_provider_id, effective_model, len(augmented_message), thinking_effort,
+        )
+        llm_t0 = time.time()
+        response = await effective_provider.generate(
+            augmented_message, effective_model, effective_history,
+            system_prompt=system_prompt, effort=thinking_effort,
+        )
+        llm_elapsed = time.time() - llm_t0
+        logger.info(
+            "── RESPONSE ──  text=%d chars  a2ui=%s  components=%d  elapsed=%.1fs",
             len(response.get("text", "")),
             bool(response.get("a2ui")),
             len(response.get("a2ui", {}).get("components", [])) if response.get("a2ui") else 0,
+            llm_elapsed,
         )
+        yield {"event": "step", "data": {
+            "id": "llm", "status": "done",
+            "label": "Response generated",
+            "detail": f"{llm_elapsed:.1f}s",
+        }}
 
         # ── Step 5: Post-processing ──────────────────────────
         response = _enforce_visual_hierarchy(response, component_priority)
 
         if search_metadata:
             response["_search"] = search_metadata
-        if user_location:
+            if search_results_raw and search_results_raw.get("results"):
+                response["_sources"] = [
+                    {"title": r.get("title", ""), "url": r.get("url", "")}
+                    for r in search_results_raw["results"][:8]
+                    if r.get("url")
+                ]
+        if user_location and do_location:
             response["_location"] = True
 
-        # Images: AI-driven visual relevance check
         if search_images and _wants_images(message):
             response["_images"] = search_images
             logger.info("── IMAGES ──  attached %d images (query is visual)", len(search_images))
         elif search_images:
             logger.info("── IMAGES ──  suppressed %d images (query not visual)", len(search_images))
 
+        if ds_metadata:
+            response["_data_sources"] = ds_metadata
+            if ds_metadata.get("active") and ds_metadata.get("successful", 0) > 0:
+                ds_source_entries = [
+                    {"title": r.get("_source_name", r.get("_source_id", "Data")), "url": "", "type": "data"}
+                    for r in ds_active_results if r.get("success")
+                ]
+                response.setdefault("_sources", []).extend(ds_source_entries)
+            elif ds_metadata.get("passive"):
+                passive_entries = [
+                    {"title": dc.get("label") or dc.get("source", "Data"), "url": "", "type": "data"}
+                    for dc in (data_context or [])
+                ]
+                response.setdefault("_sources", []).extend(passive_entries)
+
         response["_style"] = style_id
         response["_performance"] = performance_mode
+        response["_model"] = effective_model
+        response["_provider"] = effective_provider_id
+        if effective_model != model or effective_provider_id != provider_id:
+            response["_model_upgraded_from"] = model
+            response["_provider_upgraded_from"] = provider_id
 
         logger.info(
-            "══ GENERATE DONE ══  style=%s  keys=%s",
-            style_id, list(response.keys()),
+            "══ GENERATE DONE ══  style=%s  model=%s/%s  keys=%s",
+            style_id, effective_provider_id, effective_model, list(response.keys()),
         )
-        return response
+        yield {"event": "complete", "data": response}
+
+    async def generate(
+        self,
+        message: str,
+        provider_id: str,
+        model: str,
+        history: Optional[List[Dict[str, str]]] = None,
+        user_location: Optional[Dict[str, Any]] = None,
+        content_style: str = "auto",
+        performance_mode: str = "auto",
+        smart_routing: bool = True,
+        enable_web_search: bool = True,
+        enable_geolocation: bool = True,
+        enable_data_sources: bool = True,
+        data_context: Optional[List[Dict[str, Any]]] = None,
+    ) -> Dict[str, Any]:
+        """Non-streaming wrapper — collects the final result from generate_stream."""
+        result: Dict[str, Any] = {}
+        async for event in self.generate_stream(
+            message, provider_id, model,
+            history=history,
+            user_location=user_location,
+            content_style=content_style,
+            performance_mode=performance_mode,
+            smart_routing=smart_routing,
+            enable_web_search=enable_web_search,
+            enable_geolocation=enable_geolocation,
+            enable_data_sources=enable_data_sources,
+            data_context=data_context,
+        ):
+            if event["event"] == "complete":
+                result = event["data"]
+            elif event["event"] == "error":
+                raise ValueError(event["data"].get("message", "Unknown error"))
+        return result or {"text": "No response generated"}
+
+    @staticmethod
+    def _regex_needs_location(message: str) -> bool:
+        """Regex fallback for location relevance (used when AI is unavailable)."""
+        m = message.lower()
+        indicators = [
+            "weather", "forecast", "temperature", "near me", "nearby",
+            "local", "restaurant", "food", "store", "shop", "event",
+            "concert", "traffic", "commute", "directions", "open now",
+            "closest",
+        ]
+        return any(i in m for i in indicators)
 
 
 # ── Module-level singleton ─────────────────────────────────────

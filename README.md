@@ -198,36 +198,37 @@ This project is structured to eventually become an Nx plugin:
 
 ## Backend (Python FastAPI)
 
-The backend is a separate Python application not managed by Nx:
+AI-first backend with multi-provider LLM support and tool orchestration. See [`backend/README.md`](backend/README.md) for full documentation.
 
 ```bash
 cd backend
-pip install -r requirements.txt
-python app.py
+pip3 install -r requirements.txt
+cp .env.example .env   # add your API keys
+python3 app.py
 ```
 
 Backend runs on `http://localhost:8000`
 
 ### API Endpoints
-- `GET /api` - Welcome message
-- `POST /api/chat` - Chat completion with A2UI response
-  - Supports multiple LLM providers (OpenAI, Anthropic, etc.)
-  - Returns structured A2UI JSON responses
-  - Streaming support available
 
-### LLM Provider Configuration
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/providers` | Available LLM providers and models |
+| `GET` | `/api/styles` | Available content styles |
+| `GET` | `/api/tools` | Configurable tools and lock state |
+| `POST` | `/api/chat` | Chat completion with A2UI response |
 
-The backend supports multiple LLM providers through `llm_providers.py`. Configure via environment variables:
+### AI-First Pipeline
 
-```bash
-# OpenAI
-export OPENAI_API_KEY=your_key_here
+Every request follows: **AI Intent Analysis** (decides style + tools) → **Execute tools** (search, location) → **LLM Generation** → **Post-processing**. Regex fallbacks only when AI is unavailable.
 
-# Anthropic (Claude)
-export ANTHROPIC_API_KEY=your_key_here
-```
+### Configurable Tools
 
-A2UI response formatting is handled by `a2ui_responses.py`, which provides utilities for agents to generate properly structured UI components.
+Tools (web search, geolocation, history, AI classifier) can be controlled at three layers: **Environment** (admin lock) > **User setting** (UI toggle) > **Default**. Set `A2UI_TOOL_WEB_SEARCH=false` to globally disable web search regardless of user settings.
+
+### LLM Providers
+
+Configure via environment variables: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `TAVILY_API_KEY` (web search).
 
 ## Documentation
 

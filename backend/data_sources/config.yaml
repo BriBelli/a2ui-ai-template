@@ -1,0 +1,101 @@
+# ─────────────────────────────────────────────────────────────
+# A2UI Data Sources Configuration
+#
+# Each entry defines an external data source the AI agent can
+# query.  Sources are resolved at startup and exposed to the
+# AI analyzer so it can decide which (if any) to use.
+#
+# Supported types:
+#   rest        — Generic REST API (with optional OpenAPI spec)
+#   databricks  — Databricks Genie natural-language interface
+#
+# Auth tokens are ALWAYS referenced via env-var names — never
+# paste secrets directly into this file.
+# ─────────────────────────────────────────────────────────────
+
+sources:
+  - id: jsonplaceholder
+    type: rest
+    name: Sample Users & Posts
+    base_url: https://jsonplaceholder.typicode.com
+    auth:
+      type: none
+    endpoints:
+      - path: /users
+        method: GET
+        description: List of 10 sample users with name, email, company
+      - path: /posts
+        method: GET
+        description: 100 sample blog posts with title and body
+        params: [userId]
+      - path: /todos
+        method: GET
+        description: 200 to-do items (completed or pending)
+        params: [userId, completed]
+    description: >
+      Sample dataset with users, blog posts, and to-do items.
+      Good for testing data source queries and A2UI rendering.
+    rules: >
+      This is sample data for testing. Present it as real data
+      in charts, tables, and stats. Use /users for people queries,
+      /posts for content queries, /todos for task/productivity queries.
+
+# ── Example: REST API with manual endpoints ──────────────────
+#
+# - id: sales-api
+#   type: rest
+#   name: Sales Dashboard
+#   base_url: https://internal-api.company.com/v1
+#   auth:
+#     type: bearer            # bearer | api_key | none
+#     token_env: SALES_API_TOKEN
+#   endpoints:
+#     - path: /revenue
+#       method: GET
+#       description: Revenue by quarter
+#       params: [period, year]
+#     - path: /pipeline
+#       method: GET
+#       description: Deal pipeline with stages
+#       params: [stage, rep_id]
+#     - path: /customers
+#       method: GET
+#       description: Customer list with segments
+#       params: [segment, limit]
+#   description: >
+#     Sales data: revenue by quarter, deal pipeline, customer
+#     segments, rep performance.
+#   rules: >
+#     Always include date ranges when querying /revenue.
+#     Use /pipeline for forecasting questions.
+#     Prefer /revenue?period=summary for quick overviews.
+#
+# ── Example: REST API with OpenAPI spec auto-discovery ───────
+#
+# - id: product-catalog
+#   type: rest
+#   name: Product Catalog
+#   base_url: https://api.example.com
+#   auth:
+#     type: api_key
+#     header: X-API-Key
+#     token_env: PRODUCT_API_KEY
+#   openapi_spec: ./specs/product-api.yaml
+#   description: Product catalog with pricing, categories, reviews
+#
+# ── Example: Databricks Genie ────────────────────────────────
+#
+# - id: enterprise-analytics
+#   type: databricks
+#   name: Enterprise Analytics
+#   config:
+#     workspace_url_env: DATABRICKS_WORKSPACE_URL
+#     token_env: DATABRICKS_TOKEN
+#     space_id: "01abc123-genie-space-id"
+#   description: >
+#     Enterprise data warehouse — customer analytics, product
+#     metrics, operational KPIs.
+#   rules: >
+#     Use for deep analytical questions about internal company
+#     data.  Best for questions involving trends, aggregations,
+#     and cross-dimensional analysis.

@@ -206,20 +206,21 @@ async def llm_rewrite_query(
             context_lines += f"  {role}: {text}\n"
 
     system = (
-        "You are a search-query optimizer. Given a user's chat message, "
-        "rewrite it into a concise web search query that a search engine "
-        "would return the best results for.\n\n"
+        "You are a search-query optimizer. Rewrite the user's chat message "
+        "into a concise web search query for best results.\n\n"
         "Rules:\n"
-        "- Fix any typos or misspellings\n"
+        "- Fix typos and misspellings\n"
         "- Strip conversational filler (show me, can you, please, etc.)\n"
         "- Add specificity: dates, full names, locations when relevant\n"
-        "- For weather queries: search for CURRENT/TODAY weather, not monthly overviews. "
-        "Example: 'current weather Glastonbury CT today' NOT 'weather February 2026'\n"
-        "- For local queries (restaurants, events), include the user's location\n"
-        "- For time-sensitive queries (stocks, news), include today's date\n"
-        "- Keep it short — a search engine query, NOT a sentence\n"
+        "- ALWAYS assume the user means NOW/current unless they specify a date\n"
+        "- For weather: search for current/today weather, not monthly overviews. "
+        "Example: 'current weather Glastonbury CT today'\n"
+        "- For local queries (restaurants, events), include user's location\n"
+        "- For time-sensitive queries (stocks, news, prices, rankings), "
+        "include the current year to get fresh results\n"
+        "- Keep it short — a search query, NOT a sentence\n"
         "- Return ONLY the search query string, nothing else\n"
-        f"\nToday's date: {date_str}"
+        f"\nToday's date: {date_str} — use this year ({date_str[-4:]}) in queries"
         + (f"\nUser location: {location}" if location else "")
     )
 

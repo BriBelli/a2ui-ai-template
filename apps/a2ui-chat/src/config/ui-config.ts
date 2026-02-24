@@ -5,16 +5,7 @@
  * Settings are persisted to localStorage so they survive page reloads.
  */
 
-export type LoadingStyle = 'chat' | 'subtle';
-
 export interface UIConfig {
-  /**
-   * Loading indicator style
-   * - 'chat': Full message-style with AI avatar and bubble
-   * - 'subtle': Minimal dots with text
-   */
-  loadingStyle: LoadingStyle;
-
   /**
    * Enable message entrance animations
    */
@@ -37,10 +28,32 @@ export interface UIConfig {
    * survive page refreshes. Threads are scoped per user.
    */
   persistChat: boolean;
+
+  /**
+   * Show source citations below assistant responses
+   */
+  showSources: boolean;
+
+  /**
+   * Show action bar (copy, regenerate, like/dislike) on assistant responses
+   */
+  showActions: boolean;
+
+  /**
+   * Sources panel position relative to the response content.
+   * - 'auto': Side-by-side on wide screens, collapses below on narrow (default)
+   * - 'right': Always side-by-side
+   * - 'bottom': Always below the content
+   */
+  sourcesPosition: SourcesPosition;
 }
+
+export type SourcesPosition = 'auto' | 'right' | 'bottom';
 
 export type ContentStyle = 'auto' | 'analytical' | 'content' | 'comparison' | 'howto' | 'quick';
 export type PerformanceMode = 'auto' | 'comprehensive' | 'optimized';
+export type LoadingDetail = 'basic' | 'moderate' | 'comprehensive' | 'thought';
+export type LoadingStyle = 'basic' | 'focus' | 'stack';
 
 export interface AIConfig {
   /**
@@ -57,6 +70,16 @@ export interface AIConfig {
    * Enable web search tool for real-time information
    */
   webSearch: boolean;
+
+  /**
+   * Enable geolocation for location-aware responses
+   */
+  geolocation: boolean;
+
+  /**
+   * Enable data sources tool for querying configured external APIs
+   */
+  dataSources: boolean;
 
   /**
    * Content style for response presentation.
@@ -76,6 +99,30 @@ export interface AIConfig {
    * - 'optimized': Minimal context, fastest, cheapest
    */
   performanceMode: PerformanceMode;
+
+  /**
+   * Loading indicator detail level — controls what information is shown.
+   * - 'basic': Just "Thinking..." with elapsed time
+   * - 'moderate': Key pipeline steps (search, analyze, generate)
+   * - 'comprehensive': All steps with timing and detail text
+   * - 'thought': Chain-of-thought — all steps + reasoning in a collapsible panel
+   */
+  loadingDetail: LoadingDetail;
+
+  /**
+   * Loading indicator presentation style — controls how steps are animated.
+   * - 'basic': Simple list, steps fade in and stay visible
+   * - 'focus': Slot-machine — one step visible at a time, scrolls up on transition
+   * - 'stack': All steps appended, scrollable with max-height
+   */
+  loadingStyle: LoadingStyle;
+
+  /**
+   * Allow the AI pipeline to dynamically route to a stronger or faster model
+   * based on task complexity analysis. When disabled, the selected model is
+   * always used as-is with no substitution.
+   */
+  smartRouting: boolean;
 }
 
 const SETTINGS_KEY = 'a2ui_settings';
@@ -84,11 +131,13 @@ const SETTINGS_KEY = 'a2ui_settings';
  * Default UI configuration
  */
 export const uiConfig: UIConfig = {
-  loadingStyle: 'chat',
   animateMessages: true,
   animateWelcome: true,
   maxSuggestions: 3,
   persistChat: true,
+  showSources: true,
+  showActions: true,
+  sourcesPosition: 'auto',
 };
 
 /**
@@ -98,20 +147,61 @@ export const aiConfig: AIConfig = {
   conversationHistory: true,
   maxHistoryMessages: 20,
   webSearch: true,
+  geolocation: true,
+  dataSources: true,
   contentStyle: 'auto',
   performanceMode: 'auto',
+  loadingDetail: 'moderate',
+  loadingStyle: 'focus',
+  smartRouting: true,
 };
+
+const VALID_CONTENT_STYLES: ReadonlySet<ContentStyle> = new Set([
+  'auto', 'analytical', 'content', 'comparison', 'howto', 'quick',
+]);
+const VALID_PERFORMANCE_MODES: ReadonlySet<PerformanceMode> = new Set([
+  'auto', 'comprehensive', 'optimized',
+]);
+const VALID_LOADING_DETAILS: ReadonlySet<LoadingDetail> = new Set([
+  'basic', 'moderate', 'comprehensive', 'thought',
+]);
+const VALID_LOADING_STYLES: ReadonlySet<LoadingStyle> = new Set([
+  'basic', 'focus', 'stack',
+]);
+const VALID_SOURCES_POSITIONS: ReadonlySet<SourcesPosition> = new Set([
+  'auto', 'right', 'bottom',
+]);
 
 /**
  * Load persisted settings from localStorage (call once at startup).
+ * Validates saved values to prevent stale/invalid settings from persisting.
  */
 export function loadSettings(): void {
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
     if (!raw) return;
     const saved = JSON.parse(raw);
-    if (saved.ai) Object.assign(aiConfig, saved.ai);
-    if (saved.ui) Object.assign(uiConfig, saved.ui);
+    if (saved.ai) {
+      Object.assign(aiConfig, saved.ai);
+      if (!VALID_CONTENT_STYLES.has(aiConfig.contentStyle)) {
+        aiConfig.contentStyle = 'auto';
+      }
+      if (!VALID_PERFORMANCE_MODES.has(aiConfig.performanceMode)) {
+        aiConfig.performanceMode = 'auto';
+      }
+      if (!VALID_LOADING_DETAILS.has(aiConfig.loadingDetail)) {
+        aiConfig.loadingDetail = 'moderate';
+      }
+      if (!VALID_LOADING_STYLES.has(aiConfig.loadingStyle)) {
+        aiConfig.loadingStyle = 'focus';
+      }
+    }
+    if (saved.ui) {
+      Object.assign(uiConfig, saved.ui);
+      if (!VALID_SOURCES_POSITIONS.has(uiConfig.sourcesPosition)) {
+        uiConfig.sourcesPosition = 'auto';
+      }
+    }
   } catch {
     // corrupted storage — use defaults
   }

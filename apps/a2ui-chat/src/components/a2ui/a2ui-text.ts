@@ -1,6 +1,6 @@
 import { LitElement, html, css, unsafeCSS } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
-import { md, markdownStyles } from '../../services/markdown';
+import { md, markdownStyles, renderMermaidDiagrams } from '../../services/markdown';
 
 @customElement('a2ui-text')
 export class A2UIText extends LitElement {
@@ -66,6 +66,10 @@ export class A2UIText extends LitElement {
 
   @property({ type: String }) content = '';
   @property({ type: String }) variant: 'h1' | 'h2' | 'h3' | 'body' | 'caption' | 'label' | 'code' = 'body';
+
+  protected updated() {
+    renderMermaidDiagrams(this.shadowRoot!);
+  }
 
   render() {
     switch (this.variant) {

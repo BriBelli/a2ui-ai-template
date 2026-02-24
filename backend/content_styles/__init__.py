@@ -98,7 +98,7 @@ def get_system_prompt(style_id: str, max_bytes: Optional[int] = None) -> str:
             )
 
     today = date.today().strftime("%B %d, %Y")
-    return f"Today is {today}.\n\n{prompt}"
+    return f"Current date: {today}. All responses must be relevant to this date unless the user specifies otherwise.\n\n{prompt}"
 
 
 def get_component_priority(style_id: str) -> List[str]:

@@ -1,5 +1,6 @@
-import { LitElement, html, css, nothing } from 'lit';
+import { LitElement, html, css, nothing, unsafeCSS } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
+import { md, markdownStyles } from '../../services/markdown';
 
 export interface TabItem {
   id: string;
@@ -91,6 +92,8 @@ export class A2UITabs extends LitElement {
       color: var(--a2ui-text-secondary);
       line-height: 1.6;
     }
+
+    ${unsafeCSS(markdownStyles)}
   `;
 
   @property({ type: Array }) tabs: TabItem[] = [];
@@ -122,7 +125,7 @@ export class A2UITabs extends LitElement {
         `)}
       </div>
       <div role="tabpanel" class="tab-panel">
-        ${active.content}
+        ${md(active.content)}
       </div>
     `;
   }

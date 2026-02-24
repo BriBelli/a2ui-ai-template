@@ -12,10 +12,12 @@ Security:
 
 import logging
 import os
-from typing import List, Optional
+from typing import Any, List, Optional
+
+import json as _json
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -24,6 +26,7 @@ from slowapi.errors import RateLimitExceeded
 import uvicorn
 
 from content_styles import get_available_styles
+from data_sources import get_available_sources
 from llm_providers import llm_service
 
 logger = logging.getLogger(__name__)
@@ -116,29 +119,66 @@ class UserLocation(BaseModel):
     label: Optional[str] = None
 
 
+class DataContextItem(BaseModel):
+    """Pre-fetched data injected into the pipeline (passive mode)."""
+    source: str = Field(..., max_length=100, pattern=r"^[a-zA-Z0-9_\-\.]+$")
+    label: Optional[str] = Field(None, max_length=200)
+    data: Any = None
+
+
+VALID_CONTENT_STYLES = {"auto", "analytical", "content", "comparison", "howto", "quick"}
+VALID_PERFORMANCE_MODES = {"auto", "comprehensive", "optimized"}
+
+
 class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=10_000)
-    provider: Optional[str] = Field(None, max_length=50)
-    model: Optional[str] = Field(None, max_length=100)
+    provider: Optional[str] = Field(None, max_length=50, pattern=r"^[a-zA-Z0-9_\-]+$")
+    model: Optional[str] = Field(None, max_length=100, pattern=r"^[a-zA-Z0-9_\.\-]+$")
     history: List[HistoryMessage] = Field(default_factory=list)
-    enableWebSearch: bool = False
+    enableWebSearch: bool = True
+    enableGeolocation: bool = True
+    enableDataSources: bool = True
     userLocation: Optional[UserLocation] = None
+    dataContext: Optional[List[DataContextItem]] = Field(
+        default=None,
+        description="Pre-fetched external data injected into the pipeline (passive mode)",
+    )
     contentStyle: str = Field(
         default="auto",
         max_length=30,
-        description="Content style: 'auto' (default), 'analytical', 'content', 'comparison', 'howto', or 'quick'",
     )
     performanceMode: str = Field(
         default="auto",
         max_length=30,
-        description="Performance mode: 'auto' (default), 'comprehensive', or 'optimized'",
     )
+    smartRouting: bool = True
 
     @field_validator("history")
     @classmethod
     def limit_history(cls, v):
         if len(v) > 50:
             raise ValueError("History exceeds maximum of 50 messages")
+        return v
+
+    @field_validator("dataContext")
+    @classmethod
+    def limit_data_context(cls, v):
+        if v and len(v) > 10:
+            raise ValueError("dataContext exceeds maximum of 10 sources")
+        return v
+
+    @field_validator("contentStyle")
+    @classmethod
+    def validate_content_style(cls, v):
+        if v not in VALID_CONTENT_STYLES:
+            raise ValueError(f"Invalid contentStyle: {v}")
+        return v
+
+    @field_validator("performanceMode")
+    @classmethod
+    def validate_performance_mode(cls, v):
+        if v not in VALID_PERFORMANCE_MODES:
+            raise ValueError(f"Invalid performanceMode: {v}")
         return v
 
 
@@ -169,24 +209,37 @@ def get_styles(request: Request):
     return JSONResponse(content={"styles": get_available_styles()})
 
 
+@app.get("/api/tools")
+@limiter.limit("60/minute")
+def get_tools(request: Request):
+    """Return configurable tools and their current state.
+
+    Each tool reports its default, whether it's locked by an env
+    variable, and the effective env override value (if any).
+    The frontend uses this to disable toggles for locked tools.
+    """
+    return JSONResponse(content={"tools": llm_service.get_tool_states()})
+
+
+@app.get("/api/data-sources")
+@limiter.limit("60/minute")
+def get_data_sources(request: Request):
+    """Return configured data sources and their availability."""
+    return JSONResponse(content={"sources": get_available_sources()})
+
+
 # A2UI Chat endpoint — returns structured A2UI responses
+# Supports both regular JSON and SSE streaming (Accept: text/event-stream).
 @app.post("/api/chat")
 @limiter.limit("20/minute")
 async def chat(request: Request, body: ChatRequest):
     """
     Chat endpoint that returns A2UI protocol responses.
 
-    Request body (validated via Pydantic):
-    - message: The user's message (1–10 000 chars)
-    - provider: Optional LLM provider ID (openai, anthropic, gemini)
-    - model: Optional model ID for the provider
-    - history: Optional list of previous messages [{role, content}] (max 50)
-    - enableWebSearch: Optional boolean to enable web search tool
-    - contentStyle: Content style ('auto', 'analytical', 'content', etc.)
-
-    Returns:
-    - text: Optional plain text response
-    - a2ui: Optional A2UI protocol JSON for rich UI rendering
+    When the client sends ``Accept: text/event-stream``, the response is an
+    SSE stream with real-time pipeline progress events (``step``) followed
+    by a ``complete`` event containing the full A2UI response.  Otherwise
+    returns a standard JSON response.
     """
     if not body.message.strip():
         return JSONResponse(
@@ -194,42 +247,83 @@ async def chat(request: Request, body: ChatRequest):
             status_code=400,
         )
 
-    # If provider is specified, use LLM service
-    if body.provider and body.model:
-        try:
-            history_dicts = [h.model_dump() for h in body.history]
-            location_dict = body.userLocation.model_dump() if body.userLocation else None
-            response = await llm_service.generate(
-                body.message,
-                body.provider,
-                body.model,
-                history=history_dicts,
-                user_location=location_dict,
-                content_style=body.contentStyle,
-                performance_mode=body.performanceMode,
-            )
-            return JSONResponse(content=response)
-        except ValueError as e:
-            # Known errors (invalid provider, etc.)
-            return JSONResponse(
-                content={"error": str(e)},
-                status_code=400,
-            )
-        except Exception as e:
-            logger.exception("LLM error")
-            return JSONResponse(
-                content={
-                    "text": "Something went wrong generating a response. Please try again.",
-                    "_error": str(e),
-                },
-                status_code=500,
-            )
+    if not (body.provider and body.model):
+        return JSONResponse(
+            content={"error": "No LLM provider selected. Choose a provider and model from the dropdown."},
+            status_code=400,
+        )
 
-    # No provider selected — tell the client to pick one
-    return JSONResponse(
-        content={"error": "No LLM provider selected. Choose a provider and model from the dropdown."},
-        status_code=400,
+    history_dicts = [h.model_dump() for h in body.history]
+    location_dict = body.userLocation.model_dump() if body.userLocation else None
+    data_context_dicts = (
+        [dc.model_dump() for dc in body.dataContext] if body.dataContext else None
     )
+    accept = request.headers.get("accept", "")
+    wants_sse = "text/event-stream" in accept
+
+    if wants_sse:
+        async def _sse_generator():
+            try:
+                async for event in llm_service.generate_stream(
+                    body.message,
+                    body.provider,
+                    body.model,
+                    history=history_dicts,
+                    user_location=location_dict,
+                    content_style=body.contentStyle,
+                    performance_mode=body.performanceMode,
+                    smart_routing=body.smartRouting,
+                    enable_web_search=body.enableWebSearch,
+                    enable_geolocation=body.enableGeolocation,
+                    enable_data_sources=body.enableDataSources,
+                    data_context=data_context_dicts,
+                ):
+                    etype = event.get("event", "message")
+                    payload = _json.dumps(event.get("data", {}), default=str)
+                    yield f"event: {etype}\ndata: {payload}\n\n"
+            except Exception as exc:
+                logger.exception("SSE stream error")
+                err = _json.dumps({"message": "Something went wrong. Please try again."})
+                yield f"event: error\ndata: {err}\n\n"
+
+        return StreamingResponse(
+            _sse_generator(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
+
+    # Non-streaming JSON response (backward compatible)
+    try:
+        response = await llm_service.generate(
+            body.message,
+            body.provider,
+            body.model,
+            history=history_dicts,
+            user_location=location_dict,
+            content_style=body.contentStyle,
+            performance_mode=body.performanceMode,
+            smart_routing=body.smartRouting,
+            enable_web_search=body.enableWebSearch,
+            enable_geolocation=body.enableGeolocation,
+            enable_data_sources=body.enableDataSources,
+            data_context=data_context_dicts,
+        )
+        return JSONResponse(content=response)
+    except ValueError as e:
+        return JSONResponse(content={"error": str(e)}, status_code=400)
+    except Exception as e:
+        logger.exception("LLM error")
+        return JSONResponse(
+            content={
+                "text": "Something went wrong generating a response. Please try again.",
+                "_error": str(e),
+            },
+            status_code=500,
+        )
 
 
 if __name__ == "__main__":

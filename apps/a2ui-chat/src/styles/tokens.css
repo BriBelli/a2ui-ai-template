@@ -185,6 +185,7 @@
 
   /* Layout */
   --a2ui-chat-max-width: 768px;
+  --a2ui-chat-max-width-expanded: 1120px;
   --a2ui-sidebar-width: 280px;
   --a2ui-header-height: 64px;
   --a2ui-input-height: 56px;
