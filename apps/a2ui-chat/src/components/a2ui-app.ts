@@ -21,7 +21,7 @@ import {
   getTheme,
   type Theme,
 } from "../services/theme-service";
-import { isLocationCached } from "../services/geolocation-service";
+import { getUserLocation } from "../services/geolocation-service";
 import type { ThinkingStep } from "./chat/a2ui-thinking-indicator";
 
 @customElement("a2ui-app")
@@ -538,6 +538,7 @@ export class A2UIApp extends LitElement {
         this.restoreLastThread();
         this.refreshThreadList();
         this.loadProviders();
+        if (aiConfig.geolocation) getUserLocation();
       }
     });
 
@@ -547,6 +548,7 @@ export class A2UIApp extends LitElement {
       this.restoreLastThread();
       this.refreshThreadList();
       await this.loadProviders();
+      if (aiConfig.geolocation) getUserLocation();
     }
   }
 
@@ -798,9 +800,7 @@ export class A2UIApp extends LitElement {
     this.isLoading = true;
     const startTime = performance.now();
 
-    // Thinking steps built from SSE stream events + client-side geolocation.
     const steps: ThinkingStep[] = [];
-    const locationCached = isLocationCached();
     const stepIndexByTool = new Map<string, number>();
 
     const push = (label: string, detail?: string, tool?: string, reasoning?: string) => {
@@ -851,21 +851,8 @@ export class A2UIApp extends LitElement {
         this.resolvedModel,
         this.messages,
         smartRouting,
-        (phase, _detail, streamEvent?) => {
-          switch (phase) {
-            case "location":
-              if (!locationCached)
-                push("Getting your location", undefined, "client-location");
-              break;
-            case "location-done": {
-              const locIdx = stepIndexByTool.get("client-location");
-              if (locIdx !== undefined) done(locIdx);
-              break;
-            }
-            case "stream-event":
-              if (streamEvent) handleStreamEvent(streamEvent);
-              break;
-          }
+        (_phase, _detail, streamEvent?) => {
+          if (streamEvent) handleStreamEvent(streamEvent);
         },
       );
 

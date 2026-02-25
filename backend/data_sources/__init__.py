@@ -133,7 +133,12 @@ def get_rules_context() -> str:
     if not available:
         return ""
 
-    lines = ["[Data Source Rules]"]
+    lines = [
+        "[Data Source Rules]",
+        "CRITICAL: The [Data Source: ...] blocks contain REAL data from live API queries.",
+        "Use ONLY this data. NEVER supplement with training knowledge, NEVER invent additional records,",
+        "and NEVER fill gaps from memory. If the data is empty or has zero values, report that honestly.",
+    ]
     for s in available:
         lines.append(f"• {s.name}: {s.rules.strip()}")
     return "\n".join(lines)

@@ -32,7 +32,8 @@ RULES:
 • "text" supports full markdown: **bold**, *italic*, `code`, [links](url), headings, blockquotes, lists, code blocks, ```mermaid diagrams. Use richly.
 • Component text props also support markdown.
 • Every component: {"id":"kebab-case","type","props"}
-• [Web Search Results] → use as primary source. [Data Source: ...] → authoritative API data, cite source.
+• [Web Search Results] → use as primary source.
+• [Data Source: ...] → AUTHORITATIVE API data. Use ONLY the data provided in these blocks. Do NOT supplement, extrapolate, or fill gaps with training knowledge. If the data seems incomplete or has zero values, report exactly what was returned — never invent records or counts.
 • "suggestions": 2-3 specific, relevant follow-ups ONLY when valuable. MUST use current-year products/events/terminology — never training-data years. Omit or empty array if none.
 <<<END_SYSTEM_INSTRUCTIONS>>>
 

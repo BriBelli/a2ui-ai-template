@@ -2,7 +2,7 @@
 LLM Providers for A2UI
 
 Multi-provider AI service with a unified interface:
-- OpenAI  (GPT-4.1, GPT-5)
+- OpenAI  (GPT-5.1, GPT-5, GPT-4.1)
 - Anthropic  (Claude Opus 4.6, Claude Sonnet 4, Claude 3.5)
 - Google Gemini  (Gemini 3 Pro, Gemini 2.5)
 - Exploration Lab  (LiteLLM gateway — OpenAI-compatible)
@@ -414,10 +414,11 @@ class OpenAIProvider(LLMProvider):
 
     name = "OpenAI"
     models = [
-        {"id": "gpt-4.1", "name": "GPT-4.1"},
-        {"id": "gpt-4.1-mini", "name": "GPT-4.1 Mini (Fast)"},
+        {"id": "gpt-5.1", "name": "GPT-5.1"},
         {"id": "gpt-5", "name": "GPT-5"},
         {"id": "gpt-5-mini", "name": "GPT-5 Mini"},
+        {"id": "gpt-4.1", "name": "GPT-4.1"},
+        {"id": "gpt-4.1-mini", "name": "GPT-4.1 Mini (Fast)"},
     ]
 
     def __init__(self) -> None:
@@ -454,10 +455,12 @@ class OpenAIProvider(LLMProvider):
             model, len(messages), total_chars, total_chars // 4,
         )
 
-        # GPT-5+ uses max_completion_tokens and only supports temperature=1
+        # GPT-5+ uses max_completion_tokens and only supports temperature=1.
+        # 16384 output tokens needed — GPT-5 is verbose with structured JSON
+        # and data-heavy contexts (28K+ chars from data sources) easily exceed 4K.
         is_gpt5 = model.startswith("gpt-5")
         extra: Dict[str, Any] = (
-            {"max_completion_tokens": 4000}
+            {"max_completion_tokens": 16384}
             if is_gpt5
             else {"max_tokens": 4000, "temperature": 0.7}
         )
@@ -661,15 +664,16 @@ class LiteLLMProvider(LLMProvider):
 
     name = "Exploration Lab"
     models = [
-        {"id": "gpt-4o-mini", "name": "GPT-4o Mini (Fast)"},
-        {"id": "gpt-4.1", "name": "GPT-4.1"},
-        {"id": "gpt-4.1-mini", "name": "GPT-4.1 Mini"},
+        {"id": "claude-sonnet-4-6", "name": "Claude Sonnet 4.6"},
+        {"id": "claude-sonnet-4-5-20250929", "name": "Claude Sonnet 4.5"},
+        {"id": "gpt-5.1", "name": "GPT-5.1"},
         {"id": "gpt-5", "name": "GPT-5"},
         {"id": "gpt-5-nano", "name": "GPT-5 Nano (Fast)"},
         {"id": "o4-mini", "name": "o4 Mini (Reasoning)"},
-        {"id": "claude-sonnet-4-6", "name": "Claude Sonnet 4.6"},
-        {"id": "claude-sonnet-4-5-20250929", "name": "Claude Sonnet 4.5"},
+        {"id": "gpt-4.1", "name": "GPT-4.1"},
+        {"id": "gpt-4.1-mini", "name": "GPT-4.1 Mini"},
         {"id": "gpt-4o", "name": "GPT-4o"},
+        {"id": "gpt-4o-mini", "name": "GPT-4o Mini (Fast)"},
     ]
 
     BASE_URL = "https://litellm.ai-coe-test.aws.evernorthcloud.com/v1"
@@ -708,6 +712,7 @@ class LiteLLMProvider(LLMProvider):
         is_claude = model.startswith("claude-")
         # o-series reasoning models don't support temperature and use max_completion_tokens
         is_reasoning = model.startswith("o1") or model.startswith("o3") or model.startswith("o4")
+        is_gpt5 = model.startswith("gpt-5")
 
         try:
             call_params: Dict[str, Any] = {
@@ -715,14 +720,14 @@ class LiteLLMProvider(LLMProvider):
                 "messages": messages,
             }
 
-            # Reasoning models: no temperature, use max_completion_tokens
             if is_reasoning:
                 call_params["max_completion_tokens"] = 4000
+            elif is_gpt5:
+                call_params["max_completion_tokens"] = 16384
             else:
                 call_params["temperature"] = 0.7
                 call_params["max_tokens"] = 4000
 
-            # Only add response_format for non-Claude, non-reasoning models
             if not is_claude and not is_reasoning:
                 call_params["response_format"] = {"type": "json_object"}
 
@@ -1070,26 +1075,29 @@ _AUTO_DEGRADE_THRESHOLD = 0.75
 _SPEED_SCORE = {"fast": 0, "medium": 1, "slow": 2}
 
 _MODEL_ROSTER: List[Dict[str, Any]] = [
-    # Anthropic — best structured JSON precision, fast response times
-    {"provider": "anthropic", "model": "claude-sonnet-4-6",   "tier": 4, "tags": {"structured", "reasoning", "creative"}, "speed": "medium"},
+    # Anthropic — stability & precision, natural tone, root-cause debugging
+    {"provider": "anthropic", "model": "claude-sonnet-4-6",            "tier": 4, "tags": {"structured", "reasoning", "creative"}, "speed": "medium"},
     {"provider": "anthropic", "model": "claude-opus-4-6",              "tier": 4, "tags": {"structured", "reasoning", "creative"}, "speed": "medium"},
     {"provider": "anthropic", "model": "claude-sonnet-4-5-20250929",   "tier": 3, "tags": {"structured", "creative"},              "speed": "medium"},
     {"provider": "anthropic", "model": "claude-haiku-4-5-20251001",    "tier": 1, "tags": set(),                                   "speed": "fast"},
-    # OpenAI
-    {"provider": "openai",   "model": "gpt-4.1",                      "tier": 2, "tags": set(),                                    "speed": "fast"},
+    # OpenAI GPT-5.1 — 2-3x faster than GPT-5, adaptive reasoning, 400K context, peak math/logic
+    {"provider": "openai",   "model": "gpt-5.1",                      "tier": 4, "tags": {"structured", "reasoning"},              "speed": "fast"},
+    {"provider": "openai",   "model": "gpt-5",                        "tier": 4, "tags": {"structured", "reasoning"},              "speed": "medium"},
     {"provider": "openai",   "model": "gpt-5-mini",                   "tier": 2, "tags": {"structured"},                           "speed": "medium"},
+    # OpenAI — general purpose
+    {"provider": "openai",   "model": "gpt-4.1",                      "tier": 2, "tags": set(),                                    "speed": "fast"},
     {"provider": "openai",   "model": "gpt-4.1-mini",                 "tier": 1, "tags": set(),                                    "speed": "fast"},
-    {"provider": "openai",   "model": "gpt-5",                        "tier": 3, "tags": {"structured", "reasoning"},              "speed": "slow"},
     # LiteLLM gateway — cross-provider access (primary upgrade path)
-    {"provider": "litellm",  "model": "claude-sonnet-4-6",   "tier": 4, "tags": {"structured", "reasoning", "creative"}, "speed": "medium"},
+    {"provider": "litellm",  "model": "claude-sonnet-4-6",            "tier": 4, "tags": {"structured", "reasoning", "creative"}, "speed": "medium"},
     {"provider": "litellm",  "model": "claude-sonnet-4-5-20250929",   "tier": 3, "tags": {"structured", "creative"},              "speed": "medium"},
+    {"provider": "litellm",  "model": "gpt-5.1",                      "tier": 4, "tags": {"structured", "reasoning"},              "speed": "fast"},
+    {"provider": "litellm",  "model": "gpt-5",                        "tier": 4, "tags": {"structured", "reasoning"},              "speed": "medium"},
     {"provider": "litellm",  "model": "o4-mini",                      "tier": 3, "tags": {"reasoning"},                            "speed": "medium"},
     {"provider": "litellm",  "model": "gpt-4.1",                      "tier": 2, "tags": set(),                                    "speed": "fast"},
     {"provider": "litellm",  "model": "gpt-4o",                       "tier": 2, "tags": set(),                                    "speed": "medium"},
     {"provider": "litellm",  "model": "gpt-4.1-mini",                 "tier": 1, "tags": set(),                                    "speed": "fast"},
     {"provider": "litellm",  "model": "gpt-4o-mini",                  "tier": 1, "tags": set(),                                    "speed": "fast"},
     {"provider": "litellm",  "model": "gpt-5-nano",                   "tier": 1, "tags": set(),                                    "speed": "fast"},
-    {"provider": "litellm",  "model": "gpt-5",                        "tier": 3, "tags": {"structured", "reasoning"},              "speed": "slow"},
     # Gemini — strong multimodal + structured data, large context
     {"provider": "gemini",   "model": "gemini-3-pro-preview",         "tier": 3, "tags": {"structured", "reasoning"},              "speed": "medium"},
     {"provider": "gemini",   "model": "gemini-2.5-flash-preview-05-20", "tier": 1, "tags": set(),                                  "speed": "fast"},
@@ -1251,10 +1259,10 @@ class LLMService:
 
     def __init__(self) -> None:
         self.providers: Dict[str, LLMProvider] = {
-            "litellm": LiteLLMProvider(),
-            "openai": OpenAIProvider(),
             "anthropic": AnthropicProvider(),
+            "openai": OpenAIProvider(),
             "gemini": GeminiProvider(),
+            "litellm": LiteLLMProvider(),
         }
 
     def get_available_providers(self) -> List[Dict[str, Any]]:
@@ -1570,7 +1578,8 @@ class LLMService:
         # Tool gates (env/user) are applied AFTER AI decides.
         # If user disabled search, AI's "search=true" is overridden.
         #
-        # Regex fallback only fires if AI is unavailable or fails.
+        # Regex fallback for search fires if AI is unavailable or fails.
+        # Location is ONLY decided by the AI analyzer — no regex fallback.
 
         ai_wants_search = False
         ai_wants_location = False
@@ -1599,13 +1608,11 @@ class LLMService:
                         ai_wants_search, ai_wants_location, ai_search_query[:60], len(ai_data_queries), ai_component_hints, ai_complexity,
                     )
                 else:
-                    logger.warning("── ANALYZE ──  AI failed, falling back to regex for tool decisions")
+                    logger.warning("── ANALYZE ──  AI failed, falling back to regex for search")
                     ai_wants_search = should_search(message)
-                    ai_wants_location = self._regex_needs_location(message)
             else:
-                logger.info("── ANALYZE ──  AI disabled, using regex fallback for tools")
+                logger.info("── ANALYZE ──  AI disabled, using regex fallback for search")
                 ai_wants_search = should_search(message)
-                ai_wants_location = self._regex_needs_location(message)
 
         elif classifier_active:
             analysis = await self._analyze_intent(message, history=effective_history)
@@ -1624,7 +1631,6 @@ class LLMService:
             else:
                 style_id = DEFAULT_STYLE
                 ai_wants_search = should_search(message)
-                ai_wants_location = self._regex_needs_location(message)
                 logger.warning(
                     "── ANALYZE ──  AI failed → regex fallback: style=%s  search=%s  location=%s",
                     style_id, ai_wants_search, ai_wants_location,
@@ -1633,7 +1639,6 @@ class LLMService:
             from content_styles import classify_style
             style_id = classify_style(message)
             ai_wants_search = should_search(message)
-            ai_wants_location = self._regex_needs_location(message)
             logger.info(
                 "── ANALYZE ──  AI disabled → regex: style=%s  search=%s  location=%s",
                 style_id, ai_wants_search, ai_wants_location,
@@ -1832,6 +1837,10 @@ class LLMService:
                     serialized = serialized[:12_000] + "\n... (truncated)"
                 passive_blocks.append(f"[Data Source: {label}]\n{serialized}")
             ds_context = "\n".join(passive_blocks)
+            ds_context += (
+                "\n\n[INSTRUCTION: The data above comes from live API queries. Use ONLY this data. "
+                "Do NOT supplement with training knowledge or fabricate additional records.]"
+            )
             ds_metadata = {"passive": True, "sources": len(data_context)}
             logger.info(
                 "── DATA SOURCES ──  passive injection: %d sources, %d chars",
@@ -1881,7 +1890,12 @@ class LLMService:
             logger.info("── DATA SOURCES ──  not needed")
 
         if ds_context:
-            augmented_message = f"{ds_context}\n\n{augmented_message}"
+            augmented_message = (
+                f"{ds_context}\n\n"
+                "[INSTRUCTION: The data above comes from live API queries. Use ONLY this data. "
+                "Do NOT supplement with training knowledge or fabricate additional records.]\n\n"
+                f"{augmented_message}"
+            )
 
         # Data source rules (injected into system prompt context)
         ds_rules = get_rules_context()
@@ -2133,18 +2147,6 @@ class LLMService:
             elif event["event"] == "error":
                 raise ValueError(event["data"].get("message", "Unknown error"))
         return result or {"text": "No response generated"}
-
-    @staticmethod
-    def _regex_needs_location(message: str) -> bool:
-        """Regex fallback for location relevance (used when AI is unavailable)."""
-        m = message.lower()
-        indicators = [
-            "weather", "forecast", "temperature", "near me", "nearby",
-            "local", "restaurant", "food", "store", "shop", "event",
-            "concert", "traffic", "commute", "directions", "open now",
-            "closest",
-        ]
-        return any(i in m for i in indicators)
 
 
 # ── Module-level singleton ─────────────────────────────────────

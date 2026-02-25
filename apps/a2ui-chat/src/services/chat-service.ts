@@ -1,6 +1,6 @@
 import type { A2UIResponse } from '@a2ui/core';
 import { aiConfig } from '../config/ui-config';
-import { getUserLocation } from './geolocation-service';
+import { getCachedLocation } from './geolocation-service';
 import { toast } from './toast-service';
 
 export interface SourceCitation {
@@ -181,91 +181,12 @@ export class ChatService {
   }
 
   /**
-   * Lightweight check — mirrors backend's should_search().
-   * Used to predict whether the backend will search so the
-   * thinking indicator can show the right steps immediately.
-   */
-  willSearch(message: string): boolean {
-    const m = message.toLowerCase();
-    const indicators = [
-      'current',
-      'latest',
-      'today',
-      'now',
-      'recent',
-      'right now',
-      'these days',
-      'nowadays',
-      'trending',
-      'popular',
-      'getting noticed',
-      'going viral',
-      'price',
-      'stock',
-      'market',
-      'trading',
-      'bitcoin',
-      'crypto',
-      'weather',
-      'forecast',
-      'temperature',
-      'news',
-      'headlines',
-      'score',
-      'game',
-      'what is',
-      'what are',
-      'how much',
-      'who won',
-      'who is',
-      'compare',
-      'vs',
-      'versus',
-      'show me',
-      'pictures of',
-      'photos of',
-      'images of',
-      'artwork',
-      'art',
-      'design',
-      '2024',
-      '2025',
-      '2026',
-    ];
-    return indicators.some((i) => m.includes(i));
-  }
-
-  /**
-   * Check if a message would benefit from the user's location.
-   * Only local queries (weather, nearby, events, food) need it.
-   */
-  needsLocation(message: string): boolean {
-    const m = message.toLowerCase();
-    const localIndicators = [
-      'weather',
-      'forecast',
-      'temperature',
-      'near me',
-      'nearby',
-      'local',
-      'restaurant',
-      'food',
-      'store',
-      'shop',
-      'event',
-      'concert',
-      'traffic',
-      'commute',
-      'directions',
-      'open now',
-      'closest',
-    ];
-    return localIndicators.some((i) => m.includes(i));
-  }
-
-  /**
    * Send a message to the backend via SSE stream for real-time pipeline events.
    * Falls back to regular JSON if the stream fails.
+   *
+   * Geolocation is pre-cached at app startup. If available, the cached
+   * coordinates are included in every request so the backend analyzer can
+   * decide whether the query actually needs location context.
    */
   async sendMessage(
     message: string,
@@ -274,18 +195,13 @@ export class ChatService {
     history?: ChatMessage[],
     smartRouting?: boolean,
     onProgress?: (
-      phase: 'location' | 'location-done' | 'stream-event',
+      phase: 'stream-event',
       detail?: string,
       streamEvent?: StreamEvent,
     ) => void,
   ): Promise<ChatResponse> {
     try {
-      let location = null;
-      if (aiConfig.geolocation && this.needsLocation(message)) {
-        onProgress?.('location');
-        location = await getUserLocation();
-        onProgress?.('location-done');
-      }
+      const location = aiConfig.geolocation ? getCachedLocation() : null;
 
       const body: Record<string, unknown> = {
         message,
@@ -382,7 +298,7 @@ export class ChatService {
   private async consumeSSE(
     response: Response,
     onProgress?: (
-      phase: 'location' | 'location-done' | 'stream-event',
+      phase: 'stream-event',
       detail?: string,
       streamEvent?: StreamEvent,
     ) => void,

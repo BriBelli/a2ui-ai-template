@@ -77,6 +77,11 @@ export function isLocationCached(): boolean {
   return cached !== null;
 }
 
+/** Return cached location synchronously (null if not yet resolved). */
+export function getCachedLocation(): UserLocation | null {
+  return cached;
+}
+
 /** Clear cached location (e.g. on logout). */
 export function clearLocationCache() {
   cached = null;
