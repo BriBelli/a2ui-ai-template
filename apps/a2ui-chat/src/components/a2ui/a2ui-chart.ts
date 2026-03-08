@@ -256,6 +256,84 @@ export class A2UIChart extends LitElement {
   }
 
   /**
+   * Normalize scatter/bubble data when the LLM sends the wrong format.
+   *
+   * Common misformats:
+   *  A) labels[] + one dataset with flat number[] → use label index as x
+   *  B) labels[] + two datasets with flat number[] → merge into {x, y} pairs
+   *  C) N datasets each with a single flat number → consolidate at x=index
+   *
+   * Returns a cleaned copy without mutating this.data.
+   */
+  private normalizeScatterData(): ChartData {
+    const isPointBased = this.chartType === 'scatter' || this.chartType === 'bubble';
+    if (!isPointBased) return this.data;
+    if (!this.data.datasets?.length) return this.data;
+
+    const hasLabels = Array.isArray(this.data.labels) && this.data.labels.length > 0;
+
+    const isFlat = (arr: unknown[]): arr is number[] =>
+      arr.length > 0 && arr.every(v => typeof v === 'number');
+
+    const allFlat = this.data.datasets.every(
+      ds => Array.isArray(ds.data) && isFlat(ds.data as unknown[]),
+    );
+
+    if (!allFlat) return this.data;
+
+    const dsCount = this.data.datasets.length;
+    const labels = (this.data.labels ?? []).map(String);
+
+    // Case B: exactly 2 datasets with flat numbers → treat as X-series + Y-series
+    if (dsCount === 2) {
+      const xData = this.data.datasets[0].data as number[];
+      const yData = this.data.datasets[1].data as number[];
+      const len = Math.min(xData.length, yData.length);
+      const points = Array.from({ length: len }, (_, i) => ({
+        x: xData[i],
+        y: yData[i],
+      }));
+
+      return {
+        datasets: [{
+          label: this.data.datasets[1].label || this.data.datasets[0].label || '',
+          data: points as unknown as number[],
+        }],
+      };
+    }
+
+    // Case A: labels + single dataset with flat numbers
+    if (dsCount === 1 && hasLabels) {
+      const nums = this.data.datasets[0].data as number[];
+      const points = nums.map((v, i) => ({ x: i, y: v }));
+
+      return {
+        datasets: [{
+          ...this.data.datasets[0],
+          data: points as unknown as number[],
+        }],
+      };
+    }
+
+    // Case C: N datasets each with a single value (one per "point")
+    if (dsCount > 2 && this.data.datasets.every(ds => (ds.data as number[]).length === 1)) {
+      const points = this.data.datasets.map((ds, i) => ({
+        x: i,
+        y: (ds.data as number[])[0],
+      }));
+
+      return {
+        datasets: [{
+          label: '',
+          data: points as unknown as number[],
+        }],
+      };
+    }
+
+    return this.data;
+  }
+
+  /**
    * Normalize matrix data into a single dense grid.
    * Returns a cleaned copy without mutating this.data (avoids re-render loop).
    */
@@ -363,7 +441,8 @@ export class A2UIChart extends LitElement {
 
     this.chart?.destroy();
 
-    const chartData = this.normalizeMatrixData();
+    const scatterFixed = this.normalizeScatterData();
+    const chartData = scatterFixed !== this.data ? scatterFixed : this.normalizeMatrixData();
 
     const ctx = this.canvas.getContext('2d');
     if (!ctx) return;

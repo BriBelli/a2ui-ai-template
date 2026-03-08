@@ -45,6 +45,8 @@ Molecules:
   data-table — columns[{key,label,align?}], data[rows]. align:"right" for numbers.
   chart — chartType(bar|line|pie|doughnut|radar|polarArea|scatter|bubble|treemap|sankey|funnel|matrix), title?, data, options?
     Standard: {labels[],datasets[{label,data[]}]}. Radar: labels=axes, data=scores.
+    Scatter: {datasets:[{label,data:[{x:number,y:number},...]}]}. NO labels[]. Each point is {x,y}. One dataset per series.
+    Bubble: same as scatter but each point is {x,y,r} where r=radius.
     Options: fillArea?,currency?,height?,xAxisLabel?,yAxisLabel?,showGrid?,showLegend?,referenceLine?,referenceLabel?
     ALWAYS include xAxisLabel/yAxisLabel on cartesian charts. Specialized chart data shapes provided when needed.
   accordion — items[{id,title,content}]

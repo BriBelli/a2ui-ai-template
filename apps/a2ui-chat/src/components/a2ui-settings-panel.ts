@@ -367,6 +367,7 @@ export class A2UISettingsPanel extends LitElement {
   @state() private showSources = uiConfig.showSources;
   @state() private showActions = uiConfig.showActions;
   @state() private sourcesPosition: SourcesPosition = uiConfig.sourcesPosition;
+  @state() private streamingText = uiConfig.streamingText;
   @state() private styles: StyleOption[] = [];
   @state() private toolStates: Map<string, ToolState> = new Map();
 
@@ -552,6 +553,11 @@ export class A2UISettingsPanel extends LitElement {
     this.sourcesPosition = (e.target as HTMLSelectElement)
       .value as SourcesPosition;
     setUIConfig({ sourcesPosition: this.sourcesPosition });
+  }
+
+  private handleStreamingText() {
+    this.streamingText = !this.streamingText;
+    setUIConfig({ streamingText: this.streamingText });
   }
 
   render() {
@@ -926,6 +932,25 @@ export class A2UISettingsPanel extends LitElement {
                   Bottom
                 </option>
               </select>
+            </div>
+          </div>
+          <!-- Streaming Text -->
+          <div class="field">
+            <div class="field-row">
+              <div class="field-info">
+                <p class="field-label">Streaming Text</p>
+                <p class="field-desc">
+                  Show progressive text while AI generates
+                </p>
+              </div>
+              <label class="toggle">
+                <input
+                  type="checkbox"
+                  .checked=${this.streamingText}
+                  @change=${this.handleStreamingText}
+                />
+                <span class="toggle-track"></span>
+              </label>
             </div>
           </div>
           <!-- Loading Detail -->

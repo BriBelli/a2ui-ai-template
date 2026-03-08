@@ -1,11 +1,11 @@
-# A2UI Backend
+# A2UI Agent
 
-Python FastAPI backend powering the A2UI chat interface with multi-provider LLM support, AI-driven tool orchestration, and modular content styles.
+Python FastAPI agent powering the A2UI chat interface with multi-provider LLM support, AI-driven tool orchestration, and modular content styles.
 
 ## Setup
 
 ```bash
-cd backend
+cd a2ui-agent
 python3 -m venv venv
 source venv/bin/activate   # macOS/Linux
 pip3 install -r requirements.txt
@@ -18,7 +18,7 @@ cp .env.example .env       # then fill in your API keys
 python3 app.py
 ```
 
-Backend runs on `http://localhost:8000`. Enable debug mode (docs + hot-reload) with `A2UI_DEBUG=true`.
+Agent runs on `http://localhost:8000`. Enable debug mode (docs + hot-reload) with `A2UI_DEBUG=true`.
 
 ## API Endpoints
 
@@ -49,19 +49,35 @@ Backend runs on `http://localhost:8000`. Enable debug mode (docs + hot-reload) w
 
 ### AI-First Pipeline
 
-Every request follows this pipeline — AI decides tool activation, not regex:
+Every request follows a phased pipeline — AI decides tool activation, not regex:
 
 ```
-Step 0: Resolve tool gates (env override > user setting)
-Step 1: AI Intent Analysis (fast model)
-        → decides: content style, web search, geolocation, search query
-Step 2: Location context (only if AI decided + tool gate allows)
-Step 3: Web search (only if AI decided + tool gate allows)
-Step 4: LLM generation (with style-specific system prompt)
-Step 5: Post-processing (visual hierarchy, images, metadata)
+Phase 1:  Parallel Analysis (asyncio.gather)
+          ├── Intent Classifier  → style, search, location, search_query
+          └── Data Source Router → [{source, endpoint, params}]
+Phase 1+: Skip check (_can_skip_explorers)
+Phase 2:  Location pre-step (may pause for browser)
+          Parallel Explorers (asyncio.gather)
+          ├── Web Search (if AI decided + tool gate allows)
+          └── Data Sources (if AI decided + tool gate allows)
+Phase 2.5: Data-Driven Hints (_derive_hints_from_data)
+           Style Refinement (_refine_style_from_data)
+Step 3:   Style prompt + micro-context injection + adaptive model routing
+Step 4:   LLM generation (with token streaming + model fallback)
+Step 5:   Post-processing (normalize, chart hints, hierarchy, metadata)
 ```
 
-When AI is unavailable (disabled, failed, PII/PHI mode), regex-based fallbacks handle tool decisions.
+Key improvements over the previous single-analyzer design:
+- **Split analyzer** — classifier and router run in parallel with independent fallbacks
+- **Phase 2 skip** — trivial queries (greetings, general knowledge) skip all explorers
+- **Data-driven hints** — component hints and complexity derived from actual data, not blind guessing
+- **Style refinement** — content style upgraded based on real data characteristics
+- **Parallel explorers** — web search and data sources run concurrently
+- **Component normalization** — fixes LLM output quirks (type aliases, missing props, chart data format)
+- **Token streaming** — progressive text rendering via SSE `token` events
+- **Model fallback** — if primary model fails, tries an alternate model automatically
+
+When AI is unavailable (disabled, failed), regex-based fallbacks handle tool decisions.
 
 ### Content Styles
 
@@ -91,6 +107,7 @@ Environment (admin locks)  >  User setting (UI toggle)  >  Default
 | Geolocation | `A2UI_TOOL_GEOLOCATION` | `true` |
 | Conversation History | `A2UI_TOOL_HISTORY` | `true` |
 | AI Style Classifier | `A2UI_TOOL_AI_CLASSIFIER` | `true` |
+| Data Sources | `A2UI_TOOL_DATA_SOURCES` | `true` |
 
 Set an env variable to globally lock a tool on or off. When locked, the user's UI toggle is disabled.
 
@@ -98,10 +115,9 @@ Set an env variable to globally lock a tool on or off. When locked, the user's U
 
 | Provider | Models | Env Variable |
 |----------|--------|-------------|
-| OpenAI | GPT-4.1, GPT-4.1 Mini | `OPENAI_API_KEY` |
-| Anthropic | Claude Opus 4.6, Sonnet 4, Haiku 4.5 | `ANTHROPIC_API_KEY` |
+| OpenAI | GPT-5.1, GPT-5, GPT-4.1, GPT-4.1 Mini | `OPENAI_API_KEY` |
+| Anthropic | Claude Opus 4.6, Sonnet 4.6, Sonnet 4.5, Haiku 4.5 | `ANTHROPIC_API_KEY` |
 | Google Gemini | Gemini 3 Pro, Gemini 2.5 Flash | `GEMINI_API_KEY` |
-| LiteLLM | OpenAI-compatible gateway | `LITELLM_API_KEY` |
 
 ## Environment Variables
 
@@ -132,7 +148,9 @@ A2UI_TOOL_AI_CLASSIFIER=   # true/false — lock AI classifier on/off
 | File | Purpose |
 |------|---------|
 | `app.py` | FastAPI routes, middleware, request models |
-| `llm_providers.py` | LLM providers, AI intent analyzer, generate pipeline |
+| `llm_providers.py` | LLM providers, split classifier/router, phased pipeline, component normalization, token streaming |
 | `tools.py` | Web search (Tavily), query rewriting, search utilities |
 | `content_styles/` | Modular prompt definitions per content style |
 | `content_styles/_base.py` | Shared base rules prepended to all styles |
+| `data_sources/` | External API connectors (REST, Databricks Genie) |
+| `micro_contexts.py` | Chart/component micro-context fragments for system prompt injection |

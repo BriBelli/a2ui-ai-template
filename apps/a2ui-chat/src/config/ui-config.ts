@@ -46,6 +46,15 @@ export interface UIConfig {
    * - 'bottom': Always below the content
    */
   sourcesPosition: SourcesPosition;
+
+  /**
+   * Show progressive token streaming in chat while the AI generates.
+   * When enabled, response text streams character-by-character with a typing cursor.
+   * When disabled, the thinking indicator stays visible until the full response arrives.
+   * Backend SSE streaming always runs regardless — this only controls the UX.
+   * Default: true.
+   */
+  streamingText: boolean;
 }
 
 export type SourcesPosition = 'auto' | 'right' | 'bottom';
@@ -138,6 +147,7 @@ export const uiConfig: UIConfig = {
   showSources: true,
   showActions: true,
   sourcesPosition: 'auto',
+  streamingText: true,
 };
 
 /**

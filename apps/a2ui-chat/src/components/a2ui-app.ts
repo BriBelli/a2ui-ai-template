@@ -21,7 +21,6 @@ import {
   getTheme,
   type Theme,
 } from "../services/theme-service";
-import { getUserLocation } from "../services/geolocation-service";
 import type { ThinkingStep } from "./chat/a2ui-thinking-indicator";
 
 @customElement("a2ui-app")
@@ -538,7 +537,6 @@ export class A2UIApp extends LitElement {
         this.restoreLastThread();
         this.refreshThreadList();
         this.loadProviders();
-        if (aiConfig.geolocation) getUserLocation();
       }
     });
 
@@ -548,7 +546,6 @@ export class A2UIApp extends LitElement {
       this.restoreLastThread();
       this.refreshThreadList();
       await this.loadProviders();
-      if (aiConfig.geolocation) getUserLocation();
     }
   }
 
@@ -845,20 +842,45 @@ export class A2UIApp extends LitElement {
 
     try {
       const smartRouting = this.isAutoModel || aiConfig.smartRouting;
+      const streamingMsgId = crypto.randomUUID();
+      let streamingActive = false;
+
       const response = await this.chatService.sendMessage(
         message,
         this.resolvedProvider,
         this.resolvedModel,
         this.messages,
         smartRouting,
-        (_phase, _detail, streamEvent?) => {
-          if (streamEvent) handleStreamEvent(streamEvent);
+        (phase, detail, streamEvent?) => {
+          if (phase === 'token' && detail && uiConfig.streamingText) {
+            if (!streamingActive) {
+              streamingActive = true;
+              this.messages = [
+                ...this.messages,
+                {
+                  id: streamingMsgId,
+                  role: 'assistant',
+                  content: detail,
+                  timestamp: Date.now(),
+                  streaming: true,
+                },
+              ];
+            } else {
+              const idx = this.messages.findIndex(m => m.id === streamingMsgId);
+              if (idx >= 0) {
+                const updated = [...this.messages];
+                updated[idx] = { ...updated[idx], content: detail };
+                this.messages = updated;
+              }
+            }
+          } else if (streamEvent) {
+            handleStreamEvent(streamEvent);
+          }
         },
       );
 
       steps.forEach((_, i) => done(i));
 
-      // If the server routed to a different model/provider, reflect that
       const actualProviderId = response._provider || this.selectedProvider;
       const actualModelId = response._model || this.selectedModel;
       const actualProvider = this.providers.find(
@@ -876,24 +898,35 @@ export class A2UIApp extends LitElement {
 
       const elapsed = (performance.now() - startTime) / 1000;
 
-      this.messages = [
-        ...this.messages,
-        {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          content: response.text || "",
-          a2ui: response.a2ui,
-          timestamp: Date.now(),
-          model: modelLabel,
-          provider: actualProviderId,
-          modelUpgraded: wasUpgraded,
-          suggestions: response.suggestions,
-          duration: Math.round(elapsed * 10) / 10,
-          images: response._images,
-          style: response._style,
-          sources: response._sources,
-        },
-      ];
+      const finalMsg: ChatMessage = {
+        id: streamingActive ? streamingMsgId : crypto.randomUUID(),
+        role: "assistant",
+        content: response.text || "",
+        a2ui: response.a2ui,
+        timestamp: Date.now(),
+        model: modelLabel,
+        provider: actualProviderId,
+        modelUpgraded: wasUpgraded,
+        suggestions: response.suggestions,
+        duration: Math.round(elapsed * 10) / 10,
+        images: response._images,
+        style: response._style,
+        sources: response._sources,
+        streaming: false,
+      };
+
+      if (streamingActive) {
+        const idx = this.messages.findIndex(m => m.id === streamingMsgId);
+        if (idx >= 0) {
+          const updated = [...this.messages];
+          updated[idx] = finalMsg;
+          this.messages = updated;
+        } else {
+          this.messages = [...this.messages, finalMsg];
+        }
+      } else {
+        this.messages = [...this.messages, finalMsg];
+      }
 
       this.persistThread();
       this.refreshThreadList();

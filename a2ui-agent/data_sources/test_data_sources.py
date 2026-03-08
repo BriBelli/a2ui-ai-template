@@ -2,7 +2,7 @@
 """
 Data Sources — Quick Test Script
 
-Run from the backend directory while the server is running:
+Run from the a2ui-agent directory while the server is running:
     python3 data_sources/test_data_sources.py
 
 Tests both passive and active data source modes against your local API.
@@ -69,7 +69,7 @@ async def test_health() -> bool:
             return True
         except Exception as e:
             print(f"  {RED}✗ Server not reachable: {e}{RESET}")
-            print(f"  {RED}  Start it with: cd backend && python3 app.py{RESET}")
+            print(f"  {RED}  Start it with: cd a2ui-agent && python3 app.py{RESET}")
             return False
 
 

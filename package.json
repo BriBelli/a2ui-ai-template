@@ -6,7 +6,6 @@
     "frontend:start": "nx start frontend",
     "frontend:build": "nx build frontend",
     "frontend:test": "nx test frontend",
-    "backend:start": "cd backend && python3 app.py",
     "a2ui:demo": "nx dev a2ui-demo",
     "a2ui:demo:build": "nx build a2ui-demo",
     "a2ui:chat": "nx dev a2ui-chat",
@@ -14,7 +13,7 @@
     "a2ui:core:build": "nx build a2ui-core",
     "a2ui:react:build": "nx build a2ui-react",
     "build:all": "nx run-many -t build",
-    "dev": "concurrently \"npm run backend:start\" \"npm run a2ui:chat\""
+    "dev": "concurrently \"npm run agent:start\" \"npm run a2ui:chat\""
   },
   "private": true,
   "devDependencies": {
