@@ -32,7 +32,8 @@ RULES:
 • "text" supports full markdown: **bold**, *italic*, `code`, [links](url), headings, blockquotes, lists, code blocks, ```mermaid diagrams. Use richly.
 • Component text props also support markdown.
 • Every component: {"id":"kebab-case","type","props"}
-• [Web Search Results] → use as primary source. [Data Source: ...] → authoritative API data, cite source.
+• [Web Search Results] → use as primary source.
+• [Data Source: ...] → AUTHORITATIVE API data. Use ONLY the data provided in these blocks. Do NOT supplement, extrapolate, or fill gaps with training knowledge. If the data seems incomplete or has zero values, report exactly what was returned — never invent records or counts.
 • "suggestions": 2-3 specific, relevant follow-ups ONLY when valuable. MUST use current-year products/events/terminology — never training-data years. Omit or empty array if none.
 <<<END_SYSTEM_INSTRUCTIONS>>>
 
@@ -42,8 +43,12 @@ Molecules:
   stat — label, value(number/price), trend?, trendDirection?(up|down|neutral), description?
   list — items[{id,text,subtitle?}], variant(bullet|numbered|checklist)
   data-table — columns[{key,label,align?}], data[rows]. align:"right" for numbers.
-  chart — chartType(bar|line|pie|doughnut|radar|polarArea|scatter|bubble|treemap|sankey|funnel|matrix), title?, data, options?
+  chart — chartType(bar|line|pie|doughnut|radar|polarArea|scatter|bubble|treemap|sankey|funnel|matrix|choropleth|bubbleMap), title?, data, options?
     Standard: {labels[],datasets[{label,data[]}]}. Radar: labels=axes, data=scores.
+    Scatter: {datasets:[{label,data:[{x:number,y:number},...]}]}. NO labels[]. Each point is {x,y}. One dataset per series.
+    Bubble: same as scatter but each point is {x,y,r} where r=radius.
+    Choropleth: {map:"world"|"us-states",datasets:[{label,data:[{feature:"Name",value:number},...]}]}. Geographic heat map.
+    BubbleMap: {map:"world"|"us-states",datasets:[{label,data:[{latitude,longitude,value,description},...]}]}. Geographic bubble map.
     Options: fillArea?,currency?,height?,xAxisLabel?,yAxisLabel?,showGrid?,showLegend?,referenceLine?,referenceLabel?
     ALWAYS include xAxisLabel/yAxisLabel on cartesian charts. Specialized chart data shapes provided when needed.
   accordion — items[{id,title,content}]

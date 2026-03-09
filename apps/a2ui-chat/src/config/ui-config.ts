@@ -46,11 +46,20 @@ export interface UIConfig {
    * - 'bottom': Always below the content
    */
   sourcesPosition: SourcesPosition;
+
+  /**
+   * Show progressive token streaming in chat while the AI generates.
+   * When enabled, response text streams character-by-character with a typing cursor.
+   * When disabled, the thinking indicator stays visible until the full response arrives.
+   * Backend SSE streaming always runs regardless — this only controls the UX.
+   * Default: true.
+   */
+  streamingText: boolean;
 }
 
 export type SourcesPosition = 'auto' | 'right' | 'bottom';
 
-export type ContentStyle = 'auto' | 'analytical' | 'content' | 'comparison' | 'howto' | 'quick';
+export type ContentStyle = 'auto' | 'analytical' | 'content' | 'comparison' | 'dashboard' | 'howto' | 'quick';
 export type PerformanceMode = 'auto' | 'comprehensive' | 'optimized';
 export type LoadingDetail = 'basic' | 'moderate' | 'comprehensive' | 'thought';
 export type LoadingStyle = 'basic' | 'focus' | 'stack';
@@ -87,6 +96,7 @@ export interface AIConfig {
    * - 'analytical': Data dashboards with KPIs, charts, tables
    * - 'content': Narrative/editorial with sections, lists, accordions
    * - 'comparison': Side-by-side analysis with charts and detail tables
+   * - 'dashboard': Modern KPI cards, charts, and clean grid layout
    * - 'howto': Step-by-step instructions and procedural guides
    * - 'quick': Concise direct answers with minimal components
    */
@@ -138,6 +148,7 @@ export const uiConfig: UIConfig = {
   showSources: true,
   showActions: true,
   sourcesPosition: 'auto',
+  streamingText: true,
 };
 
 /**
@@ -157,7 +168,7 @@ export const aiConfig: AIConfig = {
 };
 
 const VALID_CONTENT_STYLES: ReadonlySet<ContentStyle> = new Set([
-  'auto', 'analytical', 'content', 'comparison', 'howto', 'quick',
+  'auto', 'analytical', 'content', 'comparison', 'dashboard', 'howto', 'quick',
 ]);
 const VALID_PERFORMANCE_MODES: ReadonlySet<PerformanceMode> = new Set([
   'auto', 'comprehensive', 'optimized',

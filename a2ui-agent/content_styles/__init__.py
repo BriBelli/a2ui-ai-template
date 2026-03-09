@@ -28,6 +28,7 @@ from ._base import BASE_RULES
 from .analytical import STYLE as _analytical
 from .comparison import STYLE as _comparison
 from .content import STYLE as _content
+from .dashboard import STYLE as _dashboard
 from .howto import STYLE as _howto
 from .quick import STYLE as _quick
 
@@ -36,7 +37,7 @@ logger = logging.getLogger(__name__)
 # ── Registry ──────────────────────────────────────────────────
 
 CONTENT_STYLES: Dict[str, Dict[str, Any]] = {
-    s["id"]: s for s in [_analytical, _content, _comparison, _howto, _quick]
+    s["id"]: s for s in [_analytical, _content, _comparison, _dashboard, _howto, _quick]
 }
 
 DEFAULT_STYLE = "content"
@@ -146,7 +147,13 @@ _CLASSIFICATION_RULES = [
         r"\b(?:forecast|GDP|inflation|interest\s*rate|unemployment|economic"
         r"|recession|deficit|trade\s*balance)\b", re.IGNORECASE,
     ), "analytical"),
-    (re.compile(r"\b(?:KPI|dashboard|metric|analytics)\b", re.IGNORECASE), "analytical"),
+    (re.compile(r"\b(?:KPI|metric|analytics)\b", re.IGNORECASE), "analytical"),
+
+    # ── Dashboard signals ──
+    (re.compile(
+        r"\b(?:dashboard|scoreboard|KPI\s*board|executive\s*summary"
+        r"|status\s*board|overview\s*panel)\b", re.IGNORECASE,
+    ), "dashboard"),
 
     # ── Rankings with financial context → analytical ──
     (re.compile(

@@ -1,11 +1,15 @@
-import { LitElement, html, css, unsafeCSS, nothing } from "lit";
-import { customElement, property, state } from "lit/decorators.js";
-import type { ChatMessage, SourceCitation } from "../../services/chat-service";
-import { A2UIRenderer } from "../../services/a2ui-renderer";
-import { uiConfig } from "../../config/ui-config";
-import { md, markdownStyles, renderMermaidDiagrams } from "../../services/markdown";
+import { LitElement, html, css, unsafeCSS, nothing } from 'lit';
+import { customElement, property, state } from 'lit/decorators.js';
+import type { ChatMessage, SourceCitation } from '../../services/chat-service';
+import { A2UIRenderer } from '../../services/a2ui-renderer';
+import { uiConfig } from '../../config/ui-config';
+import {
+  md,
+  markdownStyles,
+  renderMermaidDiagrams,
+} from '../../services/markdown';
 
-@customElement("a2ui-chat-message")
+@customElement('a2ui-chat-message')
 export class A2UIChatMessage extends LitElement {
   static styles = css`
     :host {
@@ -69,8 +73,11 @@ export class A2UIChatMessage extends LitElement {
     }
 
     .avatar.assistant {
-      background: linear-gradient(135deg, #4285f4, #ea4335, #fbbc05, #34a853);
-      color: white;
+      background: conic-gradient(
+        from 180deg,
+        #f28b82, #fdd663, #81c995, #8ab4f8, #c58af9, #f28b82
+      );
+      color: #1a1a1a;
     }
 
     .content {
@@ -883,6 +890,52 @@ export class A2UIChatMessage extends LitElement {
       }
     }
 
+    /* ── Streaming cursor animation ────────────── */
+
+    .streaming-text::after {
+      content: '▊';
+      display: inline;
+      animation: blink 0.7s steps(2) infinite;
+      color: var(--a2ui-accent);
+      font-weight: var(--a2ui-font-normal, 400);
+      margin-left: 1px;
+    }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
+    }
+
+    /* ── Staggered A2UI component entrance ─────── */
+    /* Applied when the message transitions from streaming → complete.
+       Targets the direct children of .a2ui-root (the flex container with
+       gap:16px) so component spacing is preserved.  Each child gets an
+       increasing animation-delay via nth-child for a cascading effect. */
+
+    .a2ui-content.staggered .a2ui-root > * {
+      opacity: 0;
+      transform: translateY(8px);
+      animation: componentSlideIn 0.35s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    }
+    .a2ui-content.staggered .a2ui-root > :nth-child(1) { animation-delay: 0ms; }
+    .a2ui-content.staggered .a2ui-root > :nth-child(2) { animation-delay: 120ms; }
+    .a2ui-content.staggered .a2ui-root > :nth-child(3) { animation-delay: 240ms; }
+    .a2ui-content.staggered .a2ui-root > :nth-child(4) { animation-delay: 360ms; }
+    .a2ui-content.staggered .a2ui-root > :nth-child(5) { animation-delay: 480ms; }
+    .a2ui-content.staggered .a2ui-root > :nth-child(6) { animation-delay: 600ms; }
+    .a2ui-content.staggered .a2ui-root > :nth-child(n+7) { animation-delay: 720ms; }
+
+    @keyframes componentSlideIn {
+      from {
+        opacity: 0;
+        transform: translateY(8px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
     /* ── Markdown (assistant text) ─────────────── */
     ${unsafeCSS(markdownStyles)}
   `;
@@ -891,11 +944,27 @@ export class A2UIChatMessage extends LitElement {
   @property({ type: Boolean }) editable = false;
   @property({ type: Boolean }) isLast = false;
   @state() private _editing = false;
-  @state() private _editText = "";
+  @state() private _editText = '';
   @state() private _copied = false;
-  @state() private _liked: "up" | "down" | null = null;
+  @state() private _liked: 'up' | 'down' | null = null;
   @state() private _sourcesExpanded = false;
   @state() private _mobileSourcesOpen = false;
+
+  /**
+   * Track whether the message just transitioned from streaming to complete.
+   * Used to apply the staggered A2UI component entrance animation.
+   */
+  @state() private _wasStreaming = false;
+
+  willUpdate(changed: Map<string, unknown>) {
+    super.willUpdate(changed);
+    if (changed.has('message')) {
+      const prev = changed.get('message') as ChatMessage | undefined;
+      if (prev?.streaming && !this.message.streaming && this.message.a2ui) {
+        this._wasStreaming = true;
+      }
+    }
+  }
 
   private _renderWandIcon() {
     return html`<svg class="wand-icon" viewBox="0 0 24 24" fill="currentColor">
@@ -911,7 +980,11 @@ export class A2UIChatMessage extends LitElement {
     let src = '';
     if (p.includes('anthropic') || model.includes('claude')) {
       src = '/icons/anthropic.ico';
-    } else if (p.includes('openai') || model.includes('gpt') || model.includes('o4')) {
+    } else if (
+      p.includes('openai') ||
+      model.includes('gpt') ||
+      model.includes('o4')
+    ) {
       src = '/icons/gpt.ico';
     } else if (p.includes('google') || model.includes('gemini')) {
       src = '/icons/gemini.png';
@@ -923,17 +996,21 @@ export class A2UIChatMessage extends LitElement {
       </svg>`;
     }
 
-    return html`<img class="provider-icon" src=${src} alt="" @error=${(e: Event) => { (e.target as HTMLElement).style.display = 'none'; }} />`;
+    return html`<img class="provider-icon" src=${src} alt="" @error=${(
+      e: Event
+    ) => {
+      (e.target as HTMLElement).style.display = 'none';
+    }} />`;
   }
 
   private _startEdit() {
-    if (!this.editable || this.message.role !== "user") return;
+    if (!this.editable || this.message.role !== 'user') return;
     this._editText = this.message.content;
     this._editing = true;
     this.requestUpdate();
     setTimeout(() => {
       const ta =
-        this.shadowRoot?.querySelector<HTMLTextAreaElement>(".edit-textarea");
+        this.shadowRoot?.querySelector<HTMLTextAreaElement>('.edit-textarea');
       if (ta) {
         ta.focus();
         ta.setSelectionRange(ta.value.length, ta.value.length);
@@ -954,30 +1031,30 @@ export class A2UIChatMessage extends LitElement {
     }
     this._editing = false;
     this.dispatchEvent(
-      new CustomEvent("edit-message", {
+      new CustomEvent('edit-message', {
         detail: { messageId: this.message.id, newContent: trimmed },
         bubbles: true,
         composed: true,
-      }),
+      })
     );
   }
 
   private _handleEditKeydown(e: KeyboardEvent) {
-    if (e.key === "Enter" && !e.shiftKey) {
+    if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       this._submitEdit();
-    } else if (e.key === "Escape") {
+    } else if (e.key === 'Escape') {
       this._cancelEdit();
     }
   }
 
   private _autoResize(el: HTMLTextAreaElement) {
-    el.style.height = "auto";
-    el.style.height = Math.min(el.scrollHeight, 200) + "px";
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 200) + 'px';
   }
 
   private async _copyResponse() {
-    const text = this.message.content || "";
+    const text = this.message.content || '';
     try {
       await navigator.clipboard.writeText(text);
       this._copied = true;
@@ -991,25 +1068,25 @@ export class A2UIChatMessage extends LitElement {
 
   private _regenerate() {
     this.dispatchEvent(
-      new CustomEvent("regenerate-message", {
+      new CustomEvent('regenerate-message', {
         detail: { messageId: this.message.id },
         bubbles: true,
         composed: true,
-      }),
+      })
     );
   }
 
-  private _toggleLike(dir: "up" | "down") {
+  private _toggleLike(dir: 'up' | 'down') {
     this._liked = this._liked === dir ? null : dir;
   }
 
   private _deletePrompt() {
     this.dispatchEvent(
-      new CustomEvent("delete-message", {
+      new CustomEvent('delete-message', {
         detail: { messageId: this.message.id },
         bubbles: true,
         composed: true,
-      }),
+      })
     );
   }
 
@@ -1019,7 +1096,7 @@ export class A2UIChatMessage extends LitElement {
 
   private _getDomain(url: string): string {
     try {
-      return new URL(url).hostname.replace(/^www\./, "");
+      return new URL(url).hostname.replace(/^www\./, '');
     } catch {
       return url;
     }
@@ -1030,7 +1107,7 @@ export class A2UIChatMessage extends LitElement {
       const domain = new URL(url).hostname;
       return `https://www.google.com/s2/favicons?domain=${domain}&sz=32`;
     } catch {
-      return "";
+      return '';
     }
   }
 
@@ -1045,7 +1122,9 @@ export class A2UIChatMessage extends LitElement {
     const hasMore = total > previewCount;
 
     return html`
-      <div class="sources-panel ${this._mobileSourcesOpen ? 'mobile-open' : ''}">
+      <div class="sources-panel ${
+        this._mobileSourcesOpen ? 'mobile-open' : ''
+      }">
         <div
           class="sources-header"
           @click=${this._toggleMobileSources}
@@ -1068,7 +1147,7 @@ export class A2UIChatMessage extends LitElement {
             />
           </svg>
           <span class="sources-count"
-            >${total} source${total !== 1 ? "s" : ""}</span
+            >${total} source${total !== 1 ? 's' : ''}</span
           >
           <svg class="sources-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="9 18 15 12 9 6" />
@@ -1076,7 +1155,7 @@ export class A2UIChatMessage extends LitElement {
         </div>
         <div class="sources-list">
           ${visible.map((s) =>
-            s.type === "data"
+            s.type === 'data'
               ? html`
                   <div class="source-card">
                     <div class="source-data-icon">
@@ -1115,7 +1194,7 @@ export class A2UIChatMessage extends LitElement {
                         alt=""
                         loading="lazy"
                         @error=${(e: Event) => {
-                          (e.target as HTMLImageElement).style.display = "none";
+                          (e.target as HTMLImageElement).style.display = 'none';
                         }}
                       />
                     </div>
@@ -1136,11 +1215,12 @@ export class A2UIChatMessage extends LitElement {
                       </div>
                     </div>
                   </a>
-                `,
+                `
           )}
         </div>
-        ${hasMore && !this._sourcesExpanded
-          ? html`
+        ${
+          hasMore && !this._sourcesExpanded
+            ? html`
               <button
                 class="sources-show-all"
                 @click=${() => {
@@ -1150,7 +1230,8 @@ export class A2UIChatMessage extends LitElement {
                 Show all
               </button>
             `
-          : ""}
+            : ''
+        }
       </div>
     `;
   }
@@ -1159,13 +1240,13 @@ export class A2UIChatMessage extends LitElement {
     return html`
       <span class="meta-actions">
         <button
-          class="action-btn ${this._liked === "up" ? "active" : ""}"
+          class="action-btn ${this._liked === 'up' ? 'active' : ''}"
           title="Good response"
-          @click=${() => this._toggleLike("up")}
+          @click=${() => this._toggleLike('up')}
         >
           <svg
             viewBox="0 0 24 24"
-            fill="${this._liked === "up" ? "currentColor" : "none"}"
+            fill="${this._liked === 'up' ? 'currentColor' : 'none'}"
             stroke="currentColor"
             stroke-width="2"
             stroke-linecap="round"
@@ -1177,13 +1258,13 @@ export class A2UIChatMessage extends LitElement {
           </svg>
         </button>
         <button
-          class="action-btn ${this._liked === "down" ? "active" : ""}"
+          class="action-btn ${this._liked === 'down' ? 'active' : ''}"
           title="Needs improvement"
-          @click=${() => this._toggleLike("down")}
+          @click=${() => this._toggleLike('down')}
         >
           <svg
             viewBox="0 0 24 24"
-            fill="${this._liked === "down" ? "currentColor" : "none"}"
+            fill="${this._liked === 'down' ? 'currentColor' : 'none'}"
             stroke="currentColor"
             stroke-width="2"
             stroke-linecap="round"
@@ -1225,8 +1306,9 @@ export class A2UIChatMessage extends LitElement {
             <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
           </svg>
         </button>
-        ${this.isLast
-          ? html`
+        ${
+          this.isLast
+            ? html`
               <button
                 class="action-btn"
                 title="Delete"
@@ -1247,25 +1329,26 @@ export class A2UIChatMessage extends LitElement {
                 </svg>
               </button>
             `
-          : ""}
+            : ''
+        }
       </span>
     `;
   }
 
   private handleFollowup(text: string) {
     this.dispatchEvent(
-      new CustomEvent("send-message", {
+      new CustomEvent('send-message', {
         detail: { message: text },
         bubbles: true,
         composed: true,
-      }),
+      })
     );
   }
 
   connectedCallback() {
     super.connectedCallback();
     if (uiConfig.animateMessages) {
-      this.setAttribute("animate", "");
+      this.setAttribute('animate', '');
     }
   }
 
@@ -1275,15 +1358,15 @@ export class A2UIChatMessage extends LitElement {
 
   private formatTime(timestamp: number): string {
     return new Date(timestamp).toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
+      hour: '2-digit',
+      minute: '2-digit',
     });
   }
 
   private _isSafeImageUrl(url: string): boolean {
     try {
       const parsed = new URL(url);
-      return parsed.protocol === "https:" || parsed.protocol === "http:";
+      return parsed.protocol === 'https:' || parsed.protocol === 'http:';
     } catch {
       return false;
     }
@@ -1291,27 +1374,31 @@ export class A2UIChatMessage extends LitElement {
 
   render() {
     const { role, content, a2ui, timestamp, model } = this.message;
-    const isUser = role === "user";
+    const isUser = role === 'user';
     const hasSources = !isUser && this.message.sources?.length;
 
     return html`
       <div
         class="message ${role}"
         role="article"
-        aria-label="${isUser ? "User" : "Assistant"} message"
+        aria-label="${isUser ? 'User' : 'Assistant'} message"
       >
         <div class="avatar ${role}" aria-hidden="true">
-          ${isUser
-            ? this.message.avatarUrl
-              ? html`<img src=${this.message.avatarUrl} alt="" />`
-              : this.message.avatarInitials || "U"
-            : "AI"}
+          ${
+            isUser
+              ? this.message.avatarUrl
+                ? html`<img src=${this.message.avatarUrl} alt="" />`
+                : this.message.avatarInitials || 'U'
+              : 'AI'
+          }
         </div>
         <div class="content">
-          ${isUser
-            ? html`
-                ${this._editing
-                  ? html`
+          ${
+            isUser
+              ? html`
+                ${
+                  this._editing
+                    ? html`
                       <div class="edit-container">
                         <textarea
                           class="edit-textarea"
@@ -1332,8 +1419,10 @@ export class A2UIChatMessage extends LitElement {
                           </button>
                           <button
                             class="edit-btn submit"
-                            ?disabled=${!this._editText.trim() ||
-                            this._editText.trim() === content}
+                            ?disabled=${
+                              !this._editText.trim() ||
+                              this._editText.trim() === content
+                            }
                             @click=${this._submitEdit}
                           >
                             Send
@@ -1341,35 +1430,62 @@ export class A2UIChatMessage extends LitElement {
                         </div>
                       </div>
                     `
-                  : html`
+                    : html`
                       <div
-                        class="bubble ${this.editable ? "editable" : ""}"
-                        @dblclick=${this.editable
-                          ? () => this._startEdit()
-                          : nothing}
-                        title=${this.editable ? "Double-click to edit" : ""}
+                        class="bubble ${this.editable ? 'editable' : ''}"
+                        @dblclick=${
+                          this.editable ? () => this._startEdit() : nothing
+                        }
+                        title=${this.editable ? 'Double-click to edit' : ''}
                       >
                         <div class="text-content">${content}</div>
                       </div>
-                    `}
+                    `
+                }
               `
-            : html`
+              : this.message.streaming
+              ? html`
+                  <!-- Streaming state: text only, with blinking cursor -->
+                  <div class="response-layout pos-${uiConfig.sourcesPosition}">
+                    <div class="response-main">
+                      <div class="bubble">
+                        ${
+                          content
+                            ? html`<div class="text-content streaming-text">${md(
+                                content
+                              )}</div>`
+                            : html`<div class="text-content streaming-text">&nbsp;</div>`
+                        }
+                      </div>
+                    </div>
+                  </div>
+                `
+              : html`
                 <div class="response-layout pos-${uiConfig.sourcesPosition}">
                   <div class="response-main">
                     <div class="bubble">
-                      ${content
-                        ? html` <div class="text-content">${md(content)}</div> `
-                        : ""}
-                      ${a2ui
-                        ? html`
-                            <div class="a2ui-content">
+                      ${
+                        content
+                          ? html` <div class="text-content">${md(
+                              content
+                            )}</div> `
+                          : ''
+                      }
+                      ${
+                        a2ui
+                          ? html`
+                            <div class="a2ui-content${
+                              this._wasStreaming ? ' staggered' : ''
+                            }">
                               ${A2UIRenderer.render(a2ui)}
                             </div>
                           `
-                        : ""}
+                          : ''
+                      }
                     </div>
-                    ${this.message.images?.length
-                      ? html`
+                    ${
+                      this.message.images?.length
+                        ? html`
                           <div class="image-strip">
                             ${this.message.images
                               .filter((url) => this._isSafeImageUrl(url))
@@ -1387,44 +1503,62 @@ export class A2UIChatMessage extends LitElement {
                                       @error=${(e: Event) => {
                                         (
                                           e.target as HTMLElement
-                                        ).parentElement!.style.display = "none";
+                                        ).parentElement!.style.display = 'none';
                                       }}
                                     />
                                   </a>
-                                `,
+                                `
                               )}
                           </div>
                         `
-                      : ""}
+                        : ''
+                    }
                     <div class="meta">
-                      ${model
-                        ? html`<span class="model-badge">${this.message.modelUpgraded ? html`<span class="sparkles-icon">✨</span>` : nothing} ${this._renderProviderIcon(this.message.provider)} ${model}</span>`
-                        : ""}
-                      ${this.message.duration
-                        ? html`
+                      ${
+                        model
+                          ? html`<span class="model-badge">${
+                              this.message.modelUpgraded
+                                ? html`<span class="sparkles-icon">✨</span>`
+                                : nothing
+                            } ${this._renderProviderIcon(
+                              this.message.provider
+                            )} ${model}</span>`
+                          : ''
+                      }
+                      ${
+                        this.message.duration
+                          ? html`
                             <span class="duration"
                               >${this.message.duration}s</span
                             >
                           `
-                        : ""}
+                          : ''
+                      }
                       <span>${this.formatTime(timestamp)}</span>
-                      ${this.message.style
-                        ? html`
+                      ${
+                        this.message.style
+                          ? html`
                             <span class="style-badge"
-                              >${this.message.style.charAt(0).toUpperCase() +
-                              this.message.style.slice(1)}</span
+                              >${
+                                this.message.style.charAt(0).toUpperCase() +
+                                this.message.style.slice(1)
+                              }</span
                             >
                           `
-                        : ""}
-                      ${uiConfig.showActions ? this._renderActions() : ""}
+                          : ''
+                      }
+                      ${uiConfig.showActions ? this._renderActions() : ''}
                     </div>
                   </div>
-                  ${uiConfig.showSources && hasSources
-                    ? this._renderSources(this.message.sources!)
-                    : ""}
-                  ${uiConfig.maxSuggestions > 0 &&
-                  this.message.suggestions?.length
-                    ? html`
+                  ${
+                    uiConfig.showSources && hasSources
+                      ? this._renderSources(this.message.sources!)
+                      : ''
+                  }
+                  ${
+                    uiConfig.maxSuggestions > 0 &&
+                    this.message.suggestions?.length
+                      ? html`
                         <div class="followups">
                           ${this.message.suggestions
                             .slice(0, uiConfig.maxSuggestions)
@@ -1449,20 +1583,24 @@ export class A2UIChatMessage extends LitElement {
                                   </svg>
                                   ${s}
                                 </button>
-                              `,
+                              `
                             )}
                         </div>
                       `
-                    : ""}
+                      : ''
+                  }
                 </div>
-              `}
-          ${isUser
-            ? html`
+              `
+          }
+          ${
+            isUser
+              ? html`
                 <div class="meta">
                   <span>${this.formatTime(timestamp)}</span>
                 </div>
               `
-            : ""}
+              : ''
+          }
         </div>
       </div>
     `;

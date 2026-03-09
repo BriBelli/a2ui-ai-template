@@ -26,7 +26,7 @@ export const aiConfig: AIConfig = {
    ```
 3. Install the package:
    ```bash
-   cd backend && pip install tavily-python
+   cd a2ui-agent && pip install tavily-python
    ```
 
 ## Graceful Fallback System
@@ -139,7 +139,7 @@ Or on failure:
 
 ## Alternative Search Providers
 
-The `backend/tools.py` module can be swapped for:
+The `a2ui-agent/tools.py` module can be swapped for:
 - **Brave Search** (2000 free/month)
 - **DuckDuckGo** (unlimited, free)
 - **SerpAPI** (100 free/month)

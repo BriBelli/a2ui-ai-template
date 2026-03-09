@@ -1,7 +1,7 @@
 # Frontend Documentation for My Python React App
 
 ## Overview
-This is the frontend part of the `pxs`, built using React. It serves as the user interface for the application, interacting with the backend API.
+This is the frontend part of the `pxs`, built using React. It serves as the user interface for the application, interacting with the agent API.
 
 ## Getting Started
 

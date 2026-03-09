@@ -27,7 +27,7 @@ import uvicorn
 
 from content_styles import get_available_styles
 from data_sources import get_available_sources
-from llm_providers import llm_service
+from llm_providers import llm_service, provide_location
 
 logger = logging.getLogger(__name__)
 
@@ -126,7 +126,7 @@ class DataContextItem(BaseModel):
     data: Any = None
 
 
-VALID_CONTENT_STYLES = {"auto", "analytical", "content", "comparison", "howto", "quick"}
+VALID_CONTENT_STYLES = {"auto", "analytical", "content", "comparison", "dashboard", "howto", "quick"}
 VALID_PERFORMANCE_MODES = {"auto", "comprehensive", "optimized"}
 
 
@@ -324,6 +324,19 @@ async def chat(request: Request, body: ChatRequest):
             },
             status_code=500,
         )
+
+
+@app.post("/api/provide-location/{request_id}")
+@limiter.limit("30/minute")
+async def handle_provide_location(request: Request, request_id: str, body: UserLocation):
+    """Receive geolocation from the frontend mid-pipeline.
+
+    The SSE stream emits a ``need_location`` event with a request_id.
+    The frontend resolves the browser Geolocation API and POSTs the
+    result here so the pipeline can resume with location context.
+    """
+    provide_location(request_id, body.model_dump())
+    return JSONResponse(content={"ok": True})
 
 
 if __name__ == "__main__":

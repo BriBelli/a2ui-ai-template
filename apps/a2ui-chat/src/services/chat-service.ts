@@ -1,6 +1,6 @@
 import type { A2UIResponse } from '@a2ui/core';
 import { aiConfig } from '../config/ui-config';
-import { getUserLocation } from './geolocation-service';
+import { getCachedLocation, getUserLocation } from './geolocation-service';
 import { toast } from './toast-service';
 
 export interface SourceCitation {
@@ -34,6 +34,8 @@ export interface ChatMessage {
   provider?: string;
   /** True when model was dynamically upgraded by adaptive routing */
   modelUpgraded?: boolean;
+  /** True while the response is still streaming tokens (text only, no A2UI yet) */
+  streaming?: boolean;
 }
 
 /** Simplified message format for API history */
@@ -181,91 +183,14 @@ export class ChatService {
   }
 
   /**
-   * Lightweight check — mirrors backend's should_search().
-   * Used to predict whether the backend will search so the
-   * thinking indicator can show the right steps immediately.
-   */
-  willSearch(message: string): boolean {
-    const m = message.toLowerCase();
-    const indicators = [
-      'current',
-      'latest',
-      'today',
-      'now',
-      'recent',
-      'right now',
-      'these days',
-      'nowadays',
-      'trending',
-      'popular',
-      'getting noticed',
-      'going viral',
-      'price',
-      'stock',
-      'market',
-      'trading',
-      'bitcoin',
-      'crypto',
-      'weather',
-      'forecast',
-      'temperature',
-      'news',
-      'headlines',
-      'score',
-      'game',
-      'what is',
-      'what are',
-      'how much',
-      'who won',
-      'who is',
-      'compare',
-      'vs',
-      'versus',
-      'show me',
-      'pictures of',
-      'photos of',
-      'images of',
-      'artwork',
-      'art',
-      'design',
-      '2024',
-      '2025',
-      '2026',
-    ];
-    return indicators.some((i) => m.includes(i));
-  }
-
-  /**
-   * Check if a message would benefit from the user's location.
-   * Only local queries (weather, nearby, events, food) need it.
-   */
-  needsLocation(message: string): boolean {
-    const m = message.toLowerCase();
-    const localIndicators = [
-      'weather',
-      'forecast',
-      'temperature',
-      'near me',
-      'nearby',
-      'local',
-      'restaurant',
-      'food',
-      'store',
-      'shop',
-      'event',
-      'concert',
-      'traffic',
-      'commute',
-      'directions',
-      'open now',
-      'closest',
-    ];
-    return localIndicators.some((i) => m.includes(i));
-  }
-
-  /**
    * Send a message to the backend via SSE stream for real-time pipeline events.
    * Falls back to regular JSON if the stream fails.
+   *
+   * If location was previously resolved and cached, it's included in the
+   * request so the backend can use it immediately. Otherwise the backend
+   * analyzer decides whether location is needed and requests it mid-stream
+   * via a ``need_location`` SSE event — the frontend then resolves the
+   * browser Geolocation API and POSTs the result back.
    */
   async sendMessage(
     message: string,
@@ -274,18 +199,15 @@ export class ChatService {
     history?: ChatMessage[],
     smartRouting?: boolean,
     onProgress?: (
-      phase: 'location' | 'location-done' | 'stream-event',
+      phase: 'stream-event' | 'token',
       detail?: string,
       streamEvent?: StreamEvent,
     ) => void,
+    contentStyleOverride?: string,
+    toolOverrides?: Record<string, unknown>,
   ): Promise<ChatResponse> {
     try {
-      let location = null;
-      if (aiConfig.geolocation && this.needsLocation(message)) {
-        onProgress?.('location');
-        location = await getUserLocation();
-        onProgress?.('location-done');
-      }
+      const location = aiConfig.geolocation ? getCachedLocation() : null;
 
       const body: Record<string, unknown> = {
         message,
@@ -376,13 +298,87 @@ export class ChatService {
   }
 
   /**
+   * Handle a `need_location` SSE event from the backend.
+   * Gets browser geolocation and POSTs it to the backend to unblock
+   * the paused pipeline.  Runs async (fire-and-forget) so the SSE
+   * reader keeps consuming events.
+   */
+  private resolveLocationRequest(requestId: string): void {
+    getUserLocation()
+      .then(async (loc) => {
+        const body = loc
+          ? { lat: loc.lat, lng: loc.lng, label: loc.label ?? null, denied: false }
+          : { denied: true };
+        try {
+          await fetch(`${this.baseUrl}/provide-location/${requestId}`, {
+            method: 'POST',
+            headers: this.getHeaders(),
+            body: JSON.stringify(body),
+          });
+          console.log('[Geo] Location provided to backend:', loc ? `${loc.lat}, ${loc.lng}` : 'denied');
+        } catch (err) {
+          console.warn('[Geo] Failed to POST location to backend:', err);
+        }
+      })
+      .catch((err) => {
+        console.warn('[Geo] getUserLocation failed:', err);
+        fetch(`${this.baseUrl}/provide-location/${requestId}`, {
+          method: 'POST',
+          headers: this.getHeaders(),
+          body: JSON.stringify({ denied: true }),
+        }).catch(() => {});
+      });
+  }
+
+  /**
+   * Extract readable text from a partial JSON token buffer.
+   * Finds the "text" field value and unescapes JSON string content.
+   */
+  static extractStreamingText(partialJson: string): string {
+    const marker = /"text"\s*:\s*"/;
+    const match = marker.exec(partialJson);
+    if (!match) return '';
+
+    const valueStart = match.index + match[0].length;
+    let result = '';
+    let i = valueStart;
+
+    while (i < partialJson.length) {
+      const ch = partialJson[i];
+      if (ch === '\\' && i + 1 < partialJson.length) {
+        const next = partialJson[i + 1];
+        if (next === '"') { result += '"'; i += 2; }
+        else if (next === '\\') { result += '\\'; i += 2; }
+        else if (next === 'n') { result += '\n'; i += 2; }
+        else if (next === 'r') { result += '\r'; i += 2; }
+        else if (next === 't') { result += '\t'; i += 2; }
+        else if (next === '/') { result += '/'; i += 2; }
+        else if (next === 'u' && i + 5 < partialJson.length) {
+          const hex = partialJson.slice(i + 2, i + 6);
+          result += String.fromCharCode(parseInt(hex, 16));
+          i += 6;
+        } else {
+          break;
+        }
+      } else if (ch === '"') {
+        break;
+      } else {
+        result += ch;
+        i++;
+      }
+    }
+
+    return result;
+  }
+
+  /**
    * Parse an SSE stream from the backend, emitting events and returning the
    * final response from the ``complete`` event.
    */
   private async consumeSSE(
     response: Response,
     onProgress?: (
-      phase: 'location' | 'location-done' | 'stream-event',
+      phase: 'stream-event' | 'token',
       detail?: string,
       streamEvent?: StreamEvent,
     ) => void,
@@ -391,6 +387,7 @@ export class ChatService {
     const decoder = new TextDecoder();
     let buffer = '';
     let finalResponse: ChatResponse | null = null;
+    let tokenBuffer = '';
 
     while (true) {
       const { done, value } = await reader.read();
@@ -425,6 +422,18 @@ export class ChatService {
             if (finalResponse?.a2ui) {
               console.log('[A2UI] SSE response a2ui:', JSON.stringify(finalResponse.a2ui, null, 2));
             }
+          } else if (eventType === 'token') {
+            const delta = (payload as Record<string, string>).delta || '';
+            tokenBuffer += delta;
+            const streamedText = ChatService.extractStreamingText(tokenBuffer);
+            if (streamedText) {
+              onProgress?.('token', streamedText);
+            }
+          } else if (eventType === 'need_location') {
+            const reqId = payload.request_id;
+            if (reqId) {
+              this.resolveLocationRequest(reqId);
+            }
           } else if (eventType === 'step') {
             if (!isValidStepEvent(payload)) {
               console.warn('[SSE] Invalid step payload, skipping');
@@ -443,7 +452,6 @@ export class ChatService {
         }
       }
 
-      // Once we have the final response, stop reading — don't wait for connection close
       if (finalResponse) {
         reader.cancel();
         break;

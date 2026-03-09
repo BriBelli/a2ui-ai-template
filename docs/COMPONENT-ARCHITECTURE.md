@@ -102,4 +102,4 @@ apps/a2ui-chat/src/components/a2ui/
 3. **Register the import** in `apps/a2ui-chat/src/main.ts` under the correct tier comment.
 4. **Add renderer mapping** in `apps/a2ui-chat/src/services/a2ui-renderer.ts`.
 5. **Add TypeScript types** in `libs/a2ui-core/src/types.ts`.
-6. **Update LLM schema** in `backend/llm_providers.py` — add to the correct tier in `A2UI_SCHEMA` and create/update relevant patterns.
+6. **Update LLM schema** in `a2ui-agent/llm_providers.py` — add to the correct tier in `A2UI_SCHEMA` and create/update relevant patterns.

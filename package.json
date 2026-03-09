@@ -6,7 +6,6 @@
     "frontend:start": "nx start frontend",
     "frontend:build": "nx build frontend",
     "frontend:test": "nx test frontend",
-    "backend:start": "cd backend && python3 app.py",
     "a2ui:demo": "nx dev a2ui-demo",
     "a2ui:demo:build": "nx build a2ui-demo",
     "a2ui:chat": "nx dev a2ui-chat",
@@ -14,25 +13,25 @@
     "a2ui:core:build": "nx build a2ui-core",
     "a2ui:react:build": "nx build a2ui-react",
     "build:all": "nx run-many -t build",
-    "dev": "concurrently \"npm run backend:start\" \"npm run a2ui:chat\""
+    "dev": "concurrently \"npm run agent:start\" \"npm run a2ui:chat\""
   },
   "private": true,
   "devDependencies": {
-    "nx": "^22.0.0",
+    "@nx/js": "^22.0.0",
     "@nx/react": "^22.0.0",
     "@nx/vite": "^22.0.0",
-    "@nx/js": "^22.0.0",
-    "tsup": "^8.0.0",
-    "typescript": "^5.0.0",
-    "vite": "^5.0.0",
-    "@vitejs/plugin-react": "^4.0.0",
     "@types/react": "^18.0.0",
     "@types/react-dom": "^18.0.0",
+    "@vitejs/plugin-react": "^4.0.0",
+    "chart.js": "^4.5.1",
+    "concurrently": "^8.0.0",
+    "lit": "^3.0.0",
+    "nx": "^22.0.0",
     "react": "^18.0.0",
     "react-dom": "^18.0.0",
-    "lit": "^3.0.0",
-    "chart.js": "^4.4.0",
-    "concurrently": "^8.0.0"
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0",
+    "vite": "^5.0.0"
   },
   "workspaces": [
     "apps/*",

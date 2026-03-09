@@ -49,7 +49,7 @@ add_header X-Frame-Options "DENY" always;
   X-Frame-Options: DENY
 ```
 
-#### FastAPI (Python backend)
+#### FastAPI (Python agent)
 ```python
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from starlette.middleware import Middleware

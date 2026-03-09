@@ -1,0 +1,8 @@
+## Parallel Agent Split
+
+The analysis phase runs **two focused agents in parallel** via `asyncio.gather`:
+
+1. **Intent Classifier** (`_classify_intent`) — Determines content style, complexity, and component hints
+2. **Data Source Router** (`_route_data_sources`) — Matches query to configured data sources (REST APIs, Databricks Genie)
+
+Both use the same `_ANALYZER_MODELS` fallback list (GPT-4.1 Mini -> Claude Haiku -> Gemini Flash) for fast, reliable classification. The parallel split halves the analysis latency compared to sequential execution.

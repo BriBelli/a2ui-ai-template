@@ -19,7 +19,7 @@ Both modes feed data into the full AI pipeline — the AI analyzer classifies th
 
 ### 1. Passive Mode (Bring Your Own Data)
 
-Send pre-fetched data in the `dataContext` field of your `/api/chat` request. No backend configuration needed.
+Send pre-fetched data in the `dataContext` field of your `/api/chat` request. No agent configuration needed.
 
 ```json
 POST /api/chat
@@ -66,10 +66,10 @@ Each item has three fields:
 
 ### 2. Active Mode (AI-Driven Discovery)
 
-Configure API endpoints in `backend/data_sources/config.yaml`. The AI analyzer sees the available sources and autonomously decides which to query based on the user's prompt.
+Configure API endpoints in `a2ui-agent/data_sources/config.yaml`. The AI analyzer sees the available sources and autonomously decides which to query based on the user's prompt.
 
 ```yaml
-# backend/data_sources/config.yaml
+# a2ui-agent/data_sources/config.yaml
 sources:
   - id: sales-api
     type: rest
@@ -91,7 +91,7 @@ sources:
     rules: Always include date ranges when querying /revenue.
 ```
 
-After adding a source, restart the backend. The AI will see it and query it when relevant.
+After adding a source, restart the agent. The AI will see it and query it when relevant.
 
 ---
 
@@ -300,7 +300,7 @@ Responses include `_data_sources` metadata:
 ### Run the Test Suite
 
 ```bash
-cd backend
+cd a2ui-agent
 python3 data_sources/test_data_sources.py
 ```
 
@@ -352,10 +352,10 @@ curl -X POST http://localhost:8000/api/chat \
 
 To add a new data source type beyond REST and Databricks:
 
-1. Create `backend/data_sources/your_connector.py`
+1. Create `a2ui-agent/data_sources/your_connector.py`
 2. Extend the `DataSource` base class
 3. Implement `is_available()` and `query()`
-4. Register it in `backend/data_sources/__init__.py` (`_create_source` factory)
+4. Register it in `a2ui-agent/data_sources/__init__.py` (`_create_source` factory)
 
 ```python
 from ._base import DataSource
@@ -384,7 +384,7 @@ class MyConnector(DataSource):
 Then add `type: your_type` in config.yaml and register in the factory:
 
 ```python
-# backend/data_sources/__init__.py
+# a2ui-agent/data_sources/__init__.py
 def _create_source(src_type, cfg):
     ...
     elif src_type == "your_type":

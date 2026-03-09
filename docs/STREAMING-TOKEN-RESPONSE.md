@@ -15,7 +15,7 @@ User types → Frontend POST (SSE) → Backend generate_stream()
 
 The SSE pipe already exists and works well for pipeline step events. The **only blocking point** is line 1867:
 
-```1867:1869:backend/llm_providers.py
+```1867:1869:a2ui-agent/llm_providers.py
         response = await effective_provider.generate(
             augmented_message, effective_model, effective_history, system_prompt=system_prompt,
         )

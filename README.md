@@ -18,7 +18,7 @@ a2ui/
 │   ├── a2ui-core/         # Core types, validation, and utilities
 │   ├── a2ui-react/        # React renderer implementation
 │   └── a2ui-lit/          # Lit/Web Components renderer implementation
-├── backend/               # Python FastAPI backend with LLM providers
+├── a2ui-agent/            # Python FastAPI agent with LLM providers
 ├── docs/                  # Additional documentation and guides
 └── nx.json               # Nx workspace configuration
 ```
@@ -60,11 +60,11 @@ npm install
 ### Quick Start (Recommended)
 
 ```bash
-# Run backend + chat interface together
+# Run agent + chat interface together
 npm run dev
 ```
 
-This starts both the Python backend and the a2ui-chat interface for a full development experience.
+This starts both the Python agent and the a2ui-chat interface for a full development experience.
 
 ### Running Applications Individually
 
@@ -98,12 +98,12 @@ Static demo showcasing:
 npm run frontend:start
 ```
 
-#### Backend
+#### Agent
 
 ```bash
-npm run backend:start
+npm run agent:start
 # or
-cd backend && python3 app.py
+cd a2ui-agent && python3 app.py
 ```
 
 ## Building
@@ -196,18 +196,18 @@ This project is structured to eventually become an Nx plugin:
 2. **Executor**: Build and validate A2UI libraries
 3. **Schematic**: Add A2UI support to existing projects
 
-## Backend (Python FastAPI)
+## A2UI Agent (Python FastAPI)
 
-AI-first backend with multi-provider LLM support and tool orchestration. See [`backend/README.md`](backend/README.md) for full documentation.
+AI-first agent with multi-provider LLM support and tool orchestration. See [`a2ui-agent/README.md`](a2ui-agent/README.md) for full documentation.
 
 ```bash
-cd backend
+cd a2ui-agent
 pip3 install -r requirements.txt
 cp .env.example .env   # add your API keys
 python3 app.py
 ```
 
-Backend runs on `http://localhost:8000`
+Agent runs on `http://localhost:8000`
 
 ### API Endpoints
 
