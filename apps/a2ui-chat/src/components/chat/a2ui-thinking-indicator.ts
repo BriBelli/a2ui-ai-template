@@ -1,6 +1,6 @@
-import { LitElement, html, css, nothing } from 'lit';
-import { customElement, property, state } from 'lit/decorators.js';
-import type { LoadingDetail, LoadingStyle } from '../../config/ui-config';
+import { LitElement, html, css, nothing } from "lit";
+import { customElement, property, state } from "lit/decorators.js";
+import type { LoadingDetail, LoadingStyle } from "../../config/ui-config";
 
 export interface ThinkingStep {
   label: string;
@@ -14,25 +14,28 @@ export interface ThinkingStep {
 
 /** Maps backend step IDs to the minimum detail level required to see them. */
 const STEP_VISIBILITY: Record<string, LoadingDetail[]> = {
-  tools:          ['comprehensive', 'thought'],
-  analyzer:       ['comprehensive', 'moderate', 'thought'],
-  search:         ['comprehensive', 'moderate', 'thought'],
-  'data-sources': ['comprehensive', 'moderate', 'thought'],
-  location:       ['comprehensive', 'moderate', 'thought'],
-  model_upgrade:  ['comprehensive', 'moderate', 'thought'],
-  llm:            ['comprehensive', 'moderate', 'thought'],
+  tools: ["comprehensive", "thought"],
+  analyzer: ["comprehensive", "moderate", "thought"],
+  search: ["comprehensive", "moderate", "thought"],
+  "data-sources": ["comprehensive", "moderate", "thought"],
+  location: ["comprehensive", "moderate", "thought"],
+  model_upgrade: ["comprehensive", "moderate", "thought"],
+  llm: ["comprehensive", "moderate", "thought"],
 };
 
-function isStepVisible(toolId: string | undefined, level: LoadingDetail): boolean {
-  if (!toolId) return level !== 'basic';
+function isStepVisible(
+  toolId: string | undefined,
+  level: LoadingDetail,
+): boolean {
+  if (!toolId) return level !== "basic";
   const allowed = STEP_VISIBILITY[toolId];
-  return allowed ? allowed.includes(level) : level !== 'basic';
+  return allowed ? allowed.includes(level) : level !== "basic";
 }
 
 const STEP_HEIGHT_COMPACT = 22;
 const STEP_HEIGHT_DETAIL = 36;
 
-@customElement('a2ui-thinking-indicator')
+@customElement("a2ui-thinking-indicator")
 export class A2UIThinkingIndicator extends LitElement {
   static styles = css`
     :host {
@@ -50,7 +53,15 @@ export class A2UIThinkingIndicator extends LitElement {
       width: 32px;
       height: 32px;
       border-radius: var(--a2ui-radius-full);
-      background: linear-gradient(135deg, #4285f4, #ea4335, #fbbc05, #34a853);
+      background: conic-gradient(
+        from 180deg,
+        rgb(242, 139, 130),
+        rgb(253, 214, 99),
+        rgb(129, 201, 149),
+        rgb(138, 180, 248),
+        rgb(197, 138, 249),
+        rgb(242, 139, 130)
+      );
       display: flex;
       align-items: center;
       justify-content: center;
@@ -92,7 +103,9 @@ export class A2UIThinkingIndicator extends LitElement {
     }
 
     @keyframes spin {
-      to { transform: rotate(360deg); }
+      to {
+        transform: rotate(360deg);
+      }
     }
 
     /* ── Shared step styles ──────────────────────────── */
@@ -105,7 +118,9 @@ export class A2UIThinkingIndicator extends LitElement {
       box-sizing: border-box;
       padding: 3px 0;
       color: var(--a2ui-text-secondary);
-      transition: opacity 0.3s ease, color 0.3s ease;
+      transition:
+        opacity 0.3s ease,
+        color 0.3s ease;
     }
 
     .step.done {
@@ -184,8 +199,12 @@ export class A2UIThinkingIndicator extends LitElement {
     }
 
     @keyframes basicFadeIn {
-      from { opacity: 0; }
-      to   { opacity: 1; }
+      from {
+        opacity: 0;
+      }
+      to {
+        opacity: 1;
+      }
     }
 
     /* ── Style: focus (slot machine) ─────────────────── */
@@ -206,7 +225,9 @@ export class A2UIThinkingIndicator extends LitElement {
       flex-shrink: 0;
       height: var(--focus-step-h);
       opacity: 0.35;
-      transition: opacity 0.3s ease, color 0.3s ease;
+      transition:
+        opacity 0.3s ease,
+        color 0.3s ease;
     }
 
     .steps-focus .step.current {
@@ -253,8 +274,14 @@ export class A2UIThinkingIndicator extends LitElement {
     }
 
     @keyframes stackSlideIn {
-      from { opacity: 0; transform: translateY(4px); }
-      to   { opacity: 1; transform: translateY(0); }
+      from {
+        opacity: 0;
+        transform: translateY(4px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
     }
 
     /* ── Thought panel (chain-of-thought) ────────────── */
@@ -314,8 +341,12 @@ export class A2UIThinkingIndicator extends LitElement {
     }
 
     @keyframes thoughtFadeIn {
-      from { opacity: 0; }
-      to   { opacity: 1; }
+      from {
+        opacity: 0;
+      }
+      to {
+        opacity: 1;
+      }
     }
 
     .thought-entry {
@@ -342,15 +373,16 @@ export class A2UIThinkingIndicator extends LitElement {
   `;
 
   @property({ type: Array }) steps: ThinkingStep[] = [];
-  @property({ type: String }) detailLevel: LoadingDetail = 'moderate';
-  @property({ type: String }) styleMode: LoadingStyle = 'focus';
+  @property({ type: String }) detailLevel: LoadingDetail = "moderate";
+  @property({ type: String }) styleMode: LoadingStyle = "focus";
 
   @state() private elapsed = 0;
   @state() private _thoughtOpen = true;
   private _timer = 0;
 
   private get _focusStepHeight(): number {
-    return (this.detailLevel === 'comprehensive' || this.detailLevel === 'thought')
+    return this.detailLevel === "comprehensive" ||
+      this.detailLevel === "thought"
       ? STEP_HEIGHT_DETAIL
       : STEP_HEIGHT_COMPACT;
   }
@@ -358,7 +390,9 @@ export class A2UIThinkingIndicator extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     this.elapsed = 0;
-    this._timer = window.setInterval(() => { this.elapsed++; }, 1000);
+    this._timer = window.setInterval(() => {
+      this.elapsed++;
+    }, 1000);
   }
 
   disconnectedCallback() {
@@ -367,14 +401,20 @@ export class A2UIThinkingIndicator extends LitElement {
   }
 
   updated(changed: Map<string, unknown>) {
-    if (changed.has('steps')) {
-      if (this.styleMode === 'stack') {
-        const el = this.renderRoot.querySelector('.steps-stack');
-        if (el) requestAnimationFrame(() => { el.scrollTop = el.scrollHeight; });
+    if (changed.has("steps")) {
+      if (this.styleMode === "stack") {
+        const el = this.renderRoot.querySelector(".steps-stack");
+        if (el)
+          requestAnimationFrame(() => {
+            el.scrollTop = el.scrollHeight;
+          });
       }
-      if (this.detailLevel === 'thought') {
-        const el = this.renderRoot.querySelector('.thought-body');
-        if (el) requestAnimationFrame(() => { el.scrollTop = el.scrollHeight; });
+      if (this.detailLevel === "thought") {
+        const el = this.renderRoot.querySelector(".thought-body");
+        if (el)
+          requestAnimationFrame(() => {
+            el.scrollTop = el.scrollHeight;
+          });
       }
     }
   }
@@ -384,23 +424,26 @@ export class A2UIThinkingIndicator extends LitElement {
       return html`
         <span class="step-icon check">
           <svg viewBox="0 0 24 24" fill="currentColor">
-            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
           </svg>
         </span>
       `;
     }
-    return html`<span class="step-icon"><span class="step-spinner"></span></span>`;
+    return html`<span class="step-icon"
+      ><span class="step-spinner"></span
+    ></span>`;
   }
 
   private _getVisibleSteps(): ThinkingStep[] {
-    if (this.detailLevel === 'basic') return [];
-    return this.steps.filter(s => isStepVisible(s.tool, this.detailLevel));
+    if (this.detailLevel === "basic") return [];
+    return this.steps.filter((s) => isStepVisible(s.tool, this.detailLevel));
   }
 
-  private _renderStep(step: ThinkingStep, extraClass = '') {
-    const showDetail = this.detailLevel === 'comprehensive' || this.detailLevel === 'thought';
+  private _renderStep(step: ThinkingStep, extraClass = "") {
+    const showDetail =
+      this.detailLevel === "comprehensive" || this.detailLevel === "thought";
     return html`
-      <div class="step ${step.done ? 'done' : ''} ${extraClass}">
+      <div class="step ${step.done ? "done" : ""} ${extraClass}">
         ${this._renderStepIcon(step.done)}
         <span class="step-text">
           <span class="step-label">${step.label}</span>
@@ -415,9 +458,7 @@ export class A2UIThinkingIndicator extends LitElement {
   /** Basic: simple list, steps fade in and stay */
   private _renderBasic(steps: ThinkingStep[]) {
     return html`
-      <div class="steps-basic">
-        ${steps.map(s => this._renderStep(s))}
-      </div>
+      <div class="steps-basic">${steps.map((s) => this._renderStep(s))}</div>
     `;
   }
 
@@ -425,16 +466,22 @@ export class A2UIThinkingIndicator extends LitElement {
   private _renderFocus(steps: ThinkingStep[]) {
     let activeIdx = steps.length - 1;
     for (let i = steps.length - 1; i >= 0; i--) {
-      if (!steps[i].done) { activeIdx = i; break; }
+      if (!steps[i].done) {
+        activeIdx = i;
+        break;
+      }
     }
     const h = this._focusStepHeight;
     const offset = -activeIdx * h;
 
     return html`
       <div class="steps-focus" style="height: ${h}px; --focus-step-h: ${h}px">
-        <div class="steps-focus-reel" style="transform: translateY(${offset}px)">
+        <div
+          class="steps-focus-reel"
+          style="transform: translateY(${offset}px)"
+        >
           ${steps.map((s, i) =>
-            this._renderStep(s, i === activeIdx ? 'current' : '')
+            this._renderStep(s, i === activeIdx ? "current" : ""),
           )}
         </div>
       </div>
@@ -444,16 +491,14 @@ export class A2UIThinkingIndicator extends LitElement {
   /** Stack: all steps visible, scrollable */
   private _renderStack(steps: ThinkingStep[]) {
     return html`
-      <div class="steps-stack">
-        ${steps.map(s => this._renderStep(s))}
-      </div>
+      <div class="steps-stack">${steps.map((s) => this._renderStep(s))}</div>
     `;
   }
 
   /** Collapsible chain-of-thought reasoning panel */
   private _renderThoughtPanel(steps: ThinkingStep[]) {
     const entries = steps
-      .filter(s => s.reasoning)
+      .filter((s) => s.reasoning)
       .map((s, _i, arr) => ({
         label: s.label,
         reasoning: s.reasoning!,
@@ -464,31 +509,42 @@ export class A2UIThinkingIndicator extends LitElement {
     if (entries.length === 0) return nothing;
 
     const chevronSvg = html`
-      <svg class="thought-chevron ${this._thoughtOpen ? 'open' : ''}"
-           viewBox="0 0 24 24" fill="none" stroke="currentColor"
-           stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-        <polyline points="9 18 15 12 9 6"/>
+      <svg
+        class="thought-chevron ${this._thoughtOpen ? "open" : ""}"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2.5"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <polyline points="9 18 15 12 9 6" />
       </svg>
     `;
 
     return html`
       <div class="thought-panel">
-        <button class="thought-toggle"
-                @click=${() => { this._thoughtOpen = !this._thoughtOpen; }}>
-          ${chevronSvg}
-          Reasoning (${entries.length})
+        <button
+          class="thought-toggle"
+          @click=${() => {
+            this._thoughtOpen = !this._thoughtOpen;
+          }}
+        >
+          ${chevronSvg} Reasoning (${entries.length})
         </button>
         ${this._thoughtOpen
           ? html`
-            <div class="thought-body">
-              ${entries.map(e => html`
-                <div class="thought-entry ${e.latest ? 'latest' : ''}">
-                  <span class="thought-entry-label">${e.label}:</span>
-                  ${e.reasoning}
-                </div>
-              `)}
-            </div>
-          `
+              <div class="thought-body">
+                ${entries.map(
+                  (e) => html`
+                    <div class="thought-entry ${e.latest ? "latest" : ""}">
+                      <span class="thought-entry-label">${e.label}:</span>
+                      ${e.reasoning}
+                    </div>
+                  `,
+                )}
+              </div>
+            `
           : nothing}
       </div>
     `;
@@ -496,15 +552,16 @@ export class A2UIThinkingIndicator extends LitElement {
 
   render() {
     const visibleSteps = this._getVisibleSteps();
-    const isThought = this.detailLevel === 'thought';
+    const isThought = this.detailLevel === "thought";
 
-    const stepsHtml = visibleSteps.length > 0
-      ? this.styleMode === 'focus'
-        ? this._renderFocus(visibleSteps)
-        : this.styleMode === 'stack'
-          ? this._renderStack(visibleSteps)
-          : this._renderBasic(visibleSteps)
-      : nothing;
+    const stepsHtml =
+      visibleSteps.length > 0
+        ? this.styleMode === "focus"
+          ? this._renderFocus(visibleSteps)
+          : this.styleMode === "stack"
+            ? this._renderStack(visibleSteps)
+            : this._renderBasic(visibleSteps)
+        : nothing;
 
     return html`
       <div class="thinking">

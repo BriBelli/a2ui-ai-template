@@ -69,7 +69,18 @@ export class A2UIApp extends LitElement {
     .logo-icon {
       width: 32px;
       height: 32px;
-      background: linear-gradient(135deg, #4285f4, #ea4335, #fbbc05, #34a853);
+      background:
+        radial-gradient(
+          circle at 50% 50%,
+          rgba(190, 210, 230, 0.85) 0%,
+          rgba(190, 210, 230, 0.45) 20%,
+          transparent 45%
+        ),
+        conic-gradient(
+          from 180deg,
+          rgb(242, 139, 130), rgb(253, 214, 99), rgb(129, 201, 149),
+          rgb(138, 180, 248), rgb(197, 138, 249), rgb(242, 139, 130)
+        );
       border-radius: var(--a2ui-radius-md);
     }
 
@@ -320,7 +331,18 @@ export class A2UIApp extends LitElement {
     .welcome-logo {
       width: 56px;
       height: 56px;
-      background: linear-gradient(135deg, #4285f4, #ea4335, #fbbc05, #34a853);
+      background:
+        radial-gradient(
+          circle at 50% 50%,
+          rgba(190, 210, 230, 0.85) 0%,
+          rgba(190, 210, 230, 0.45) 20%,
+          transparent 45%
+        ),
+        conic-gradient(
+          from 180deg,
+          rgb(242, 139, 130), rgb(253, 214, 99), rgb(129, 201, 149),
+          rgb(138, 180, 248), rgb(197, 138, 249), rgb(242, 139, 130)
+        );
       border-radius: var(--a2ui-radius-lg);
     }
 
@@ -482,6 +504,9 @@ export class A2UIApp extends LitElement {
   @state() private activeThreadId: string | null = null;
   @state() private threads: ChatThread[] = [];
 
+  /** Thread ID that currently has an in-flight request (null = idle). */
+  private loadingThreadId: string | null = null;
+
   // ── Suggestions (data can come from AI, config, or any source) ──
   private suggestions = [
     "Compare iPhone vs Android",
@@ -573,6 +598,8 @@ export class A2UIApp extends LitElement {
     } else if (state?.a2ui !== "chat" && this.messages.length > 0) {
       // Back from active conversation → save and clear
       this.persistThread();
+      this.isLoading = false;
+      this.thinkingSteps = [];
       this.savedMessages = [...this.messages];
       this.messages = [];
       this.activeThreadId = null;
@@ -595,16 +622,16 @@ export class A2UIApp extends LitElement {
   private async loadProviders() {
     this.providers = await this.chatService.getProviders();
     if (this.providers.length > 0 && !this.selectedProvider) {
-      this.selectedProvider = 'auto';
-      this.selectedModel = 'auto';
+      this.selectedProvider = "auto";
+      this.selectedModel = "auto";
     }
   }
 
   /** Build grouped options for the model selector from providers. */
   private get modelGroups(): SelectGroup[] {
     const autoGroup: SelectGroup = {
-      label: '',
-      items: [{ value: 'auto::auto', label: 'Auto' }],
+      label: "",
+      items: [{ value: "auto::auto", label: "Auto" }],
     };
     const providerGroups = this.providers.map((p) => ({
       label: p.name,
@@ -633,7 +660,7 @@ export class A2UIApp extends LitElement {
 
   /** True when user has selected "Auto" model (pipeline picks the model). */
   private get isAutoModel(): boolean {
-    return this.selectedProvider === 'auto' && this.selectedModel === 'auto';
+    return this.selectedProvider === "auto" && this.selectedModel === "auto";
   }
 
   /** Resolve actual provider/model for API calls (defaults for "Auto" mode). */
@@ -646,17 +673,17 @@ export class A2UIApp extends LitElement {
 
   private get resolvedModel(): string {
     if (this.isAutoModel && this.providers.length > 0) {
-      return this.providers[0].models[0]?.id || '';
+      return this.providers[0].models[0]?.id || "";
     }
     return this.selectedModel;
   }
 
   /** Human-readable model name for the header badge. */
   private get modelDisplayLabel(): string {
-    if (this.isAutoModel) return 'Auto';
-    const provider = this.providers.find(p => p.id === this.selectedProvider);
+    if (this.isAutoModel) return "Auto";
+    const provider = this.providers.find((p) => p.id === this.selectedProvider);
     if (!provider) return this.selectedModel;
-    const model = provider.models.find(m => m.id === this.selectedModel);
+    const model = provider.models.find((m) => m.id === this.selectedModel);
     return model?.name || this.selectedModel;
   }
 
@@ -673,20 +700,27 @@ export class A2UIApp extends LitElement {
     )
       return;
 
-    const existing = chatHistoryService.getThread(this.activeThreadId);
+    this.persistThreadById(this.activeThreadId, this.messages);
+    sessionStorage.setItem(A2UIApp.ACTIVE_KEY, this.activeThreadId);
+  }
+
+  /** Save a specific thread's messages to localStorage (used when the
+   *  target thread may not be the currently active one). */
+  private persistThreadById(threadId: string, messages: ChatMessage[]) {
+    if (!uiConfig.persistChat || messages.length === 0) return;
+
+    const existing = chatHistoryService.getThread(threadId);
     const thread: ChatThread = {
-      id: this.activeThreadId,
+      id: threadId,
       title:
-        existing?.title ??
-        ChatHistoryService.titleFrom(this.messages[0].content),
-      messages: this.messages,
-      createdAt: existing?.createdAt ?? this.messages[0].timestamp,
+        existing?.title ?? ChatHistoryService.titleFrom(messages[0].content),
+      messages,
+      createdAt: existing?.createdAt ?? messages[0].timestamp,
       updatedAt: Date.now(),
       provider: this.resolvedProvider || undefined,
       model: this.resolvedModel || undefined,
     };
     chatHistoryService.saveThread(thread);
-    sessionStorage.setItem(A2UIApp.ACTIVE_KEY, this.activeThreadId);
   }
 
   /** Restore the active thread on page refresh. */
@@ -770,7 +804,6 @@ export class A2UIApp extends LitElement {
 
     const isFirstMessage = this.messages.length === 0;
 
-    // Start a new thread on first message
     if (isFirstMessage) {
       this.activeThreadId = crypto.randomUUID();
     }
@@ -787,27 +820,45 @@ export class A2UIApp extends LitElement {
       },
     ];
 
-    // Push history entry on first message so back clears the conversation
     if (isFirstMessage) {
       history.pushState({ a2ui: "chat", threadId: this.activeThreadId }, "");
     }
 
     this.persistThread();
     this.refreshThreadList();
+
+    // Pin the thread ID so the async callback can detect thread switches
+    const requestThreadId = this.activeThreadId!;
+    // Snapshot messages for this thread so we can persist even if user navigates away
+    let threadMessages = [...this.messages];
+
+    this.loadingThreadId = requestThreadId;
     this.isLoading = true;
     const startTime = performance.now();
+
+    const isStillActive = () => this.activeThreadId === requestThreadId;
 
     const steps: ThinkingStep[] = [];
     const stepIndexByTool = new Map<string, number>();
 
-    const push = (label: string, detail?: string, tool?: string, reasoning?: string) => {
+    const push = (
+      label: string,
+      detail?: string,
+      tool?: string,
+      reasoning?: string,
+    ) => {
       const idx = steps.length;
       steps.push({ label, done: false, detail, tool, reasoning });
       if (tool) stepIndexByTool.set(tool, idx);
-      this.thinkingSteps = [...steps];
+      if (isStillActive()) this.thinkingSteps = [...steps];
       return idx;
     };
-    const done = (index: number, label?: string, detail?: string, reasoning?: string) => {
+    const done = (
+      index: number,
+      label?: string,
+      detail?: string,
+      reasoning?: string,
+    ) => {
       steps[index] = {
         ...steps[index],
         done: true,
@@ -815,7 +866,7 @@ export class A2UIApp extends LitElement {
         ...(detail && { detail }),
         ...(reasoning && { reasoning }),
       };
-      this.thinkingSteps = [...steps];
+      if (isStillActive()) this.thinkingSteps = [...steps];
     };
 
     const handleStreamEvent = (evt: StreamEvent) => {
@@ -829,7 +880,7 @@ export class A2UIApp extends LitElement {
             detail: evt.detail,
             ...(evt.reasoning && { reasoning: evt.reasoning }),
           };
-          this.thinkingSteps = [...steps];
+          if (isStillActive()) this.thinkingSteps = [...steps];
         } else {
           push(evt.label, evt.detail, evt.id, evt.reasoning);
         }
@@ -852,25 +903,33 @@ export class A2UIApp extends LitElement {
         this.messages,
         smartRouting,
         (phase, detail, streamEvent?) => {
-          if (phase === 'token' && detail && uiConfig.streamingText) {
+          if (phase === "token" && detail && uiConfig.streamingText) {
             if (!streamingActive) {
               streamingActive = true;
-              this.messages = [
-                ...this.messages,
-                {
-                  id: streamingMsgId,
-                  role: 'assistant',
-                  content: detail,
-                  timestamp: Date.now(),
-                  streaming: true,
-                },
-              ];
+              const streamMsg: ChatMessage = {
+                id: streamingMsgId,
+                role: "assistant",
+                content: detail,
+                timestamp: Date.now(),
+                streaming: true,
+              };
+              threadMessages = [...threadMessages, streamMsg];
+              if (isStillActive()) {
+                this.messages = [...threadMessages];
+              }
             } else {
-              const idx = this.messages.findIndex(m => m.id === streamingMsgId);
+              const idx = threadMessages.findIndex(
+                (m) => m.id === streamingMsgId,
+              );
               if (idx >= 0) {
-                const updated = [...this.messages];
-                updated[idx] = { ...updated[idx], content: detail };
-                this.messages = updated;
+                threadMessages = [...threadMessages];
+                threadMessages[idx] = {
+                  ...threadMessages[idx],
+                  content: detail,
+                };
+                if (isStillActive()) {
+                  this.messages = [...threadMessages];
+                }
               }
             }
           } else if (streamEvent) {
@@ -916,42 +975,58 @@ export class A2UIApp extends LitElement {
       };
 
       if (streamingActive) {
-        const idx = this.messages.findIndex(m => m.id === streamingMsgId);
+        const idx = threadMessages.findIndex((m) => m.id === streamingMsgId);
         if (idx >= 0) {
-          const updated = [...this.messages];
-          updated[idx] = finalMsg;
-          this.messages = updated;
+          threadMessages = [...threadMessages];
+          threadMessages[idx] = finalMsg;
         } else {
-          this.messages = [...this.messages, finalMsg];
+          threadMessages = [...threadMessages, finalMsg];
         }
       } else {
-        this.messages = [...this.messages, finalMsg];
+        threadMessages = [...threadMessages, finalMsg];
       }
 
-      this.persistThread();
+      if (isStillActive()) {
+        this.messages = [...threadMessages];
+        this.persistThread();
+      } else {
+        this.persistThreadById(requestThreadId, threadMessages);
+      }
       this.refreshThreadList();
     } catch (error) {
       console.error("Chat error:", error);
-      this.messages = [
-        ...this.messages,
-        {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          content: "Sorry, there was an error processing your request.",
-          timestamp: Date.now(),
-        },
-      ];
-      this.persistThread();
+      const errorMsg: ChatMessage = {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content: "Sorry, there was an error processing your request.",
+        timestamp: Date.now(),
+      };
+      threadMessages = [...threadMessages, errorMsg];
+
+      if (isStillActive()) {
+        this.messages = [...threadMessages];
+        this.persistThread();
+      } else {
+        this.persistThreadById(requestThreadId, threadMessages);
+      }
       this.refreshThreadList();
     } finally {
-      this.isLoading = false;
-      this.thinkingSteps = [];
+      if (this.loadingThreadId === requestThreadId) {
+        this.loadingThreadId = null;
+      }
+      if (isStillActive()) {
+        this.isLoading = false;
+        this.thinkingSteps = [];
+      }
     }
   }
 
   private newChat() {
-    // Persist current thread before starting fresh
     this.persistThread();
+    // Clear loading UI when navigating away from the loading thread
+    // (the in-flight request will still persist its result when done)
+    this.isLoading = false;
+    this.thinkingSteps = [];
     this.messages = [];
     this.activeThreadId = null;
     this.savedMessages = [];
@@ -966,17 +1041,18 @@ export class A2UIApp extends LitElement {
     const { threadId } = e.detail;
     if (threadId === this.activeThreadId) return;
 
-    // Save current thread first
     this.persistThread();
 
-    // Load requested thread
+    // Clear loading UI — in-flight request persists its own result
+    this.isLoading = false;
+    this.thinkingSteps = [];
+
     const thread = chatHistoryService.getThread(threadId);
     if (thread) {
       this.activeThreadId = thread.id;
       this.messages = thread.messages;
       sessionStorage.setItem(A2UIApp.ACTIVE_KEY, thread.id);
 
-      // Restore provider/model if saved
       if (thread.provider) this.selectedProvider = thread.provider;
       if (thread.model) this.selectedModel = thread.model;
 
@@ -992,7 +1068,8 @@ export class A2UIApp extends LitElement {
     chatHistoryService.deleteThread(threadId);
 
     if (threadId === this.activeThreadId) {
-      // Deleted the active thread — clear UI
+      this.isLoading = false;
+      this.thinkingSteps = [];
       this.messages = [];
       this.activeThreadId = null;
       this.savedMessages = [];

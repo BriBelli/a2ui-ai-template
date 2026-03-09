@@ -1,5 +1,5 @@
 import { LitElement, html, css } from 'lit';
-import { customElement, property, query } from 'lit/decorators.js';
+import { customElement, property, query, state } from 'lit/decorators.js';
 import {
   Chart,
   registerables,
@@ -11,6 +11,16 @@ import { TreemapController, TreemapElement } from 'chartjs-chart-treemap';
 import { SankeyController, Flow } from 'chartjs-chart-sankey';
 import { FunnelController, TrapezoidElement } from 'chartjs-chart-funnel';
 import { MatrixController, MatrixElement } from 'chartjs-chart-matrix';
+import {
+  ChoroplethController,
+  BubbleMapController,
+  GeoFeature,
+  ColorScale,
+  ProjectionScale,
+  SizeScale,
+} from 'chartjs-chart-geo';
+import * as topojson from 'topojson-client';
+import type { Topology } from 'topojson-specification';
 
 Chart.register(
   ...registerables,
@@ -18,6 +28,8 @@ Chart.register(
   SankeyController, Flow,
   FunnelController, TrapezoidElement,
   MatrixController, MatrixElement,
+  ChoroplethController, BubbleMapController, GeoFeature,
+  ColorScale, ProjectionScale, SizeScale,
 );
 
 interface ChartDataset {
@@ -31,6 +43,8 @@ interface ChartDataset {
 interface ChartData {
   labels?: string[];
   datasets: ChartDataset[];
+  /** For geo charts: which map to render ("world" | "us-states") */
+  map?: string;
 }
 
 interface ChartOptions {
@@ -168,9 +182,32 @@ export class A2UIChart extends LitElement {
     canvas {
       width: 100% !important;
     }
+
+    .geo-loading {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      color: var(--a2ui-text-tertiary);
+      font-size: var(--a2ui-text-sm);
+      font-family: 'Google Sans', Roboto, sans-serif;
+    }
+
+    .geo-loading .spinner {
+      width: 16px;
+      height: 16px;
+      border: 2px solid var(--a2ui-border-subtle, rgba(255,255,255,0.1));
+      border-top-color: var(--a2ui-text-tertiary, #71767b);
+      border-radius: 50%;
+      animation: geo-spin 0.8s linear infinite;
+    }
+
+    @keyframes geo-spin {
+      to { transform: rotate(360deg); }
+    }
   `;
 
-  @property({ type: String }) chartType: 'bar' | 'line' | 'pie' | 'doughnut' | 'radar' | 'polarArea' | 'scatter' | 'bubble' | 'treemap' | 'sankey' | 'funnel' | 'matrix' = 'bar';
+  @property({ type: String }) chartType: 'bar' | 'line' | 'pie' | 'doughnut' | 'radar' | 'polarArea' | 'scatter' | 'bubble' | 'treemap' | 'sankey' | 'funnel' | 'matrix' | 'choropleth' | 'bubbleMap' = 'bar';
   @property({ type: String }) title = '';
   @property({ type: Object }) data: ChartData = { labels: undefined, datasets: [] };
   @property({ type: Object }) options: ChartOptions = {};
@@ -181,8 +218,25 @@ export class A2UIChart extends LitElement {
    *  in the template, so @state() would only cause a spurious re-render. */
   private chart?: Chart;
 
+  @state() private _geoLoading = false;
+
   /** Row labels (y-axis categories) extracted by normalizeMatrixData. */
   private _matrixRows: string[] = [];
+
+  private static _mapCache = new Map<string, { features: GeoJSON.Feature[]; outline: GeoJSON.Feature }>();
+
+  private static MAP_SOURCES: Record<string, { url: string; featureKey: string; outlineKey: string }> = {
+    world: {
+      url: '/maps/countries-110m.json',
+      featureKey: 'countries',
+      outlineKey: 'land',
+    },
+    'us-states': {
+      url: '/maps/states-10m.json',
+      featureKey: 'states',
+      outlineKey: 'nation',
+    },
+  };
 
   // Default palette -- muted yet vibrant, works great on dark backgrounds
   private palette = [
@@ -436,10 +490,162 @@ export class A2UIChart extends LitElement {
     };
   }
 
+  private async loadMapData(mapKey: string): Promise<{ features: GeoJSON.Feature[]; outline: GeoJSON.Feature } | null> {
+    const cached = A2UIChart._mapCache.get(mapKey);
+    if (cached) return cached;
+
+    const src = A2UIChart.MAP_SOURCES[mapKey];
+    if (!src) {
+      console.warn(`[a2ui-chart] Unknown map key: "${mapKey}". Use "world" or "us-states".`);
+      return null;
+    }
+
+    try {
+      const resp = await fetch(src.url);
+      const topo = (await resp.json()) as Topology;
+      const featureCollection = topojson.feature(topo, topo.objects[src.featureKey]);
+      const outlineCollection = topojson.feature(topo, topo.objects[src.outlineKey]);
+      const features = (featureCollection as GeoJSON.FeatureCollection).features;
+      const outline = (outlineCollection as GeoJSON.FeatureCollection).features?.[0]
+        ?? (outlineCollection as unknown as GeoJSON.Feature);
+
+      const result = { features, outline };
+      A2UIChart._mapCache.set(mapKey, result);
+      return result;
+    } catch (err) {
+      console.error(`[a2ui-chart] Failed to load map "${mapKey}":`, err);
+      return null;
+    }
+  }
+
+  private async renderGeoChart() {
+    const ctx = this.canvas.getContext('2d');
+    if (!ctx) return;
+
+    const mapKey = this.data.map || 'world';
+    this._geoLoading = true;
+    const mapData = await this.loadMapData(mapKey);
+    this._geoLoading = false;
+    if (!mapData) return;
+
+    const { features, outline } = mapData;
+    const dataset = this.data.datasets[0];
+    if (!dataset) return;
+
+    const textSecondary = this.token('--a2ui-text-secondary') || '#9aa0a6';
+    const bgApp = this.token('--a2ui-bg-app') || '#1a1a1a';
+    const textPrimary = this.token('--a2ui-text-primary') || '#e3e3e3';
+    const borderSubtle = this.token('--a2ui-border-subtle') || 'rgba(255,255,255,0.06)';
+    const projection = mapKey === 'us-states' ? 'albersUsa' : 'equalEarth';
+
+    if (this.chartType === 'choropleth') {
+      const valueMap = new Map<string, number>();
+      for (const d of dataset.data as Array<Record<string, unknown>>) {
+        const name = String(d.feature ?? d.name ?? '');
+        if (name && typeof d.value === 'number') {
+          valueMap.set(name.toLowerCase(), d.value);
+        }
+      }
+
+      const chartData = features.map(f => {
+        const name = (f.properties?.name ?? '') as string;
+        return { feature: f, value: valueMap.get(name.toLowerCase()) ?? 0 };
+      });
+
+      this.chart = new Chart(ctx, {
+        type: 'choropleth' as any,
+        data: {
+          labels: features.map(f => (f.properties?.name ?? '') as string),
+          datasets: [{
+            label: dataset.label || '',
+            outline,
+            data: chartData,
+          }],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: bgApp,
+              titleColor: textPrimary,
+              bodyColor: textSecondary,
+              borderColor: borderSubtle,
+              borderWidth: 1,
+              cornerRadius: 8,
+              padding: { top: 8, bottom: 8, left: 12, right: 12 },
+              titleFont: { family: 'Google Sans, Roboto, sans-serif', size: 12, weight: 'bold' as any },
+              bodyFont: { family: 'Google Sans, Roboto, sans-serif', size: 11 },
+            },
+          },
+          scales: {
+            projection: { axis: 'x' as any, projection },
+            color: {
+              axis: 'x' as any,
+              quantize: 5,
+              legend: { position: 'bottom-right' as any, align: 'right' as any },
+            },
+          },
+        },
+      } as any);
+    } else {
+      // bubbleMap
+      const chartData = (dataset.data as Array<Record<string, unknown>>).map(d => ({
+        latitude: Number(d.latitude ?? d.lat ?? 0),
+        longitude: Number(d.longitude ?? d.lng ?? d.lon ?? 0),
+        value: Number(d.value ?? 0),
+        description: String(d.description ?? d.label ?? ''),
+      }));
+
+      this.chart = new Chart(ctx, {
+        type: 'bubbleMap' as any,
+        data: {
+          labels: chartData.map(d => d.description),
+          datasets: [{
+            label: dataset.label || '',
+            outline,
+            showOutline: true,
+            backgroundColor: this.hexToRgba(this.palette[0], 0.65),
+            data: chartData,
+          }],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: bgApp,
+              titleColor: textPrimary,
+              bodyColor: textSecondary,
+              borderColor: borderSubtle,
+              borderWidth: 1,
+              cornerRadius: 8,
+              padding: { top: 8, bottom: 8, left: 12, right: 12 },
+              titleFont: { family: 'Google Sans, Roboto, sans-serif', size: 12, weight: 'bold' as any },
+              bodyFont: { family: 'Google Sans, Roboto, sans-serif', size: 11 },
+            },
+          },
+          scales: {
+            projection: { axis: 'x' as any, projection },
+            size: { axis: 'x' as any, size: [1, 20] },
+          },
+        },
+      } as any);
+    }
+  }
+
   private renderChart() {
     if (!this.canvas) return;
 
     this.chart?.destroy();
+
+    const isGeo = this.chartType === 'choropleth' || this.chartType === 'bubbleMap';
+    if (isGeo) {
+      this.renderGeoChart();
+      return;
+    }
 
     const scatterFixed = this.normalizeScatterData();
     const chartData = scatterFixed !== this.data ? scatterFixed : this.normalizeMatrixData();
@@ -468,6 +674,7 @@ export class A2UIChart extends LitElement {
     const isRadial = isRadar || isPolar;
     const isPointBased = isScatter || isBubble;
     const isPlugin = isTreemap || isSankey || isFunnel || isMatrix;
+    // geo types handled by renderGeoChart() above — won't reach here
     const isSingleDataset = chartData.datasets.length === 1;
     const chartHeight = this.options.height || 240;
 
@@ -836,7 +1043,13 @@ export class A2UIChart extends LitElement {
           </div>
         ` : ''}
         <div class="chart-wrapper" style="height: ${height}px">
-          <canvas></canvas>
+          ${this._geoLoading ? html`
+            <div class="geo-loading" style="height: ${height}px">
+              <div class="spinner"></div>
+              <span>Loading map…</span>
+            </div>
+          ` : ''}
+          <canvas style="${this._geoLoading ? 'display:none' : ''}"></canvas>
         </div>
       </div>
     `;

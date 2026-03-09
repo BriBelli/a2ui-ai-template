@@ -43,10 +43,12 @@ Molecules:
   stat — label, value(number/price), trend?, trendDirection?(up|down|neutral), description?
   list — items[{id,text,subtitle?}], variant(bullet|numbered|checklist)
   data-table — columns[{key,label,align?}], data[rows]. align:"right" for numbers.
-  chart — chartType(bar|line|pie|doughnut|radar|polarArea|scatter|bubble|treemap|sankey|funnel|matrix), title?, data, options?
+  chart — chartType(bar|line|pie|doughnut|radar|polarArea|scatter|bubble|treemap|sankey|funnel|matrix|choropleth|bubbleMap), title?, data, options?
     Standard: {labels[],datasets[{label,data[]}]}. Radar: labels=axes, data=scores.
     Scatter: {datasets:[{label,data:[{x:number,y:number},...]}]}. NO labels[]. Each point is {x,y}. One dataset per series.
     Bubble: same as scatter but each point is {x,y,r} where r=radius.
+    Choropleth: {map:"world"|"us-states",datasets:[{label,data:[{feature:"Name",value:number},...]}]}. Geographic heat map.
+    BubbleMap: {map:"world"|"us-states",datasets:[{label,data:[{latitude,longitude,value,description},...]}]}. Geographic bubble map.
     Options: fillArea?,currency?,height?,xAxisLabel?,yAxisLabel?,showGrid?,showLegend?,referenceLine?,referenceLabel?
     ALWAYS include xAxisLabel/yAxisLabel on cartesian charts. Specialized chart data shapes provided when needed.
   accordion — items[{id,title,content}]

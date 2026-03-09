@@ -799,6 +799,11 @@ _CHART_TYPE_TO_HINT: Dict[str, Optional[str]] = {
     "radar": "chart_radar",
     "scatter": "chart_scatter",
     "bubble": "chart_scatter",
+    "choropleth": "chart_choropleth",
+    "geo": "chart_choropleth",
+    "geographic": "chart_choropleth",
+    "bubblemap": "chart_bubblemap",
+    "bubble_map": "chart_bubblemap",
 }
 
 _EXOTIC_CHART_PATTERNS: Dict[str, re.Pattern] = {
@@ -808,6 +813,8 @@ _EXOTIC_CHART_PATTERNS: Dict[str, re.Pattern] = {
     "chart_funnel": re.compile(r"\b(?:funnel|conversion\s*funnel|sales\s*pipeline)\b", re.IGNORECASE),
     "chart_radar": re.compile(r"\b(?:radar|spider\s*chart|star\s*chart)\b", re.IGNORECASE),
     "chart_scatter": re.compile(r"\b(?:scatter|bubble\s*chart|correlation\s*plot)\b", re.IGNORECASE),
+    "chart_choropleth": re.compile(r"\b(?:choropleth|geo(?:graphic)?\s*map|country\s*map|state\s*map|world\s*map|us\s*map)\b", re.IGNORECASE),
+    "chart_bubblemap": re.compile(r"\b(?:bubble\s*map|geo(?:graphic)?\s*bubble|location\s*map|city\s*map|lat(?:itude)?\s*long(?:itude)?)\b", re.IGNORECASE),
 }
 
 
@@ -1530,7 +1537,9 @@ def _wants_images(message: str) -> bool:
 #   2. Data Source Router  — which data sources / endpoints / params to query
 #
 # Each has its own system prompt, user prompt template, and max_tokens.
-# Both share the same model list (_ANALYZER_MODELS) and temperature=0.
+# Both use temperature=0 and select models based on performance_mode:
+#   - default/auto/comprehensive: _ANALYZER_MODELS  (Sonnet 4.6)
+#   - optimized (speed):          _ANALYZER_MODELS_FAST (Haiku 4.5)
 
 
 def _make_classifier_system() -> str:
@@ -1588,9 +1597,11 @@ _ROUTER_PROMPT_TEMPLATE = (
 )
 
 _ANALYZER_MODELS: List[tuple] = [
-    ("openai", "gpt-4.1-mini"),
+    ("anthropic", "claude-sonnet-4-6"),
+]
+
+_ANALYZER_MODELS_FAST: List[tuple] = [
     ("anthropic", "claude-haiku-4-5-20251001"),
-    ("gemini", "gemini-2.5-flash-preview-05-20"),
 ]
 
 
@@ -1970,6 +1981,7 @@ class LLMService:
         self,
         message: str,
         history: Optional[List[Dict[str, str]]] = None,
+        performance_mode: str = "auto",
     ) -> Optional[Dict[str, Any]]:
         """Classify user intent: style, search, location, search_query.
 
@@ -1994,7 +2006,8 @@ class LLMService:
             query=message[:500],
         )
 
-        for provider_id, model_id in _ANALYZER_MODELS:
+        analyzer_models = _ANALYZER_MODELS_FAST if performance_mode == "optimized" else _ANALYZER_MODELS
+        for provider_id, model_id in analyzer_models:
             provider = self.providers.get(provider_id)
             if not provider or not provider.is_available():
                 continue
@@ -2074,6 +2087,7 @@ class LLMService:
         self,
         message: str,
         history: Optional[List[Dict[str, str]]] = None,
+        performance_mode: str = "auto",
     ) -> List[Dict[str, Any]]:
         """Route query to relevant data sources.
 
@@ -2105,7 +2119,8 @@ class LLMService:
             query=message[:500],
         )
 
-        for provider_id, model_id in _ANALYZER_MODELS:
+        analyzer_models = _ANALYZER_MODELS_FAST if performance_mode == "optimized" else _ANALYZER_MODELS
+        for provider_id, model_id in analyzer_models:
             provider = self.providers.get(provider_id)
             if not provider or not provider.is_available():
                 continue
@@ -2265,8 +2280,8 @@ class LLMService:
             async def _noop_router() -> List[Dict[str, Any]]:
                 return []
 
-            classify_task = self._classify_intent(message, history=effective_history)
-            route_task = self._route_data_sources(message, history=effective_history) if data_sources_allowed else _noop_router()
+            classify_task = self._classify_intent(message, history=effective_history, performance_mode=performance_mode)
+            route_task = self._route_data_sources(message, history=effective_history, performance_mode=performance_mode) if data_sources_allowed else _noop_router()
 
             classify_result, route_result = await asyncio.gather(
                 classify_task,
@@ -2332,6 +2347,7 @@ class LLMService:
             "analytical": "Analytical (data dashboards)",
             "content": "Content (narrative)",
             "comparison": "Comparison (side-by-side)",
+            "dashboard": "Dashboard (KPI cards & charts)",
             "howto": "How-To (step-by-step)",
             "quick": "Quick Answer (concise)",
         }

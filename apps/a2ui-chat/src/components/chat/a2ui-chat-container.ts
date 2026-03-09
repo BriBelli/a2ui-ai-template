@@ -466,17 +466,44 @@ export class A2UIChatContainer extends LitElement {
 
   updated(changedProperties: Map<string, unknown>) {
     if (changedProperties.has('messages') || changedProperties.has('isLoading')) {
-      if (this._userNearBottom) {
-        this._scrollToLastUserMessage();
-      } else if (changedProperties.has('messages')) {
-        const prev = changedProperties.get('messages') as ChatMessage[] | undefined;
-        if (prev && this.messages.length > prev.length) {
-          const lastNew = this.messages[this.messages.length - 1];
-          if (lastNew.role === 'user') {
-            this._scrollToLastUserMessage();
+      const lastMessage = this.messages[this.messages.length - 1];
+      const isCurrentlyStreaming = lastMessage?.streaming === true || this.isLoading;
+      
+      // Check if response just completed
+      const prevIsLoading = changedProperties.get('isLoading');
+      const isLoadingComplete = prevIsLoading === true && !this.isLoading;
+      
+      // Check if streaming flag changed from true to false
+      let streamingJustCompleted = false;
+      if (changedProperties.has('messages')) {
+        const prevMessages = changedProperties.get('messages') as ChatMessage[] | undefined;
+        if (prevMessages && prevMessages.length > 0) {
+          const prevLastMsg = prevMessages[prevMessages.length - 1];
+          streamingJustCompleted = prevLastMsg?.streaming === true && lastMessage?.streaming === false;
+        }
+      }
+
+      // Only scroll when response is 100% complete (not during streaming)
+      if (isLoadingComplete || streamingJustCompleted) {
+        // Response is complete - scroll only if viewport is above the prompt
+        if (this._isViewportAbovePrompt()) {
+          this._scrollToLastUserMessage();
+        }
+      } else if (!isCurrentlyStreaming && changedProperties.has('messages')) {
+        // Not streaming - handle normal message updates (e.g., user sends a message)
+        if (this._userNearBottom) {
+          this._scrollToLastUserMessage();
+        } else {
+          const prev = changedProperties.get('messages') as ChatMessage[] | undefined;
+          if (prev && this.messages.length > prev.length) {
+            const lastNew = this.messages[this.messages.length - 1];
+            if (lastNew.role === 'user') {
+              this._scrollToLastUserMessage();
+            }
           }
         }
       }
+      // During streaming, don't scroll at all
 
       // Screen-reader announcement for new messages
       if (changedProperties.has('messages')) {
@@ -502,6 +529,40 @@ export class A2UIChatContainer extends LitElement {
         this.srAnnouncement = 'Generating response, please wait...';
       }
     }
+  }
+
+  /** Check if the viewport scroll position is above the last user message (prompt). */
+  private _isViewportAbovePrompt(): boolean {
+    const el = this.messagesContainer;
+    if (!el) return true; // Default to true if container not found
+
+    const messageElements = el.querySelectorAll('a2ui-chat-message');
+    let lastUserEl: Element | null = null;
+
+    // Find the last user message element
+    for (let i = this.messages.length - 1; i >= 0; i--) {
+      if (this.messages[i].role === 'user' && messageElements[i]) {
+        lastUserEl = messageElements[i];
+        break;
+      }
+    }
+
+    if (!lastUserEl) return true; // No user message found, default to scrolling
+
+    // Check if viewport bottom is above the last user message bottom
+    // Get the position of the user message relative to the container
+    const containerRect = el.getBoundingClientRect();
+    const userMsgRect = lastUserEl.getBoundingClientRect();
+    
+    // Calculate scroll position of viewport bottom
+    const viewportBottomScroll = el.scrollTop + el.clientHeight;
+    
+    // Calculate scroll position where user message bottom would be
+    // userMsgRect.bottom is in viewport coordinates, convert to scroll coordinates
+    const userMsgBottomScroll = el.scrollTop + (userMsgRect.bottom - containerRect.top);
+
+    // Return true if viewport bottom is above (less than) the user message bottom
+    return viewportBottomScroll < userMsgBottomScroll;
   }
 
   private _scrollToLastUserMessage() {

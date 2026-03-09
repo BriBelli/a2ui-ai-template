@@ -126,7 +126,7 @@ class DataContextItem(BaseModel):
     data: Any = None
 
 
-VALID_CONTENT_STYLES = {"auto", "analytical", "content", "comparison", "howto", "quick"}
+VALID_CONTENT_STYLES = {"auto", "analytical", "content", "comparison", "dashboard", "howto", "quick"}
 VALID_PERFORMANCE_MODES = {"auto", "comprehensive", "optimized"}
 
 

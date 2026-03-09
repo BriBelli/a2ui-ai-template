@@ -95,6 +95,49 @@ r = bubble radius (bubble only). ALWAYS include xAxisLabel and yAxisLabel.
 """)
 
 
+# ── Chart: Choropleth (Geographic Map) ────────────────────────
+
+_register("chart_choropleth", """
+CHOROPLETH MAP — chartType:"choropleth"
+Geographic map where region colors encode values. Map data is loaded automatically from CDN.
+STRICT FORMAT:
+  map: "world" | "us-states" — which map to render.
+  datasets:[{label:"Title", data:[{feature:"Region Name", value:number}, ...]}]
+RULES:
+- ONE dataset. feature names MUST match the map's region names exactly.
+  World map: use country names (e.g. "United States", "China", "Brazil").
+  US states: use full state names (e.g. "California", "Texas", "New York").
+- value = color intensity (auto-scaled). Only include regions you have data for — others default to 0.
+- height:350+ recommended. Do NOT include labels[]; they are derived from the map.
+EXAMPLE (US states):
+  map:"us-states",
+  datasets:[{label:"Population",data:[
+    {feature:"California",value:39538223},{feature:"Texas",value:29145505},
+    {feature:"Florida",value:21538187},{feature:"New York",value:20201249}
+  ]}], options:{height:400}
+""")
+
+# ── Chart: BubbleMap (Geographic Bubble Map) ──────────────────
+
+_register("chart_bubblemap", """
+BUBBLE MAP — chartType:"bubbleMap"
+Geographic map with circles at lat/long coordinates, sized by value.
+STRICT FORMAT:
+  map: "world" | "us-states" — which map outline to render.
+  datasets:[{label:"Title", data:[{latitude:number, longitude:number, value:number, description:"Label"}, ...]}]
+RULES:
+- ONE dataset. Each point needs latitude, longitude, value, and description.
+- value = circle size (auto-scaled). description = tooltip/label text.
+- height:350+ recommended. Do NOT include labels[]; they are derived from descriptions.
+EXAMPLE (US cities):
+  map:"us-states",
+  datasets:[{label:"Major Cities",data:[
+    {latitude:40.7128,longitude:-74.006,value:8336817,description:"New York"},
+    {latitude:34.0522,longitude:-118.2437,value:3979576,description:"Los Angeles"},
+    {latitude:41.8781,longitude:-87.6298,value:2693976,description:"Chicago"}
+  ]}], options:{height:400}
+""")
+
 # ── Public API ────────────────────────────────────────────────
 
 AVAILABLE_KEYS: FrozenSet[str] = frozenset(_CONTEXTS.keys())
