@@ -152,6 +152,7 @@ class ChatRequest(BaseModel):
         max_length=30,
     )
     smartRouting: bool = True
+    temperature: float = Field(default=0.7, ge=0.0, le=2.0)
 
     @field_validator("history")
     @classmethod
@@ -277,6 +278,7 @@ async def chat(request: Request, body: ChatRequest):
                     enable_geolocation=body.enableGeolocation,
                     enable_data_sources=body.enableDataSources,
                     data_context=data_context_dicts,
+                    temperature=body.temperature,
                 ):
                     etype = event.get("event", "message")
                     payload = _json.dumps(event.get("data", {}), default=str)

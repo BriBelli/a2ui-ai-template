@@ -1005,12 +1005,14 @@ class LLMProvider(ABC):
         history: Optional[List[Dict[str, str]]] = None,
         system_prompt: Optional[str] = None,
         effort: Optional[str] = None,
+        temperature: Optional[float] = None,
     ) -> Dict[str, Any]:
         """Generate a response for the given message with optional history.
 
         Args:
             effort: Thinking effort level for models that support adaptive
                     thinking ("low", "medium", "high", "max"). None = provider default.
+            temperature: Sampling temperature (0.0–2.0). None = provider default (0.7).
         """
 
     async def generate_stream_tokens(
@@ -1020,6 +1022,7 @@ class LLMProvider(ABC):
         history: Optional[List[Dict[str, str]]] = None,
         system_prompt: Optional[str] = None,
         effort: Optional[str] = None,
+        temperature: Optional[float] = None,
     ) -> AsyncGenerator[str, None]:
         """Yield token deltas as they arrive from the LLM.
 
@@ -1032,6 +1035,7 @@ class LLMProvider(ABC):
         result = await self.generate(
             message, model, history,
             system_prompt=system_prompt, effort=effort,
+            temperature=temperature,
         )
         if result.get("_is_error"):
             raise LLMStreamError(result)
@@ -1076,6 +1080,7 @@ class OpenAIProvider(LLMProvider):
         model: str,
         history: Optional[List[Dict[str, str]]] = None,
         system_prompt: Optional[str] = None,
+        temperature: Optional[float] = None,
     ) -> Dict[str, Any]:
         """Make a single OpenAI call and return parsed JSON or error dict."""
         import time as _time
@@ -1092,10 +1097,11 @@ class OpenAIProvider(LLMProvider):
         # 16384 output tokens needed — GPT-5 is verbose with structured JSON
         # and data-heavy contexts (28K+ chars from data sources) easily exceed 4K.
         is_gpt5 = model.startswith("gpt-5")
+        effective_temp = temperature if temperature is not None else 0.7
         extra: Dict[str, Any] = (
             {"max_completion_tokens": 16384}
             if is_gpt5
-            else {"max_tokens": 4000, "temperature": 0.7}
+            else {"max_tokens": 4000, "temperature": effective_temp}
         )
 
         t0 = _time.monotonic()
@@ -1158,15 +1164,17 @@ class OpenAIProvider(LLMProvider):
         model: str,
         history: Optional[List[Dict[str, str]]] = None,
         system_prompt: Optional[str] = None,
+        temperature: Optional[float] = None,
     ) -> AsyncGenerator[str, None]:
         """Streaming variant — yields token deltas. Raises LLMStreamError on failure."""
         messages = _build_messages(message, history, system_prompt=system_prompt)
 
         is_gpt5 = model.startswith("gpt-5")
+        effective_temp = temperature if temperature is not None else 0.7
         extra: Dict[str, Any] = (
             {"max_completion_tokens": 16384}
             if is_gpt5
-            else {"max_tokens": 4000, "temperature": 0.7}
+            else {"max_tokens": 4000, "temperature": effective_temp}
         )
 
         try:
@@ -1208,13 +1216,14 @@ class OpenAIProvider(LLMProvider):
         history: Optional[List[Dict[str, str]]] = None,
         system_prompt: Optional[str] = None,
         effort: Optional[str] = None,
+        temperature: Optional[float] = None,
     ) -> Dict[str, Any]:
-        result = await self._call_llm(message, model, history, system_prompt)
+        result = await self._call_llm(message, model, history, system_prompt, temperature=temperature)
 
         # Refusal guard — retry with stronger nudge
         return await _retry_on_refusal(
             result, message,
-            lambda msg, hist: self._call_llm(msg, model, hist, system_prompt),
+            lambda msg, hist: self._call_llm(msg, model, hist, system_prompt, temperature=temperature),
         )
 
     async def generate_stream_tokens(
@@ -1224,9 +1233,10 @@ class OpenAIProvider(LLMProvider):
         history: Optional[List[Dict[str, str]]] = None,
         system_prompt: Optional[str] = None,
         effort: Optional[str] = None,
+        temperature: Optional[float] = None,
     ) -> AsyncGenerator[str, None]:
         """Yield raw token deltas from the LLM as they arrive."""
-        async for delta in self._call_llm_stream(message, model, history, system_prompt):
+        async for delta in self._call_llm_stream(message, model, history, system_prompt, temperature=temperature):
             yield delta
 
 
@@ -1271,6 +1281,7 @@ class AnthropicProvider(LLMProvider):
         history: Optional[List[Dict[str, str]]] = None,
         system_prompt: Optional[str] = None,
         effort: Optional[str] = None,
+        temperature: Optional[float] = None,
     ) -> Dict[str, Any]:
         """Make a single Anthropic call and return parsed JSON or error dict."""
         if system_prompt is None:
@@ -1286,12 +1297,16 @@ class AnthropicProvider(LLMProvider):
             messages.append({"role": msg["role"], "content": msg["content"]})
         messages.append({"role": "user", "content": message})
 
+        # Anthropic temperature range is 0.0–1.0
+        effective_temp = min(temperature, 1.0) if temperature is not None else None
+
         # Build kwargs — add adaptive thinking for 4.6 models
         kwargs: Dict[str, Any] = dict(
             model=model,
             max_tokens=16000 if model in self._THINKING_MODELS and effort else 4000,
             system=system_prompt,
             messages=messages,
+            **({"temperature": effective_temp} if effective_temp is not None else {}),
         )
 
         if model in self._ADAPTIVE_MODELS and effort:
@@ -1343,6 +1358,7 @@ class AnthropicProvider(LLMProvider):
         history: Optional[List[Dict[str, str]]] = None,
         system_prompt: Optional[str] = None,
         effort: Optional[str] = None,
+        temperature: Optional[float] = None,
     ) -> AsyncGenerator[str, None]:
         """Streaming variant — yields token deltas. Raises LLMStreamError on failure."""
         if system_prompt is None:
@@ -1357,11 +1373,13 @@ class AnthropicProvider(LLMProvider):
             messages.append({"role": msg["role"], "content": msg["content"]})
         messages.append({"role": "user", "content": message})
 
+        effective_temp = min(temperature, 1.0) if temperature is not None else None
         kwargs: Dict[str, Any] = dict(
             model=model,
             max_tokens=4000,
             system=system_prompt,
             messages=messages,
+            **({"temperature": effective_temp} if effective_temp is not None else {}),
         )
 
         try:
@@ -1394,13 +1412,14 @@ class AnthropicProvider(LLMProvider):
         history: Optional[List[Dict[str, str]]] = None,
         system_prompt: Optional[str] = None,
         effort: Optional[str] = None,
+        temperature: Optional[float] = None,
     ) -> Dict[str, Any]:
-        result = await self._call_llm(message, model, history, system_prompt, effort)
+        result = await self._call_llm(message, model, history, system_prompt, effort, temperature=temperature)
 
         # Refusal guard — retry with stronger nudge
         return await _retry_on_refusal(
             result, message,
-            lambda msg, hist: self._call_llm(msg, model, hist, system_prompt, effort),
+            lambda msg, hist: self._call_llm(msg, model, hist, system_prompt, effort, temperature=temperature),
         )
 
     async def generate_stream_tokens(
@@ -1410,9 +1429,10 @@ class AnthropicProvider(LLMProvider):
         history: Optional[List[Dict[str, str]]] = None,
         system_prompt: Optional[str] = None,
         effort: Optional[str] = None,
+        temperature: Optional[float] = None,
     ) -> AsyncGenerator[str, None]:
         """Yield raw token deltas from the LLM as they arrive."""
-        async for delta in self._call_llm_stream(message, model, history, system_prompt, effort):
+        async for delta in self._call_llm_stream(message, model, history, system_prompt, effort, temperature=temperature):
             yield delta
 
 
@@ -1437,6 +1457,7 @@ class GeminiProvider(LLMProvider):
         model: str,
         history: Optional[List[Dict[str, str]]] = None,
         system_prompt: Optional[str] = None,
+        temperature: Optional[float] = None,
     ) -> Dict[str, Any]:
         """Make a single Gemini call and return parsed JSON or error dict."""
         import google.generativeai as genai  # optional dep — lazy import
@@ -1461,7 +1482,9 @@ class GeminiProvider(LLMProvider):
             role = "user" if msg["role"] == "user" else "model"
             chat_history.append({"role": role, "parts": [msg["content"]]})
 
-        generation_config = {"response_mime_type": "application/json"}
+        generation_config: Dict[str, Any] = {"response_mime_type": "application/json"}
+        if temperature is not None:
+            generation_config["temperature"] = temperature
 
         try:
             if chat_history:
@@ -1490,13 +1513,14 @@ class GeminiProvider(LLMProvider):
         history: Optional[List[Dict[str, str]]] = None,
         system_prompt: Optional[str] = None,
         effort: Optional[str] = None,
+        temperature: Optional[float] = None,
     ) -> Dict[str, Any]:
-        result = await self._call_llm(message, model, history, system_prompt)
+        result = await self._call_llm(message, model, history, system_prompt, temperature=temperature)
 
         # Refusal guard — retry with stronger nudge
         return await _retry_on_refusal(
             result, message,
-            lambda msg, hist: self._call_llm(msg, model, hist, system_prompt),
+            lambda msg, hist: self._call_llm(msg, model, hist, system_prompt, temperature=temperature),
         )
 
 
@@ -2694,6 +2718,7 @@ class LLMService:
             async for delta in effective_provider.generate_stream_tokens(
                 augmented_message, effective_model, effective_history,
                 system_prompt=system_prompt, effort=thinking_effort,
+                temperature=temperature,
             ):
                 full_content += delta
                 yield {"event": "token", "data": {"delta": delta}}
@@ -2711,6 +2736,7 @@ class LLMService:
                 response = await effective_provider.generate(
                     augmented_message, effective_model, effective_history,
                     system_prompt=system_prompt, effort=thinking_effort,
+                    temperature=temperature,
                 )
                 llm_elapsed = time.time() - llm_t0
             except Exception as gen_exc:
@@ -2733,6 +2759,7 @@ class LLMService:
                         response = await alt_provider.generate(
                             augmented_message, alt_mid, effective_history,
                             system_prompt=system_prompt,
+                            temperature=temperature,
                         )
                         effective_provider_id = alt_pid
                         effective_model = alt_mid
@@ -2760,6 +2787,7 @@ class LLMService:
             response, message,
             lambda msg, hist: effective_provider.generate(
                 msg, effective_model, hist, system_prompt=system_prompt,
+                temperature=temperature,
             ),
         )
 
@@ -2831,6 +2859,7 @@ class LLMService:
         enable_geolocation: bool = True,
         enable_data_sources: bool = True,
         data_context: Optional[List[Dict[str, Any]]] = None,
+        temperature: Optional[float] = None,
     ) -> Dict[str, Any]:
         """Non-streaming wrapper — collects the final result from generate_stream."""
         result: Dict[str, Any] = {}
@@ -2845,6 +2874,7 @@ class LLMService:
             enable_geolocation=enable_geolocation,
             enable_data_sources=enable_data_sources,
             data_context=data_context,
+            temperature=temperature,
         ):
             if event["event"] == "complete":
                 result = event["data"]

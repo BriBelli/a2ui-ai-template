@@ -219,6 +219,7 @@ export class ChatService {
         contentStyle: aiConfig.contentStyle,
         performanceMode: aiConfig.performanceMode,
         smartRouting: smartRouting ?? aiConfig.smartRouting,
+        temperature: aiConfig.temperature,
         ...(location && { userLocation: location }),
       };
 
