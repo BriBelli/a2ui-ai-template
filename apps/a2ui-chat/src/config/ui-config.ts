@@ -55,9 +55,17 @@ export interface UIConfig {
    * Default: true.
    */
   streamingText: boolean;
+
+  /**
+   * Dashboard rendering tier.
+   * - 'static': Static builders render dashboards instantly (no AI cost)
+   * - 'hybrid': AI generates dashboard layouts with strict shapes (low cost)
+   */
+  dashboardTier: DashboardTier;
 }
 
 export type SourcesPosition = 'auto' | 'right' | 'bottom';
+export type DashboardTier = 'static' | 'hybrid';
 
 export type ContentStyle = 'auto' | 'analytical' | 'content' | 'comparison' | 'dashboard' | 'howto' | 'quick';
 export type PerformanceMode = 'auto' | 'comprehensive' | 'optimized';
@@ -133,6 +141,14 @@ export interface AIConfig {
    * always used as-is with no substitution.
    */
   smartRouting: boolean;
+
+  /**
+   * LLM sampling temperature (0.0–2.0).
+   * Lower = more deterministic, higher = more creative.
+   * Default: 0.7 (balanced for general chat).
+   * Only applies to the main generation call; classifiers stay at 0.
+   */
+  temperature: number;
 }
 
 const SETTINGS_KEY = 'a2ui_settings';
@@ -149,6 +165,7 @@ export const uiConfig: UIConfig = {
   showActions: true,
   sourcesPosition: 'auto',
   streamingText: true,
+  dashboardTier: 'static',
 };
 
 /**
@@ -165,6 +182,7 @@ export const aiConfig: AIConfig = {
   loadingDetail: 'moderate',
   loadingStyle: 'focus',
   smartRouting: true,
+  temperature: 0.7,
 };
 
 const VALID_CONTENT_STYLES: ReadonlySet<ContentStyle> = new Set([
@@ -205,6 +223,9 @@ export function loadSettings(): void {
       }
       if (!VALID_LOADING_STYLES.has(aiConfig.loadingStyle)) {
         aiConfig.loadingStyle = 'focus';
+      }
+      if (typeof aiConfig.temperature !== 'number' || aiConfig.temperature < 0 || aiConfig.temperature > 2) {
+        aiConfig.temperature = 0.7;
       }
     }
     if (saved.ui) {
